@@ -121,5 +121,7 @@ js/ui/                interface : socle, cartographie, inventaire, matériel, ta
 ```
 
 - Sens des dépendances : `config → utils → store → services → 3d → ui`.
+- Tests de bout en bout dans `tests/` : `npm install` puis `npm test` (Chromium piloté par Playwright).
+- Tests du relais dans `connecteurs/` : `npm install` puis `npm test`.
 - Seule bibliothèque externe : Three.js `0.160.0`.
 - Le suivi du projet (cahier des charges, décisions, plan par lots, journal) est dans `SUIVI.md`.

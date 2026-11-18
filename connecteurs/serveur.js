@@ -9,7 +9,7 @@
    Usage : node serveur.js [chemin/vers/config.json]
    Les identifiants restent ici : ils ne sont jamais envoyés au navigateur. */
 'use strict';
-const http = require('http'), fs = require('fs'), path = require('path');
+const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
 const { fusionner, secret } = require('./lib/contrat');
 
 const TYPES = { simulation: './sources/simulation', prtg: './sources/prtg', snmp: './sources/snmp' };
@@ -21,6 +21,8 @@ function demarrer(cfg, journal = console.log) {
   });
   const jeton = cfg.token ? secret(cfg.token) : '';
   const origines = cfg.corsOrigins || [];
+  // Comparaison en temps constant, pour ne rien laisser deviner du jeton
+  const jetonValide = recu => { const a = Buffer.from(String(recu || '')), b = Buffer.from('Bearer ' + jeton); return a.length === b.length && crypto.timingSafeEqual(a, b); };
   let enCours = false;
   async function relever() {
     if (enCours) return;
@@ -39,7 +41,7 @@ function demarrer(cfg, journal = console.log) {
     if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
     if (req.method !== 'GET') return json(405, { erreur: 'Lecture seule : seule la méthode GET est acceptée.' });
     const chemin = new URL(req.url, 'http://x').pathname;
-    if (jeton && chemin.startsWith('/api/') && req.headers.authorization !== 'Bearer ' + jeton) return json(401, { erreur: 'Jeton absent ou invalide.' });
+    if (jeton && chemin.startsWith('/api/') && !jetonValide(req.headers.authorization)) return json(401, { erreur: 'Jeton absent ou invalide.' });
     if (chemin === '/api/etat') return json(200, { version: 1, source: sources.map(s => s.src.nom).join(' + ') || 'aucune', ts: Math.max(0, ...sources.map(s => s.ts)), devices: fusionner(sources.filter(s => s.ok).map(s => s.devices)) });
     if (chemin === '/api/sante') return json(200, { sources: sources.map(s => ({ nom: s.src.nom, ok: s.ok, erreur: s.erreur, equipements: s.devices.length, ts: s.ts })) });
     if (chemin.startsWith('/api/')) return json(404, { erreur: 'Chemin inconnu. Disponibles : /api/etat, /api/sante' });

@@ -63,7 +63,6 @@ const ROOM_TYPES = {
   workshop: { label: 'Atelier',          fill: '#241f1a' },
 };
 const OUTLET_USAGE = { data: 'Données', voice: 'Voix', ap: 'Borne Wi-Fi', camera: 'Caméra', printer: 'Imprimante' };
-const USAGE_VLAN = { data: 10, voice: 20, ap: 30, camera: 40, printer: 50 };
 const PORT_KIND = { rj45: 'RJ45', sfp: 'SFP', 'sfp+': 'SFP+', lc: 'LC duplex' };
 const PORT_ROLE = { access: 'Accès', uplink: 'Uplink', pp: 'Passif' };
 const CABLE_TYPES = {

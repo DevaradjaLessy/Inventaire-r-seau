@@ -133,6 +133,10 @@ Actions['modal-ok'] = () => {
 };
 $('#modal-root').addEventListener('mousedown', e => { if (e.target.id === 'modal-root') Modal.close(); });
 
+/* --- Accessibilité : un bouton à icône seule reçoit comme nom le titre de son infobulle --- */
+const nommer = racine => { for (const b of racine.querySelectorAll?.('button.icon[data-tip]:not([aria-label])') || []) b.setAttribute('aria-label', b.dataset.tip.split('|')[0]); };
+new MutationObserver(muts => { for (const m of muts) for (const n of m.addedNodes) if (n.nodeType === 1) nommer(n.parentElement || n); }).observe(document.body, { childList: true, subtree: true });
+
 /* --- Gestionnaires délégués --- */
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');

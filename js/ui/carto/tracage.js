@@ -46,8 +46,7 @@ function drawPlanTrace() {
   const g = $('#plan-trace'), tr = Carto.trace;
   if (!g || !tr) return;
   const pts = [];
-  let leaves = false;
-  for (const n of tr.nodes) { const p = tracePoint(n, Carto.floorId); if (!p) { if (pts.length) leaves = true; continue; } if (!pts.length || pts.at(-1).id !== p.id) pts.push(p); }
+  for (const n of tr.nodes) { const p = tracePoint(n, Carto.floorId); if (!p) continue; if (!pts.length || pts.at(-1).id !== p.id) pts.push(p); }
   if (!pts.length) { g.innerHTML = ''; return; }
   // Tracé en équerre entre deux points successifs
   let d = `M${pts[0].x} ${pts[0].y}`;

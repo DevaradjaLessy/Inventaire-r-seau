@@ -15,6 +15,7 @@ let Inst = null;
 function openInstall(o) {
   const dev = o.moveId ? byId(o.moveId) : null, cat = dev ? catOf(dev) : Store.idx.cat.get(o.catId);
   if (!cat) return;
+  if (!Store.db.floors.length) throw new Error('Aucun étage dans la base : créez d\'abord un bâtiment et un étage.');
   if (!dev && stockOf(cat.id).available < 1) throw new Error(`Stock épuisé pour ${cat.brand} ${cat.model}.`);
   const start = o.rackId ? locOf(o.rackId) : o.roomId ? locOf(o.roomId) : dev ? locOf(dev.id) : locOf(Carto.rackId && cat.mount === 'rack' ? Carto.rackId : Carto.floorId || Store.db.floors[0].id);
   Inst = { cat, dev, bld: start.building?.id || Store.db.buildings[0].id, floor: start.floor?.id || '', room: (cat.mount === 'rack' ? start.rack && start.room?.id : start.room?.id) || '', rack: start.rack?.id || '', u: o.u || '', x: o.x ?? '', y: o.y ?? '', outlet: '', name: dev ? dev.hostname : '', ip: dev ? dev.ip : '', usage: 'data', auto: !dev };

@@ -16,4 +16,5 @@ Ce dépôt sert à construire **NetCarto** : un outil web de cartographie, d'inv
 - Le dossier `connecteurs/` est un service Node.js facultatif (relais de supervision, voir la section 3.12 de `SUIVI.md`). Il reste en lecture seule, ne contient aucun secret, et se teste avec `npm test` contre des simulateurs. L'application doit continuer de fonctionner sans lui.
 - Interface et commentaires du code en français. Palette « Ardoise et vert », en deux thèmes au choix de l'utilisateur : sombre (par défaut) et clair. Toute couleur d'interface passe par une variable CSS de `css/style.css`, jamais par une valeur en dur.
 - L'interface doit rester utilisable sur téléphone (règles regroupées à la fin de `css/style.css`, seuil 900 px). Vérifier aussi en largeur 390 px.
-- Tester dans Chromium (Playwright) avant chaque commit, en servant le dossier par HTTP (les modules ne se chargent pas en `file://`). Si le CDN est bloqué, voir la note technique 3.9 de `SUIVI.md`.
+- Lancer les tests avant chaque commit : `npm test` dans `tests/` (application, Chromium via Playwright) et dans `connecteurs/` (relais). Ajouter un scénario pour chaque nouvelle fonction. Si le CDN est bloqué, voir la note technique 3.9 de `SUIVI.md`.
+- Tout fichier importé est contrôlé par `Store.validate` : une nouvelle donnée insérée dans la page doit y avoir sa règle.

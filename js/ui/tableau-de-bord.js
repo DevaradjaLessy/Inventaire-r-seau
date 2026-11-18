@@ -4,7 +4,7 @@ import { $, clamp, esc, fmtDateTime, groupBy, pct, plural, sum } from '../utils.
 import { ico } from '../icones.js';
 import { Cache, Store } from '../store.js';
 import { cablesOf, catOf, computeAlerts, isPassive, locLabel, locOf, poeUsage, portsOf, rackUsage } from '../services/requetes.js';
-import { isNetDev, outletInfo } from '../services/cablage.js';
+import { effStatus, isNetDev, outletInfo } from '../services/cablage.js';
 import { levelColor, Views } from './socle.js';
 
 /* Statistiques globales (hors équipements hors service) */
@@ -20,7 +20,7 @@ function computeStats() {
     const byCat = groupBy(devs, x => catOf(x).category), byBld = groupBy(devs, x => locOf(x.id).building?.id || '');
     return {
       devices: devs.length, active: devs.filter(x => !isPassive(x)).length, byCat, byBld,
-      ports: netPorts.length, portsUsed: netPorts.filter(used).length, portStates: groupBy(netPorts, p => p.status),
+      ports: netPorts.length, portsUsed: netPorts.filter(used).length, portStates: groupBy(netPorts, p => effStatus(p)),
       uTotal: sum(racks, x => x.total), uUsed: sum(racks, x => x.used), racks,
       poeUsed: sum(poe, x => x.used), poeBudget: sum(poe, x => x.budget), poe,
       outlets: outs.length, patched: outs.filter(s => s !== 'idle' && s !== 'free').length, outletsUp: outs.filter(s => s === 'up').length,

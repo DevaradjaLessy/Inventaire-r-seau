@@ -6,7 +6,7 @@ import { Cache, Store } from '../store.js';
 import { catOf, locLabel, locOf } from '../services/requetes.js';
 import { NET_CATS } from '../services/cablage.js';
 import { search } from '../services/recherche.js';
-import { Actions, Changes, Inputs, showTab, stDev, toast, UI, Views } from './socle.js';
+import { Actions, Changes, Inputs, showTab, toast, UI, Views } from './socle.js';
 import { goto } from './carto/carto.js';
 import { opt } from './carto/fiches.js';
 import { Mat } from './materiel/catalogue.js';

@@ -24,6 +24,8 @@ class Viewer3D {
     const r = this.renderer = new T.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     r.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
     r.toneMapping = T.ACESFilmicToneMapping; r.toneMappingExposure = 1.1;
+    // Ombres portées douces, recalculées seulement quand la scène change (pas à chaque clignotement de LED)
+    r.shadowMap.enabled = true; r.shadowMap.type = T.PCFSoftShadowMap; r.shadowMap.autoUpdate = false;
     this.host.appendChild(r.domElement);
     const s = this.scene = new T.Scene();
     s.background = new T.Color('#0a100f'); s.fog = new T.Fog('#0a100f', 7, 16);
@@ -34,9 +36,14 @@ class Viewer3D {
     ct.enableDamping = true; ct.dampingFactor = 0.12; ct.minDistance = 0.12; ct.maxDistance = 9; ct.maxPolarAngle = Math.PI * 0.55; ct.zoomSpeed = 1.1;
     ct.addEventListener('change', () => { this.dirty = true; });
     ct.addEventListener('start', () => { ct.autoRotate = false; this.anim = null; });
-    const dl = new T.DirectionalLight('#ffffff', 1.7); dl.position.set(1.5, 3, 4); s.add(dl);
-    const fill = new T.DirectionalLight('#9fc4ff', 0.7); fill.position.set(-3, 1.5, 2); s.add(fill);
-    s.add(new T.HemisphereLight('#cfe3ff', '#1c2026', 0.45));
+    // Éclairage : une lumière principale qui porte les ombres, un contre-jour froid, une ambiance douce
+    const dl = this.key = new T.DirectionalLight('#fff4e6', 2.1); dl.position.set(1.9, 3.6, 4.4); dl.castShadow = true;
+    dl.shadow.mapSize.set(2048, 2048); dl.shadow.bias = -0.0003; dl.shadow.normalBias = 0.01; dl.shadow.radius = 4;
+    Object.assign(dl.shadow.camera, { left: -1.9, right: 1.9, top: 1.9, bottom: -1.9, near: 0.5, far: 14 });
+    dl.target.position.set(0, 1, 0); s.add(dl, dl.target);
+    const fill = new T.DirectionalLight('#9fc4ff', 0.55); fill.position.set(-3, 1.5, 2); s.add(fill);
+    const rim = new T.DirectionalLight('#bfe9dc', 0.5); rim.position.set(-1.5, 2.5, -3.5); s.add(rim);
+    this.hemi = new T.HemisphereLight('#cfe3ff', '#1c2026', 0.5); s.add(this.hemi);
     this.root = new T.Group(); s.add(this.root);
     this.ray = new T.Raycaster();
     // Géométries partagées
@@ -56,13 +63,21 @@ class Viewer3D {
     el.addEventListener('pointerup', e => { if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5) this.onClick(e); down = null; });
     el.dataset.tipkeep = '1';
     new ResizeObserver(() => this.resize()).observe(this.host);
+    this.applyTheme();
     this.ok = true;
     this.tick = this.tick.bind(this); requestAnimationFrame(this.tick);
   }
   /* Le fond de la scène suit le thème clair ou sombre */
   applyTheme() {
     const c = getComputedStyle(document.documentElement).getPropertyValue('--scene').trim() || '#0a100f';
-    this.scene.background.set(c); this.scene.fog.color.set(c); this.dirty = true;
+    const light = document.documentElement.dataset.theme === 'light';
+    this.scene.background.set(c); this.scene.fog.color.set(c);
+    // Sol, mur et exposition suivent aussi le thème
+    this.theme = { floor: light ? '#e3e7e4' : '#8b929a', wall: light ? '#f2f4f2' : '#1b2321', plinth: light ? '#c9d0cc' : '#0f1513', exposure: light ? 1.18 : 1.1 };
+    this.floorMat?.color.set(this.theme.floor); this.wallMat?.color.set(this.theme.wall); this.plinthMat?.color.set(this.theme.plinth);
+    if (this.renderer) this.renderer.toneMappingExposure = this.theme.exposure;
+    if (this.hemi) this.hemi.intensity = light ? 0.85 : 0.5;
+    this.dirty = true;
   }
   resize() {
     const w = this.host.clientWidth, h = this.host.clientHeight;
@@ -93,7 +108,8 @@ class Viewer3D {
       let tex;
       if (img) { tex = new THREE.TextureLoader().load(img, () => { this.dirty = true; }); tex.colorSpace = THREE.SRGBColorSpace; }
       else tex = this.canvasTex(key);
-      const m = new THREE.MeshStandardMaterial({ map: tex, metalness: 0.3, roughness: 0.55 }); m.userData.keep = true;
+      // Légère auto-illumination : la façade (voyants, afficheur) reste lisible même dans l'ombre de la baie
+      const m = new THREE.MeshStandardMaterial({ map: tex, metalness: 0.3, roughness: 0.5, emissive: '#ffffff', emissiveMap: tex, emissiveIntensity: 0.16 }); m.userData.keep = true;
       this.texCache.set(key, m);
     }
     return this.texCache.get(key);
@@ -105,13 +121,13 @@ class Viewer3D {
       if (o.isInstancedMesh) o.dispose();
     });
     this.root.clear();
-    Object.assign(this, { ports: [], portIdx: new Map(), devGroups: new Map(), cableMeshes: new Map(), bodies: [], overlay: null, leds: null, hlMesh: null, cableGroup: null, ledPorts: [] });
+    Object.assign(this, { ports: [], portIdx: new Map(), devGroups: new Map(), cableMeshes: new Map(), bodies: [], overlay: null, leds: null, glow: null, hlMesh: null, cableGroup: null, ledPorts: [] });
     this.hoverFrame.visible = this.selFrame.visible = this.selBox.visible = false;
     this.controls.autoRotate = false;
   }
   box(parent, w, h, d, x, y, z, m) { const me = new THREE.Mesh(this.unitBox, m); me.scale.set(w, h, d); me.position.set(x, y, z); parent.add(me); return me; }
   /* Sol en dalles de faux plancher et ombre de contact */
-  addFloor(shadowW, shadowD) {
+  addFloor(shadowW, shadowD, wallZ = null) {
     const T = THREE;
     if (!this.floorMat) {
       const cv = document.createElement('canvas'); cv.width = cv.height = 256; const c = cv.getContext('2d'), rnd = mulberry32(3);
@@ -119,20 +135,27 @@ class Viewer3D {
       for (let i = 0; i < 900; i++) { c.fillStyle = `rgba(${rnd() > 0.5 ? '255,255,255' : '0,0,0'},${rnd() * 0.07})`; c.fillRect(rnd() * 256, rnd() * 256, 2 + rnd() * 3, 2); }
       c.strokeStyle = '#2a2e33'; c.lineWidth = 5; c.strokeRect(0, 0, 256, 256);
       const t = this.canvasTex(cv); t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(30, 30);
-      this.floorMat = new T.MeshStandardMaterial({ map: t, metalness: 0.15, roughness: 0.62, color: '#8b929a' }); this.floorMat.userData.keep = true;
+      this.floorMat = new T.MeshStandardMaterial({ map: t, metalness: 0.2, roughness: 0.48, color: this.theme.floor }); this.floorMat.userData.keep = true;
+      this.wallMat = new T.MeshStandardMaterial({ color: this.theme.wall, metalness: 0, roughness: 0.92 }); this.wallMat.userData.keep = true;
+      this.plinthMat = new T.MeshStandardMaterial({ color: this.theme.plinth, metalness: 0.1, roughness: 0.7 }); this.plinthMat.userData.keep = true;
       const sc = document.createElement('canvas'); sc.width = sc.height = 128; const s2 = sc.getContext('2d'), g2 = s2.createRadialGradient(64, 64, 20, 64, 64, 64);
       g2.addColorStop(0, 'rgba(0,0,0,.75)'); g2.addColorStop(1, 'rgba(0,0,0,0)'); s2.fillStyle = g2; s2.fillRect(0, 0, 128, 128);
       this.shadowMat = new T.MeshBasicMaterial({ map: new T.CanvasTexture(sc), transparent: true, depthWrite: false }); this.shadowMat.userData.keep = true;
     }
-    const fl = new T.Mesh(new T.PlaneGeometry(18, 18), this.floorMat); fl.rotation.x = -Math.PI / 2; this.root.add(fl);
-    const sd = new T.Mesh(new T.PlaneGeometry(shadowW, shadowD), this.shadowMat); sd.rotation.x = -Math.PI / 2; sd.position.y = 0.002; this.root.add(sd);
+    const fl = new T.Mesh(new T.PlaneGeometry(18, 18), this.floorMat); fl.rotation.x = -Math.PI / 2; fl.userData.noCast = true; this.root.add(fl);
+    const sd = new T.Mesh(new T.PlaneGeometry(shadowW, shadowD), this.shadowMat); sd.rotation.x = -Math.PI / 2; sd.position.y = 0.002; sd.userData.noShadow = true; this.root.add(sd);
+    // Mur du fond et plinthe : donnent un repère de pièce et reçoivent l'ombre
+    if (wallZ != null) {
+      const wl = new T.Mesh(new T.PlaneGeometry(18, 4.2), this.wallMat); wl.position.set(0, 2.1, wallZ); wl.userData.noCast = true; this.root.add(wl);
+      const pl = this.box(this.root, 18, 0.09, 0.015, 0, 0.045, wallZ + 0.008, this.plinthMat); pl.userData.noCast = true;
+    }
   }
   /* --- Baie ou coffret --- */
   buildEnclosure(rc, HU, name) {
     const T = THREE, g = new T.Group(), wall = !!gabarit(rc).wall;
     const W = rc.visual?.width || 0.75, D = rc.visual?.depth || 1.07, innerH = HU * U_M, fr = 0.05, H = innerH + 2 * fr;
     const y0 = wall ? 1.05 : 0.06, zF = D / 2 - (wall ? 0.07 : 0.11);
-    const mF = this.mat(rc.visual?.color || '#17191c', 0.55, 0.5), mIn = this.mat('#0c0e11', 0.3, 0.8);
+    const mF = this.mat(shade(rc.visual?.color || '#17191c', 0.07), 0.6, 0.42), mIn = this.mat('#0c0e11', 0.3, 0.8);
     this.box(g, W, fr, D, 0, y0 + fr / 2, 0, mF); this.box(g, W, fr, D, 0, y0 + H - fr / 2, 0, mF);
     for (const sx of [-1, 1]) {
       this.box(g, 0.012, innerH, D - 0.02, sx * (W / 2 - 0.006), y0 + fr + innerH / 2, 0, mF);
@@ -151,7 +174,25 @@ class Viewer3D {
     const railMat = new T.MeshStandardMaterial({ map: this.canvasTex(rc2), metalness: 0.6, roughness: 0.45 });
     for (const sx of [-1, 1]) this.box(g, 0.02, innerH, 0.003, sx * 0.2326, y0 + fr + innerH / 2, zF - 0.0035, railMat);
     if (!wall) for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const f = new T.Mesh(new T.CylinderGeometry(0.025, 0.03, 0.06, 12), this.mat('#0c0d0f', 0.4, 0.6)); f.position.set(sx * (W / 2 - 0.06), 0.03, sz * (D / 2 - 0.06)); g.add(f); }
-    if (wall) { const wl = new T.Mesh(new T.PlaneGeometry(6, 3.2), this.mat('#2b3138', 0, 0.95)); wl.position.set(0, 1.6, -D / 2 - 0.002); g.add(wl); }
+    if (!wall) {
+      // Passe-câbles verticaux : une platine et des doigts de guidage de chaque côté des montants
+      const mCm = this.mat('#101315', 0.35, 0.6), fingers = new T.InstancedMesh(this.unitBox, mCm, HU * 4), M = new T.Matrix4(), q = new T.Quaternion();
+      let n = 0;
+      for (const sx of [-1, 1]) {
+        this.box(g, W / 2 - 0.2426 - 0.02, innerH, 0.004, sx * (0.2426 + (W / 2 - 0.2426) / 2 - 0.004), y0 + fr + innerH / 2, zF - 0.02, mCm);
+        for (let u = 0; u < HU; u++) for (const fx of [0.252, W / 2 - 0.03]) { M.compose(new T.Vector3(sx * fx, y0 + fr + (u + 0.5) * U_M, zF + 0.022), q, new T.Vector3(0.005, 0.011, 0.085)); fingers.setMatrixAt(n++, M); }
+      }
+      g.add(fingers);
+      // Bandeaux de prises électriques au fond de la baie, avec leur voyant
+      const pc = document.createElement('canvas'); pc.width = 32; pc.height = 512; const pcx = pc.getContext('2d');
+      pcx.fillStyle = '#1a1d21'; pcx.fillRect(0, 0, 32, 512);
+      for (let i = 0; i < 12; i++) { pcx.fillStyle = '#07080a'; pcx.fillRect(7, 14 + i * 41, 18, 26); pcx.fillStyle = '#2b3036'; pcx.fillRect(13, 20 + i * 41, 6, 3); pcx.fillRect(13, 31 + i * 41, 6, 3); }
+      const pduMat = new T.MeshStandardMaterial({ map: this.canvasTex(pc), metalness: 0.4, roughness: 0.6 });
+      for (const sx of [-1, 1]) {
+        this.box(g, 0.05, innerH * 0.82, 0.045, sx * (W / 2 - 0.06), y0 + fr + innerH * 0.5, -D / 2 + 0.06, pduMat);
+        const led = this.box(g, 0.008, 0.008, 0.003, sx * (W / 2 - 0.06), y0 + fr + innerH * 0.93, -D / 2 + 0.084, new T.MeshBasicMaterial({ color: '#3dff66', toneMapped: false })); led.userData.noShadow = true;
+      }
+    }
     if (name) { const pl = new T.Mesh(new T.PlaneGeometry(0.2, 0.034), new T.MeshBasicMaterial({ map: this.canvasTex(labelCanvas(name, { w: 384, h: 64, bg: '#0d1117', fg: '#e6edf3', px: 34 })) })); pl.position.set(0, y0 + H - fr / 2, D / 2 + 0.001); g.add(pl); }
     return { g, geo: { W, D, HU, H, yBase: y0 + fr, yTop: y0 + H, zF, sideX: W / 2 - (wall ? 0.028 : 0.085), wall } };
   }
@@ -159,7 +200,7 @@ class Viewer3D {
   buildDevice(cat, dev) {
     const T = THREE, g = new T.Group(), tpl = gabarit(cat), L = facadeLayout(cat), depth = tpl.depth || 0.3, base = cat.visual?.color || '#2a3038';
     const side = this.mat(shade(base, -0.3), 0.55, 0.5);
-    const body = new T.Mesh(this.unitBox, [side, side, side, side, this.facadeMat(cat), side]);
+    const body = new T.Mesh(this.unitBox, [side, side, this.topMat(base, tpl.decor), side, this.facadeMat(cat), side]);
     body.scale.set(FACE_W, L.H, depth); body.position.z = -depth / 2; body.userData.devId = dev?.id || null;
     g.add(body); this.bodies.push(body);
     const earM = this.mat(shade(base, -0.1), 0.6, 0.45), scr = this.mat('#c9ced4', 0.9, 0.3);
@@ -177,13 +218,36 @@ class Viewer3D {
     }
     return { g, L };
   }
+  /* Dessus d'un équipement : tôle avec zone d'aération perforée et étiquette de conformité */
+  topMat(base, decor) {
+    const key = `top|${base}|${decor === 'patch' || decor === 'cablemgr' ? 'plain' : 'vent'}`;
+    if (!this.matCache.has(key)) {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 256; const c = cv.getContext('2d'), col = shade(base, -0.22);
+      c.fillStyle = col; c.fillRect(0, 0, 256, 256);
+      if (!key.endsWith('plain')) {
+        c.fillStyle = 'rgba(0,0,0,.55)';
+        for (let y = 18; y < 120; y += 9) for (let x = 20 + ((y / 9) % 2) * 5; x < 236; x += 10) { c.beginPath(); c.arc(x, y, 2.6, 0, 7); c.fill(); }
+        c.fillStyle = '#e8eaec'; c.fillRect(188, 214, 48, 24); c.fillStyle = '#30353b'; for (let i = 0; i < 3; i++) c.fillRect(192, 219 + i * 6, 22 + (i * 9) % 16, 2);
+      }
+      c.strokeStyle = 'rgba(255,255,255,.07)'; c.lineWidth = 2; c.strokeRect(1, 1, 254, 254);
+      const m = new THREE.MeshStandardMaterial({ map: this.canvasTex(cv), metalness: 0.55, roughness: 0.5 }); m.userData.keep = true;
+      this.matCache.set(key, m);
+    }
+    return this.matCache.get(key);
+  }
+  /* Ombres : chaque maillage en porte et en reçoit, sauf les éléments lumineux ou transparents */
+  finishScene() {
+    this.root.traverse(o => { if (!o.isMesh) return; const off = o.userData.noShadow || o.material?.isMeshBasicMaterial; o.castShadow = !off && !o.userData.noCast; o.receiveShadow = !off; });
+    this.renderer.shadowMap.needsUpdate = true; this.dirty = true;
+  }
   /* Affiche une baie complète */
   showRack(rackId, keepCam) {
     if (!this.ok) { this.queue = () => this.showRack(rackId); return; }
     const T = THREE, rack = byId(rackId);
     this.clear(); this.kind = 'rack'; this.rackId = rackId;
     const rc = catOf(rack), { g, geo } = this.buildEnclosure(rc, rack.heightU, rack.name);
-    this.geo = geo; this.root.add(g); this.addFloor(geo.W * 2.2, geo.D * 1.9);
+    this.geo = geo; this.root.add(g); this.addFloor(geo.W * 2.2, geo.D * 1.9, -geo.D / 2 - (geo.wall ? 0.004 : 0.75));
+    this.key.target.position.set(0, geo.yBase + geo.H / 2, 0);
     const ledPorts = [], plugs = [];
     for (const dev of Store.idx.devByRack.get(rackId) || []) {
       const cat = catOf(dev), { g: dg, L } = this.buildDevice(cat, dev);
@@ -202,7 +266,7 @@ class Viewer3D {
     this.buildCables(plugs);
     this.refreshColors(); this.applyHighlight(); this.setSelected(this.selId);
     if (!keepCam) this.frameAll(false);
-    this.dirty = true;
+    this.finishScene();
   }
   /* Câble visible en façade : le cordon (et non le lien permanent à l'arrière d'un panneau) */
   frontCable(p) { return cablesOf(p.id).find(c => p.role !== 'pp' || !isPassiveNode(otherEnd(c, p.id))) || null; }
@@ -220,12 +284,24 @@ class Viewer3D {
       this.leds = new T.InstancedMesh(this.unitBox, new T.MeshBasicMaterial({ toneMapped: false }), ledPorts.length);
       ledPorts.forEach((e, i) => { M.compose(V(e.x - e.w / 2 + 0.0019, e.y + (e.lp.top ? 1 : -1) * (e.h / 2 + 0.002), e.z + 0.0004), q, V(0.0028, 0.0014, 0.0008)); this.leds.setMatrixAt(i, M); this.leds.setColorAt(i, col.set('#11151a')); e.phase = Math.random() * 10; });
       this.root.add(this.leds);
+      // Halo lumineux autour de chaque LED (mélange additif : une LED éteinte n'ajoute rien)
+      if (!this.glowTex) { const gc = document.createElement('canvas'); gc.width = gc.height = 64; const g2 = gc.getContext('2d'), gr = g2.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,.9)'); gr.addColorStop(0.25, 'rgba(255,255,255,.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g2.fillStyle = gr; g2.fillRect(0, 0, 64, 64); this.glowTex = new T.CanvasTexture(gc); this.glowGeo = Object.assign(new T.PlaneGeometry(1, 1), { userData: { keep: true } }); }
+      const gm = new T.MeshBasicMaterial({ map: this.glowTex, transparent: true, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false }); gm.userData.keep = false;
+      this.glow = new T.InstancedMesh(this.glowGeo, gm, ledPorts.length);
+      ledPorts.forEach((e, i) => { M.compose(V(e.x - e.w / 2 + 0.0019, e.y + (e.lp.top ? 1 : -1) * (e.h / 2 + 0.002), e.z + 0.0012), q, V(0.013, 0.011, 1)); this.glow.setMatrixAt(i, M); this.glow.setColorAt(i, col.set('#000')); });
+      this.glow.userData.noShadow = true; this.root.add(this.glow);
     }
     // Fiches branchées
     if (plugs.length) {
-      this.plugs = new T.InstancedMesh(this.unitBox, this.mat('#ffffff', 0.1, 0.55), plugs.length);
-      plugs.forEach((e, i) => { const sf = e.lp.kind !== 'rj45'; M.compose(V(e.x, e.y, e.z + (sf ? 0.011 : 0.008)), q, V(e.w * 0.82, e.h * 0.74, sf ? 0.022 : 0.016)); this.plugs.setMatrixAt(i, M); this.plugs.setColorAt(i, col.set(sf ? '#c9ced4' : e.cable.color || '#3987e5')); });
-      this.root.add(this.plugs);
+      // Fiche : corps clair (RJ45 translucide ou module SFP métallique), puis manchon à la couleur du cordon
+      this.plugs = new T.InstancedMesh(this.unitBox, this.mat('#ffffff', 0.15, 0.3), plugs.length);
+      const boots = new T.InstancedMesh(this.unitBox, this.mat('#ffffff', 0.05, 0.7), plugs.length);
+      plugs.forEach((e, i) => {
+        const sf = e.lp.kind !== 'rj45', cc = e.cable.color || CABLE_TYPES[e.cable.type]?.color || '#3987e5';
+        M.compose(V(e.x, e.y, e.z + (sf ? 0.009 : 0.005)), q, V(e.w * 0.84, e.h * 0.76, sf ? 0.018 : 0.010)); this.plugs.setMatrixAt(i, M); this.plugs.setColorAt(i, col.set(sf ? '#b9bfc6' : '#dfe6ea'));
+        M.compose(V(e.x, e.y - (sf ? 0 : e.h * 0.06), e.z + (sf ? 0.022 : 0.0145)), q, V(e.w * (sf ? 0.7 : 0.62), e.h * (sf ? 0.6 : 0.56), sf ? 0.010 : 0.010)); boots.setMatrixAt(i, M); boots.setColorAt(i, col.set(cc));
+      });
+      this.root.add(this.plugs, boots);
     }
   }
   /* Cordons de brassage : un tube par cordon, qui passe par le côté de la baie */
@@ -238,9 +314,9 @@ class Viewer3D {
       const bi = this.portIdx.get(otherEnd(cab, a.p.id)), b = bi != null ? this.ports[bi] : null;
       const j = ((k * 37) % 17) / 17, zo = 0.03 + j * 0.03, fib = CABLE_TYPES[cab.type]?.fiber && cab.type !== 'dac'; k++;
       const side = ((a.x + (b ? b.x : a.x)) >= 0 ? 1 : -1), sx = side * (geo.sideX - j * 0.022);
-      const A = new T.Vector3(a.x, a.y, a.z + 0.014), pts = [A, new T.Vector3(a.x, a.y - 0.004, a.z + zo)];
+      const A = new T.Vector3(a.x, a.y, a.z + 0.019), pts = [A, new T.Vector3(a.x, a.y - 0.004, a.z + zo)];
       if (b) {
-        const B = new T.Vector3(b.x, b.y, b.z + 0.014);
+        const B = new T.Vector3(b.x, b.y, b.z + 0.019);
         if (Math.abs(a.y - b.y) < 0.03 && Math.abs(a.x - b.x) < 0.1) pts.push(new T.Vector3((a.x + b.x) / 2, (a.y + b.y) / 2 - 0.012, a.z + zo + 0.01));
         else pts.push(new T.Vector3(sx, a.y - 0.012, a.z + zo * 0.6), new T.Vector3(sx, b.y + (a.y > b.y ? 0.012 : -0.012), b.z + zo * 0.6));
         pts.push(new T.Vector3(b.x, b.y - 0.004, b.z + zo), B);
@@ -248,7 +324,7 @@ class Viewer3D {
         // L'autre extrémité est ailleurs : le cordon part par le côté puis vers le haut de la baie
         pts.push(new T.Vector3(sx, a.y + 0.02, a.z + zo * 0.5), new T.Vector3(sx, geo.yTop - 0.06, a.z - 0.02));
       }
-      const tube = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts, false, 'catmullrom', 0.25), b ? 26 : 16, fib ? 0.0016 : cab.type === 'dac' ? 0.003 : 0.0027, 5), this.mat(cab.color || CABLE_TYPES[cab.type].color, 0.05, 0.6));
+      const tube = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts, false, 'catmullrom', 0.25), b ? 26 : 16, fib ? 0.0016 : cab.type === 'dac' ? 0.003 : 0.0027, 7), this.mat(cab.color || CABLE_TYPES[cab.type].color, 0.02, 0.55));
       tube.userData.cabId = cab.id; grp.add(tube); this.cableMeshes.set(cab.id, tube);
     }
   }
@@ -260,7 +336,7 @@ class Viewer3D {
     let size = 0.3, cy = 0.1;
     if (tpl.type === 'enclosure') {
       const { g, geo } = this.buildEnclosure(cat, cat.heightU || 42, cat.model.split(' ').slice(0, 2).join(' '));
-      this.root.add(g); this.addFloor(geo.W * 2.2, geo.D * 1.9); size = geo.H * 0.9; cy = geo.yBase + geo.H / 2 - 0.05;
+      this.root.add(g); this.addFloor(geo.W * 2.2, geo.D * 1.9, -geo.D / 2 - (geo.wall ? 0.004 : 0.75)); size = geo.H * 0.9; cy = geo.yBase + geo.H / 2 - 0.05;
     } else {
       this.addFloor(0.9, 0.9);
       const ped = new T.Mesh(new T.CylinderGeometry(0.36, 0.38, 0.03, 48), this.mat('#161b22', 0.4, 0.5)); ped.position.y = 0.015; this.root.add(ped);
@@ -269,8 +345,8 @@ class Viewer3D {
         const yc = 0.03 + L.H / 2 + 0.002; g.position.set(0, yc, (tpl.depth || 0.3) / 2 > 0.3 ? 0.3 : (tpl.depth || 0.3) / 2);
         this.root.add(g);
         // Ports survolables (informations du catalogue)
-        const names = portNames(cat); let gi = 0, n = 0;
-        for (const grp of cat.ports || []) { const cnt = grp.names ? grp.names.length : grp.count; for (let i = 0; i < cnt; i++, n++) { const lp = L.ports[n]; this.ports.push({ info: { name: names[n], grp }, lp, x: lp.x, y: yc + lp.y, z: g.position.z, w: lp.w, h: lp.h }); } gi++; }
+        const names = portNames(cat); let n = 0;
+        for (const grp of cat.ports || []) { const cnt = grp.names ? grp.names.length : grp.count; for (let i = 0; i < cnt; i++, n++) { const lp = L.ports[n]; this.ports.push({ info: { name: names[n], grp }, lp, x: lp.x, y: yc + lp.y, z: g.position.z, w: lp.w, h: lp.h }); } }
         this.buildPortMeshes([], []);
         size = 0.27; cy = yc;
       } else {
@@ -281,11 +357,12 @@ class Viewer3D {
     const dist = size / Math.tan(this.camera.fov * Math.PI / 360) * 0.95;
     this.controls.target.set(0, cy, 0); this.camera.position.set(dist * 0.42, cy + dist * 0.42, dist * 0.82);
     this.controls.autoRotate = !dev; this.controls.autoRotateSpeed = 1.2;
-    this.controls.update(); this.dirty = true;
+    this.key.target.position.set(0, cy, 0);
+    this.controls.update(); this.finishScene();
   }
   /* --- Couleurs, LEDs, surbrillance --- */
   setMode(m) { this.mode = m; this.refreshColors(); }
-  setCables(on) { this.cablesOn = on; if (this.cableGroup) this.cableGroup.visible = on; this.dirty = true; }
+  setCables(on) { this.cablesOn = on; if (this.cableGroup) this.cableGroup.visible = on; this.renderer.shadowMap.needsUpdate = true; this.dirty = true; }
   refreshColors() {
     if (!this.overlay) return;
     const col = new THREE.Color();
@@ -302,8 +379,10 @@ class Viewer3D {
       if (s === 'up') c = Math.random() < 0.22 ? '#0e5a1c' : '#3dff66';
       else if (s === 'error') c = Math.sin(t / 220 + e.phase) > 0 ? '#ff9a1f' : '#4a2b05';
       this.leds.setColorAt(i, col.set(c));
+      this.glow?.setColorAt(i, col.set(s === 'up' || s === 'error' ? c : '#000000'));
     });
     this.leds.instanceColor.needsUpdate = true;
+    if (this.glow) this.glow.instanceColor.needsUpdate = true;
     return true;
   }
   /* Surbrillance d'un chemin : { nodeSet, cableSet } */

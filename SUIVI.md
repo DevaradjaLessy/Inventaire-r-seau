@@ -196,6 +196,7 @@ history    [{ id, ts, type, text, ref }]                                 // type
 - **Modes de coloration :** aucune (aspect réel), état, VLAN, PoE, chacun avec sa légende.
 - **Mode « objet » :** un équipement seul (borne Wi-Fi, téléphone, caméra, prise murale, aperçu catalogue).
 - Le rendu se met en pause quand la vue est cachée. Les LEDs sont rafraîchies environ 10 fois par seconde.
+- **Rendu (révision du 2026-11-18) :** ombres portées douces (carte d'ombres recalculée seulement quand la scène change, pas à chaque clignotement), lumière principale chaude, contre-jour et lumière d'arête ; mur de fond et plinthe ; sol, mur et exposition suivent le thème. Halo additif sur chaque LED. Passe-câbles verticaux et bandeaux de prises dans les baies au sol. Tout maillage porte et reçoit l'ombre, sauf les éléments lumineux ou transparents (`finishScene`).
 - Une **élévation 2D de la baie** (HTML) est affichée à côté de la 3D. On y voit les U libres, et elle accepte le glisser-déposer depuis le stock.
 
 ### 3.5 Code couleur
@@ -304,6 +305,7 @@ history    [{ id, ts, type, text, ref }]                                 // type
   - mention « Données fictives »
 
 ### 3.9 Note technique pour les tests
+- **Les tests sont dans le dépôt :** `tests/netcarto.test.js` (application, 13 scénarios) et `connecteurs/tests/test.js` (relais, 6 scénarios). Les lancer avant chaque commit. Si le CDN est bloqué, indiquer le dossier de Three.js par la variable `NETCARTO_THREE`, ou faire `npm install` dans `tests/`.
 - Dans l'environnement cloud de Claude, le CDN jsDelivr peut être bloqué (erreur 403 du proxy). Le registre npm, lui, est accessible.
 - Pour tester :
   1. installer `three@0.160.0` avec npm dans un dossier temporaire (pas dans le dépôt) ;
@@ -356,7 +358,7 @@ history    [{ id, ts, type, text, ref }]                                 // type
 | 7 | Tableau de bord : indicateurs, graphiques, alertes, historique | Moyen à élevé (medium/high) | ✅ Fait |
 | 8 | Finitions : performances, tests complets, `README.md` (modèle de données, ajout d'un modèle ou d'un plan, sécurité), activation de GitHub Pages | Élevé (high) | ✅ Fait, sauf l'activation de GitHub Pages : elle se fait à la main dans les réglages du dépôt (voir `README.md`) |
 
-| 9 | **Sécuriser le développement :** tests Playwright dans le dépôt (dossier `tests/`), sauvegarde locale plus sûre (IndexedDB et sauvegarde automatique téléchargeable), annulation plus légère | Élevé (high) | ⏳ À faire |
+| 9 | **Sécuriser le développement :** tests Playwright dans le dépôt (dossier `tests/`), sauvegarde locale plus sûre (IndexedDB et sauvegarde automatique téléchargeable), annulation plus légère | Élevé (high) | 🔄 En cours : tests faits (13 scénarios, `npm test` dans `tests/`). Restent la sauvegarde et l'annulation. |
 | 10 | **Saisir un vrai réseau :** démarrage sur base vide ; création, modification et suppression des sites, bâtiments, étages et pièces depuis l'interface (dessin des pièces sur le plan) ; gestion des VLAN | Élevé (high) | ⏳ À faire |
 | 11 | **Qualité des données :** import CSV des équipements et des prises ; contrôle des doublons (IP, nom d'hôte, MAC, repère de prise) ; vérification du brassage lors du déplacement d'un équipement | Élevé (high) | ⏳ À faire |
 | 12 | **Harmonisation visuelle :** appliquer le style du tableau de bord et de l'inventaire à la Cartographie et au Matériel ; sol et baie de la vue 3D adaptés au thème clair | Moyen à élevé | ⏳ À faire |
@@ -395,6 +397,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-18 | Adapter l'affichage au téléphone | ✅ Fait (écran ≤ 900 px) : onglets en barre du bas, en-tête sur deux lignes, Cartographie en plein écran avec l'arbre et la fiche en volets, boutons de zoom sur le plan, Inventaire et Matériel empilés, tableau de bord sur deux colonnes. Vérifié sur un écran simulé de 390 × 800 ; à confirmer sur un vrai téléphone. |
 | 2026-11-18 | Bilan des points forts, des inconvénients et des évolutions indispensables ; « il faudra corriger tout ça », « note-le » | ✅ Noté : lots 9 à 15 ajoutés en section 4, avec les points en attente de décision. Rien n'est encore réalisé. |
 | 2026-11-18 | Peut-on brancher une supervision réelle (PRTG), ou interroger directement un switch ? Développer et préparer ces connecteurs en interne, comme un vrai outil professionnel | ✅ Fait pour la première étape (voir 3.12) : couche de mesures en direct dans NetCarto, écran « Sources de données », relais interne avec sources PRTG, SNMP et simulation. Testé contre des simulateurs ; reste à valider sur du matériel réel et à ajouter les API des constructeurs. |
+| 2026-11-18 | Auditer et peaufiner la solution, améliorer encore les visuels 3D | ✅ Fait. **Audit :** faille corrigée à l'import (un fichier JSON pouvait injecter du code par un identifiant ou une couleur : le contenu est maintenant contrôlé élément par élément) ; suite de tests ajoutée au dépôt ; boutons à icône nommés pour les lecteurs d'écran ; message clair si l'on installe sans étage ; états de ports du tableau de bord alignés sur l'affichage ; jeton du relais comparé en temps constant ; code mort retiré. **3D :** ombres portées douces, mur de fond et plinthe, sol et éclairage adaptés au thème clair, passe-câbles verticaux à doigts, bandeaux de prises au fond de la baie, halo lumineux des LEDs, fiches en deux parties (corps clair et manchon à la couleur du cordon), dessus des équipements ajouré, façades légèrement auto-éclairées, bords de scène assombris. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---

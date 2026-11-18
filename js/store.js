@@ -1,5 +1,5 @@
 /* Store : état, index, historique, annulation, sauvegarde locale. Toute modification passe par Store.commit(type, texte, mutation). */
-import { APP } from './config.js';
+import { APP, CATEGORIES, DEVICE_STATUS, OUTLET_USAGE, PORT_KIND, PORT_ROLE, PORT_STATUS } from './config.js';
 import { nextId } from './utils.js';
 import { buildDemo, emptyDb } from './demo.js';
 
@@ -17,6 +17,28 @@ const Store = {
     if (!d || typeof d !== 'object' || !d.meta || d.meta.app !== APP.name) return 'Ce fichier n\'est pas un export NetCarto.';
     if (d.meta.schemaVersion > APP.schemaVersion) return 'Ce fichier vient d\'une version plus récente de NetCarto.';
     for (const k of Object.keys(emptyDb())) if (k !== 'meta' && !Array.isArray(d[k])) return `Section « ${k} » absente ou invalide.`;
+    // Contrôle du contenu : ces valeurs sont insérées dans la page, elles doivent donc avoir une forme sûre
+    const ID = /^[A-Za-z0-9_-]{1,64}$/, COLOR = /^#[0-9a-fA-F]{3,8}$/, IMG = /^(data:image\/(png|jpeg|jpg|webp|gif|svg\+xml)[;,]|https?:\/\/)/;
+    const id = v => typeof v === 'string' && ID.test(v), ref = v => v == null || v === '' || id(v), col = v => v == null || v === '' || (typeof v === 'string' && COLOR.test(v));
+    const nb = v => v == null || (typeof v === 'number' && Number.isFinite(v)), img = v => v == null || v === '' || (typeof v === 'string' && IMG.test(v));
+    const RULES = {
+      sites: e => id(e.id), buildings: e => id(e.id) && id(e.siteId),
+      floors: e => id(e.id) && id(e.buildingId) && e.width > 0 && e.height > 0 && img(e.planImage),
+      rooms: e => id(e.id) && id(e.floorId) && [e.x, e.y, e.w, e.h].every(v => typeof v === 'number' && Number.isFinite(v)),
+      racks: e => id(e.id) && id(e.roomId) && id(e.catalogId) && e.heightU > 0 && nb(e.x) && nb(e.y) && e.status in DEVICE_STATUS,
+      devices: e => id(e.id) && id(e.catalogId) && ref(e.rackId) && ref(e.roomId) && nb(e.x) && nb(e.y) && nb(e.u) && e.status in DEVICE_STATUS,
+      ports: e => id(e.id) && id(e.deviceId) && e.status in PORT_STATUS && e.kind in PORT_KIND && e.role in PORT_ROLE && e.poe && typeof e.poe === 'object' && nb(e.poe.watts) && (e.vlan == null || Number.isInteger(e.vlan)),
+      outlets: e => id(e.id) && id(e.roomId) && nb(e.x) && nb(e.y) && e.usage in OUTLET_USAGE,
+      cables: e => id(e.id) && id(e.a) && id(e.b) && col(e.color),
+      catalog: e => id(e.id) && e.category in CATEGORIES && Array.isArray(e.ports) && e.ports.every(g => g && g.kind in PORT_KIND) && (!e.visual || (col(e.visual.color) && col(e.visual.accent) && img(e.visual.frontImage))),
+      stock: e => id(e.catalogId) && nb(e.available) && nb(e.threshold),
+      vlans: e => Number.isInteger(e.id) && col(e.color),
+      history: e => e && typeof e === 'object',
+    };
+    for (const [k, ok] of Object.entries(RULES)) {
+      const i = d[k].findIndex(e => { try { return !e || typeof e !== 'object' || !ok(e); } catch { return true; } });
+      if (i >= 0) return `Section « ${k} », élément n° ${i + 1} : valeur manquante ou invalide.`;
+    }
     return null;
   },
   loadLocal() {

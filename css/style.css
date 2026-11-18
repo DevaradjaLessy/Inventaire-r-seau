@@ -245,6 +245,8 @@ svg.plan .trace-halo{fill:var(--hl-bg);stroke:var(--hl);stroke-width:1.6;pointer
 .r3d{position:relative;min-width:0;min-height:0;background:var(--canvas2)}
 .v3d{position:absolute;inset:0}
 .v3d canvas{outline:none}
+/* Léger assombrissement des bords de la scène 3D, pour concentrer le regard */
+.v3d::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 45%,transparent 55%,color-mix(in srgb,var(--scene) 55%,transparent) 100%)}
 .palette{position:absolute;right:10px;top:10px;bottom:10px;width:230px;background:var(--glass);border:1px solid var(--line2);border-radius:8px;display:flex;flex-direction:column;z-index:6}
 .palette h4{padding:9px 11px;border-bottom:1px solid var(--line);font-size:12.5px;display:flex;align-items:center;gap:6px}
 .palette .list{overflow:auto;padding:6px;display:flex;flex-direction:column;gap:5px}
