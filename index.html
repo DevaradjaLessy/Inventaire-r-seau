@@ -175,7 +175,7 @@ svg.plan .pobj.sel .ring{stroke:var(--accent);stroke-width:2.2;fill:rgba(56,189,
 svg.plan .ring{fill:none;stroke:none}
 svg.plan .lbl{fill:#9aa9bb;font-size:5px;pointer-events:none;display:none}
 svg.plan.zoomed .lbl{display:block}
-svg.plan .rlabel{fill:#c9d4e0;font-size:7px;font-weight:600;text-anchor:middle;pointer-events:none}
+svg.plan .rlabel{fill:#c9d4e0;font-size:6px;font-weight:600;text-anchor:middle;pointer-events:none;paint-order:stroke;stroke:#070a0e;stroke-width:2px}
 svg.plan.editing .pobj{cursor:move}
 svg.plan .trace-line{fill:none;stroke:var(--accent);stroke-width:2.4;stroke-dasharray:8 6;animation:dash 1s linear infinite;pointer-events:none;stroke-linejoin:round}
 svg.plan .trace-halo{fill:rgba(56,189,248,.18);stroke:var(--accent);stroke-width:1.6;pointer-events:none}
@@ -245,6 +245,15 @@ svg.plan .trace-halo{fill:rgba(56,189,248,.18);stroke:var(--accent);stroke-width
 .pal-it b{font-weight:600;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px}
 .pal-it small{color:var(--txt2)}
 .pal-it .q{margin-left:auto;font-weight:700;color:var(--accent)}
+
+/* --- Topologie --- */
+svg.topo{width:100%;height:100%;display:block;background:#070a0e;cursor:grab;user-select:none}
+svg.topo .tnode{cursor:pointer}
+svg.topo .tb{fill:#141d28;stroke:#2c3c50;stroke-width:1.2}
+svg.topo .tnode:hover .tb{stroke:#5b7696}
+svg.topo .tnode.hl .tb{stroke:var(--accent);stroke-width:2;fill:#0f2a3a}
+svg.topo .tnode.sel .tb{stroke:#fff;stroke-width:2}
+svg.topo .tlink.hl{stroke:var(--accent)!important;stroke-width:4;stroke-dasharray:9 6;animation:dash 1s linear infinite}
 /*@@CSS*/
 </style>
 </head>
@@ -756,6 +765,7 @@ function buildDemo() {
   put(rkB1, 7, 'cat-mgr1u', 'PC-B1-03');
   const swB1b = put(rkB1, 6, 'cat-usw-pro-24-poe', 'SW-B1-ACC-02');
   const rtrB1 = put(rkB1, 5, 'cat-ccr2004', 'RTR-B1-01', { notes: 'Lien de secours 4G' });
+  rtrB1.layer = 'access';   // niveau forcé : ce routeur de secours est raccordé à un switch d'accès
   put(rkB1, 4, 'cat-mgr1u', 'PC-B1-04');
   const upsB1 = put(rkB1, 1, 'cat-5px1500', 'OND-B1-01');
 
@@ -1186,6 +1196,112 @@ function scopeOf(id) {
 }
 /* Dimensions au sol d'une baie, en mètres */
 const rackSize = rack => { const v = catOf(rack)?.visual || {}; return { w: v.width || 0.75, d: v.depth || 1.07 }; };
+/* --- Topologie logique : liens entre équipements actifs et niveaux calculés --- */
+const LVL = { perimeter: 0, core: 1, distribution: 2, access: 3 };
+function topology() {
+  return Cache.get('topo', () => {
+    const devs = Store.db.devices.filter(d => d.status !== 'retired' && catOf(d) && !isPassive(d));
+    const links = new Map(), adj = new Map(devs.map(d => [d.id, new Set()]));
+    for (const d of devs) for (const p of portsOf(d.id)) {
+      if (p.role === 'pp' || !cablesOf(p.id).length) continue;
+      const far = farEnd(p.id);
+      if (!far || far.deviceId === d.id || p.id > far.id || !adj.has(far.deviceId)) continue;
+      const [a, b] = d.id < far.deviceId ? [d.id, far.deviceId] : [far.deviceId, d.id], k = a + '|' + b;
+      if (!links.has(k)) links.set(k, { a, b, pairs: [] });
+      links.get(k).pairs.push(d.id === a ? [p, far] : [far, p]);
+      adj.get(a).add(b); adj.get(b).add(a);
+    }
+    const net = devs.filter(isNetDev), layer = new Map(), cat = d => catOf(d).category;
+    const nb = d => [...adj.get(d.id)].map(byId).filter(isNetDev);
+    for (const d of net) { if (d.layer && d.layer in LVL) layer.set(d.id, d.layer); else if (cat(d) !== 'switch') layer.set(d.id, 'perimeter'); }
+    const free = () => net.filter(d => !layer.has(d.id));
+    // Cœur : switchs reliés à un pare-feu (à défaut à un routeur, à défaut modèle marqué « cœur »)
+    // (seuls comptent les liens portés par un port d'uplink du switch : un simple port de gestion ne suffit pas)
+    const viaUplink = (d, n) => (links.get(d.id < n.id ? d.id + '|' + n.id : n.id + '|' + d.id)?.pairs || []).some(pr => pr.some(p => p.deviceId === d.id && p.role === 'uplink'));
+    let core = free().filter(d => nb(d).some(n => cat(n) === 'firewall' && layer.get(n.id) === 'perimeter' && viaUplink(d, n)));
+    if (!core.length) core = free().filter(d => nb(d).some(n => layer.get(n.id) === 'perimeter' && viaUplink(d, n)));
+    if (!core.length) core = free().filter(d => catOf(d).layer === 'core');
+    core.forEach(d => layer.set(d.id, 'core'));
+    const nearCore = d => nb(d).some(n => layer.get(n.id) === 'core');
+    // Distribution : reliés au cœur, avec des switchs en aval qui ne voient pas le cœur
+    for (const d of free().filter(nearCore)) if (nb(d).some(n => !layer.has(n.id) && !nearCore(n))) layer.set(d.id, 'distribution');
+    for (const d of free()) layer.set(d.id, 'access');
+    // Terminaux rattachés à leur équipement réseau
+    const ends = new Map();
+    for (const d of devs) { if (isNetDev(d)) continue; const up = [...adj.get(d.id)].map(byId).find(isNetDev); if (up) (ends.get(up.id) || ends.set(up.id, []).get(up.id)).push(d); }
+    return { nodes: net, layer, links: [...links.values()], adj, ends };
+  });
+}
+const levelOf = dev => LVL[topology().layer.get(dev.id)] ?? 9;
+
+/* --- Traçage : terminal → prise → panneau → switch d'accès → uplinks → cœur --- */
+function trace(startId) {
+  const seg = segment(startId);
+  let nodes = [...seg.nodes], cables = [...seg.cables];
+  const rank = id => { if (!id || typeOf(id) !== 'port') return 10; const p = byId(id); if (p.role === 'pp') return 10; const d = byId(p.deviceId); return isNetDev(d) ? levelOf(d) : 9; };
+  if (rank(nodes[0]) < rank(nodes.at(-1))) { nodes.reverse(); cables.reverse(); }
+  const internal = new Set(), seen = new Set(nodes);
+  let complete = false, stop = '';
+  for (let hop = 0; hop < 4; hop++) {
+    const last = byId(nodes.at(-1));
+    if (!last || typeOf(last.id) !== 'port' || last.role === 'pp') { stop = nodes.length > 1 ? 'Le câblage s\'arrête sur un élément passif non raccordé.' : 'Rien n\'est branché.'; break; }
+    const dev = byId(last.deviceId);
+    if (!isNetDev(dev)) { stop = 'Aucun équipement réseau au bout du câblage.'; break; }
+    const L = levelOf(dev);
+    if (L <= LVL.core) { complete = true; break; }
+    const ups = portsOf(dev.id).map(p => ({ p, far: p.role !== 'pp' && cablesOf(p.id).length ? farEnd(p.id) : null })).filter(x => x.far && isNetDev(byId(x.far.deviceId)) && levelOf(byId(x.far.deviceId)) < L && !seen.has(x.p.id));
+    const up = ups.find(x => x.p.status === 'up') || ups[0];
+    if (!up) { stop = `${dev.hostname} n'a pas d'uplink vers le niveau supérieur.`; break; }
+    internal.add(nodes.length);   // ce saut traverse l'équipement
+    const s = segment(up.p.id), sn = s.nodes[0] === up.p.id ? s.nodes : [...s.nodes].reverse(), sc = s.nodes[0] === up.p.id ? s.cables : [...s.cables].reverse();
+    for (const n of sn) { nodes.push(n); seen.add(n); }
+    cables.push(...sc);
+  }
+  const devSet = new Set();
+  for (const n of nodes) { if (typeOf(n) === 'port') devSet.add(byId(n).deviceId); }
+  return { start: startId, rev: Store.rev, nodes, cables, internal, complete, stop, nodeSet: new Set(nodes), cableSet: new Set(cables.map(c => c.id)), devSet };
+}
+
+/* --- Connexion et débranchement --- */
+const mediaOf = id => typeOf(id) === 'outlet' || byId(id).kind === 'rj45' ? 'cuivre' : 'fibre';
+/* Un port actif n'accepte qu'un câble ; un nœud passif en accepte un à l'arrière (vers un autre passif) et un à l'avant */
+function canAccept(id, otherId) {
+  const cs = cablesOf(id);
+  if (!isPassiveNode(id)) return cs.length === 0;
+  const rear = isPassiveNode(otherId);
+  return !cs.some(c => isPassiveNode(otherEnd(c, id)) === rear);
+}
+function connectCheck(a, b) {
+  if (a === b) return 'Impossible de relier un élément à lui-même.';
+  if (typeOf(a) === 'outlet' && typeOf(b) === 'outlet') return 'Deux prises murales ne se relient pas directement.';
+  if (typeOf(a) === 'port' && typeOf(b) === 'port' && byId(a).deviceId === byId(b).deviceId) return 'Les deux ports sont sur le même équipement.';
+  if (mediaOf(a) !== mediaOf(b)) return 'Types incompatibles : cuivre d\'un côté, fibre de l\'autre.';
+  if (!canAccept(a, b)) return `${labelOf(a)} est déjà câblé de ce côté.`;
+  if (!canAccept(b, a)) return `${labelOf(b)} est déjà câblé de ce côté.`;
+  return null;
+}
+function connect(a, b, type, length) {
+  const err = connectCheck(a, b);
+  if (err) throw new Error(err);
+  return Store.commit('edit', `Connexion ${labelOf(a)} ↔ ${labelOf(b)} (${type.toUpperCase()}, ${length} m)`, db => {
+    const cab = { id: nextId(db, 'cab'), a, b, type, length, color: CABLE_TYPES[type].color, label: '' };
+    db.cables.push(cab);
+    Store.reindex();
+    // Si la liaison relie maintenant deux ports actifs, le lien monte
+    const ends = segment(a).nodes.map(byId).filter(n => n && n.deviceId && n.role !== 'pp');
+    if (ends.length === 2) { for (const p of ends) if (p.status === 'down') p.status = 'up'; const v = ends.find(p => isNetDev(byId(p.deviceId)))?.vlan; if (type === 'patch' && v != null) cab.color = vlanOf(v).color; }
+    return cab;
+  }, a);
+}
+function disconnect(cableId) {
+  const cab = byId(cableId);
+  if (!cab) return;
+  const ends = segment(cab.a).nodes.map(byId).filter(n => n && n.deviceId && n.role !== 'pp');
+  Store.commit('edit', `Débranchement ${labelOf(cab.a)} ↔ ${labelOf(cab.b)}`, db => {
+    db.cables.splice(db.cables.indexOf(cab), 1);
+    if (ends.length === 2) for (const p of ends) if (p.status === 'up') { p.status = 'down'; p.poe.watts = 0; }
+  }, cab.a);
+}
 /*@@SERVICES*/
 
 /* ============================================================
@@ -2065,6 +2181,8 @@ const Views3D = {};   // complété par la vue 3D
 
 function renderCarto() {
   if (!Carto.built) return;
+  // Le chemin tracé est recalculé si la base a changé
+  if (Carto.trace && Carto.trace.rev !== Store.rev) { const tr = byId(Carto.trace.start) ? trace(Carto.trace.start) : null; Carto.trace = tr && tr.nodes.length > 1 ? tr : null; }
   renderTree(); renderCrumb();
   $('#c-views').innerHTML = [['plan', 'plan', 'Plan 2D'], ['rack', 'cube', 'Baie 3D'], ['topo', 'topo', 'Topologie']].map(([v, i, l]) => `<button data-act="c-view" data-v="${v}" class="${Carto.view === v ? 'on' : ''}">${ico(i)}${l}</button>`).join('');
   for (const v of ['plan', 'rack', 'topo']) $('#v-' + v).classList.toggle('on', Carto.view === v);
@@ -2467,8 +2585,6 @@ $('#file-image').addEventListener('change', e => {
 });
 Actions['plan-img-del'] = () => { const floor = byId(Carto.floorId); Store.commit('edit', `Fond de plan retiré pour ${labelOf(floor.id)}`, () => { floor.planImage = ''; }, floor.id); };
 
-/* Vues provisoires, remplacées par les lots suivants */
-function renderTopo() { $('#v-topo').innerHTML = '<div class="empty">Topologie en cours de construction.</div>'; }
 /* ---------- Vue « Baie 3D » : élévation 2D à gauche, scène 3D à droite ---------- */
 const View3D = { mode: 'none', cables: true, key: '', focusReq: false };
 function renderRackView() {
@@ -2536,6 +2652,201 @@ Changes['rack-pick'] = el => { if (el.value) { View3D.focusReq = true; select(el
 Actions['r3d-mode'] = el => { View3D.mode = el.dataset.m; Views3D.main.setMode(View3D.mode); renderRackView(); };
 Actions['r3d-cables'] = () => { View3D.cables = !View3D.cables; Views3D.main.setCables(View3D.cables); renderRackView(); };
 Actions['r3d-fit'] = () => Views3D.main.frameAll();
+/* ---------- Traçage du câblage ---------- */
+Actions.trace = el => {
+  const tr = trace(el.dataset.id);
+  if (tr.nodes.length < 2) throw new Error('Rien n\'est branché sur cet élément.');
+  Carto.trace = tr;
+  renderCarto();
+  toast(tr.complete ? `Chemin tracé jusqu'au cœur : ${tr.nodes.length} points, ${tr.cables.length} câbles` : `Chemin partiel : ${tr.stop}`, tr.complete ? 'ok' : 'warn');
+};
+Actions['trace-clear'] = () => { Carto.trace = null; renderCarto(); };
+/* Liste des sauts du chemin, affichée dans la fiche */
+traceSection = () => {
+  const tr = Carto.trace;
+  if (!tr) return '';
+  const rows = [];
+  let ci = 0;
+  tr.nodes.forEach((n, i) => {
+    if (i > 0) {
+      if (tr.internal.has(i)) rows.push(`<div class="hop"><span class="n" style="visibility:hidden"></span><span class="cabl">↓ traversée de ${esc(byId(byId(n).deviceId).hostname)}</span></div>`);
+      else { const c = tr.cables[ci++]; if (c) rows.push(`<div class="hop"><span class="n" style="visibility:hidden"></span><span class="cabl">↓ ${esc(CABLE_TYPES[c.type]?.label || c.type)} · ${c.length} m${c.label ? ' · ' + esc(c.label) : ''}</span></div>`); }
+    }
+    const t = typeOf(n), e = byId(n);
+    const sub = t === 'outlet' ? locLabel(e.roomId) : `${PORT_KIND[e.kind]}${e.role === 'pp' ? '' : ' · ' + STATE_LABEL[e.status]} · ${locLabel(e.deviceId, { short: true })}`;
+    rows.push(`<div class="hop" data-act="sel" data-id="${n}"><span class="n">${i + 1}</span><div><b>${esc(labelOf(n))}</b><div class="cabl">${esc(sub)}</div></div></div>`);
+  });
+  return `<div class="d-sec"><div class="sec-t">${ico('trace')}Chemin de câblage<button class="btn sm" style="margin-left:auto" data-act="trace-clear">${ico('x')}Effacer</button></div>
+    <div class="muted" style="margin-bottom:6px">${tr.complete ? `<span class="st"><i style="background:${COL.up}"></i>Chemin complet jusqu'au cœur</span>` : `<span class="st"><i style="background:${COL.warn}"></i>Chemin partiel</span> — ${esc(tr.stop)}`}</div>${rows.join('')}</div>`;
+};
+/* Position sur le plan d'un nœud du chemin, s'il est sur l'étage affiché */
+function tracePoint(n, floorId) {
+  const l = locOf(n);
+  if (l.floor?.id !== floorId) return null;
+  const e = l.rack || l.device || l.outlet;
+  return e && e.x != null ? { x: e.x * K, y: e.y * K, id: e.id } : null;
+}
+drawPlanTrace = () => {
+  const g = $('#plan-trace'), tr = Carto.trace;
+  if (!g || !tr) return;
+  const pts = [];
+  let leaves = false;
+  for (const n of tr.nodes) { const p = tracePoint(n, Carto.floorId); if (!p) { if (pts.length) leaves = true; continue; } if (!pts.length || pts.at(-1).id !== p.id) pts.push(p); }
+  if (!pts.length) { g.innerHTML = ''; return; }
+  // Tracé en équerre entre deux points successifs
+  let d = `M${pts[0].x} ${pts[0].y}`;
+  for (let i = 1; i < pts.length; i++) d += ` L${pts[i].x} ${pts[i - 1].y} L${pts[i].x} ${pts[i].y}`;
+  const last = pts.at(-1), others = tr.nodes.some(n => !tracePoint(n, Carto.floorId));
+  g.innerHTML = `<path class="trace-line" d="${d}"/>${pts.map(p => `<circle class="trace-halo" cx="${p.x}" cy="${p.y}" r="11"/>`).join('')}
+    ${others ? `<text x="${last.x + 14}" y="${last.y - 12}" fill="#38bdf8" font-size="8" font-weight="700">↗ suite du chemin sur un autre étage</text>` : ''}`;
+};
+
+/* ---------- Connexion et débranchement ---------- */
+/* Cibles possibles pour relier l'élément a : prises et ports compatibles et libres */
+function connectTargets(a) {
+  const d = Store.db, here = locOf(a), ok = id => !connectCheck(a, id);
+  const outlets = typeOf(a) === 'outlet' ? [] : d.outlets.filter(o => ok(o.id));
+  const devs = d.devices.filter(x => x.status !== 'retired' && portsOf(x.id).some(p => ok(p.id)));
+  // Les équipements de la même baie, puis de la même pièce, passent en premier
+  const score = x => { const l = locOf(x.id); return (here.rack && l.rack?.id === here.rack.id ? 0 : here.room && l.room?.id === here.room.id ? 1 : here.floor && l.floor?.id === here.floor.id ? 2 : 3); };
+  devs.sort((x, y) => score(x) - score(y) || x.hostname.localeCompare(y.hostname));
+  outlets.sort((x, y) => (locOf(x.id).floor?.id === here.floor?.id ? 0 : 1) - (locOf(y.id).floor?.id === here.floor?.id ? 0 : 1) || x.label.localeCompare(y.label));
+  return { outlets, devs };
+}
+Actions.connect = el => {
+  const a = el.dataset.id, { outlets, devs } = connectTargets(a), fiber = mediaOf(a) === 'fibre';
+  if (!outlets.length && !devs.length) throw new Error('Aucune cible libre et compatible.');
+  const types = Object.entries(CABLE_TYPES).filter(([k, v]) => v.fiber === fiber);
+  Modal.open({
+    title: `Connecter ${esc(labelOf(a))}`,
+    body: `<div class="form-grid">
+      <label class="f full"><span>Équipement ou prise de destination (${fiber ? 'fibre' : 'cuivre'})</span><select name="target" data-chg="conn-target" data-a="${a}" autofocus>
+        ${devs.length ? `<optgroup label="Équipements">${devs.map(x => opt(x.id, `${x.hostname} — ${locLabel(x.id, { short: true })}`, '')).join('')}</optgroup>` : ''}
+        ${outlets.length ? `<optgroup label="Prises murales">${outlets.map(o => opt(o.id, `Prise ${o.label} — ${locLabel(o.roomId)}`, '')).join('')}</optgroup>` : ''}</select></label>
+      <label class="f full"><span>Port</span><select name="port" id="conn-port"></select></label>
+      <label class="f"><span>Type de câble</span><select name="type" id="conn-type">${types.map(([k, v]) => opt(k, v.label, '')).join('')}</select></label>
+      <label class="f"><span>Longueur (m)</span><input type="number" name="length" min="0.5" step="0.5" value="2"></label></div>`,
+    ok: 'Connecter',
+    onOpen: root => Changes['conn-target'](root.querySelector('[name=target]')),
+    onOk(v) {
+      const b = typeOf(v.target) === 'outlet' ? v.target : v.port;
+      if (!b) throw new Error('Choisissez un port.');
+      connect(a, b, v.type, v.length || 1);
+      toast('Connexion créée', 'ok', undoAction);
+      return true;
+    },
+  });
+};
+Changes['conn-target'] = el => {
+  const a = el.dataset.a, t = el.value, sel = $('#conn-port'), ty = $('#conn-type');
+  const ports = typeOf(t) === 'device' ? portsOf(t).filter(p => !connectCheck(a, p.id)) : [];
+  sel.innerHTML = ports.map(p => opt(p.id, `${p.name} — ${PORT_KIND[p.kind]}${p.role === 'pp' ? ' (panneau)' : ''}`, '')).join('');
+  sel.disabled = !ports.length;
+  // Type proposé : lien permanent entre deux éléments passifs, cordon sinon
+  const b = typeOf(t) === 'outlet' ? t : ports[0]?.id;
+  if (b && mediaOf(a) === 'cuivre') ty.value = isPassiveNode(a) && isPassiveNode(b) ? 'cat6a' : 'patch';
+};
+Actions.disconnect = el => {
+  const id = el.dataset.id, cabs = cablesOf(id);
+  if (!cabs.length) return;
+  if (cabs.length === 1) { disconnect(cabs[0].id); toast('Câble débranché', 'ok', undoAction); return; }
+  Modal.open({
+    title: `Débrancher ${esc(labelOf(id))}`,
+    body: `<label class="f"><span>Câble à retirer</span><select name="cab">${cabs.map(c => opt(c.id, `${isPassiveNode(otherEnd(c, id)) ? 'Arrière' : 'Avant'} : vers ${labelOf(otherEnd(c, id))} (${c.type.toUpperCase()}, ${c.length} m)`, '')).join('')}</select></label>`,
+    ok: 'Débrancher', okClass: 'danger',
+    onOk(v) { disconnect(v.cab); toast('Câble débranché', 'ok', undoAction); return true; },
+  });
+};
+Actions['outlet-del'] = el => {
+  const o = byId(el.dataset.id);
+  Modal.confirm('Supprimer la prise', `Supprimer la prise <b>${esc(o.label)}</b> et ses câbles ?`, () => {
+    Store.commit('remove', `Suppression de la prise ${o.label}`, db => { db.cables = db.cables.filter(c => c.a !== o.id && c.b !== o.id); db.outlets.splice(db.outlets.indexOf(o), 1); });
+    select(o.roomId, { keep: true }); toast('Prise supprimée', 'ok', undoAction); return true;
+  }, 'Supprimer', 'danger');
+};
+
+/* ---------- Topologie logique ---------- */
+const Topo = { ends: true, vb: null };
+function renderTopo() {
+  const host = $('#v-topo'), tp = topology(), tr = Carto.trace;
+  const rows = [['perimeter', 150], ['core', 280], ['distribution', 410], ['access', 540]];
+  const byLayer = Object.fromEntries(rows.map(([k]) => [k, tp.nodes.filter(d => tp.layer.get(d.id) === k)]));
+  const NW = 150, NH = 50, GAP = 26;
+  const stag = a => a.length > 6;   // niveau chargé : les nœuds sont placés en quinconce sur deux rangées
+  const W = Math.max(900, ...Object.values(byLayer).map(a => (stag(a) ? a.length * (NW + GAP) * 0.56 + NW : a.length * (NW + GAP)) + 140));
+  const pos = new Map();
+  // Chaque niveau est trié selon la position moyenne de ses voisins du niveau au-dessus
+  for (const [k, y] of rows) {
+    const list = byLayer[k];
+    const bary = d => { const xs = [...tp.adj.get(d.id)].map(n => pos.get(n)?.x).filter(x => x != null); return xs.length ? sum(xs) / xs.length : W / 2; };
+    list.sort((a, b) => bary(a) - bary(b) || a.hostname.localeCompare(b.hostname));
+    const step = stag(list) ? (NW + GAP) * 0.56 : Math.min(NW + GAP * 3, (W - 140) / Math.max(1, list.length));
+    list.forEach((d, i) => pos.set(d.id, { x: 120 + (W - 140) / 2 + (i - (list.length - 1) / 2) * step, y: y + (stag(list) ? (i % 2) * 84 : 0) }));
+  }
+  const o = [];
+  for (const [k, y] of rows) o.push(`<rect x="0" y="${y - 50}" width="${W}" height="${stag(byLayer[k]) ? 202 : 118}" fill="${k === 'core' || k === 'access' ? '#0c1219' : '#0a0f15'}"/><text x="14" y="${y - 30}" fill="#5d6c80" font-size="11" font-weight="700" letter-spacing="1">${LAYERS[k].toUpperCase()}</text>`);
+  // Lien WAN
+  const wanRtr = tp.nodes.find(d => portsOf(d.id).some(p => /opérateur|internet|wan/i.test(p.connected)) && pos.has(d.id));
+  if (wanRtr) { const p = pos.get(wanRtr.id); o.push(`<path d="M${p.x} ${p.y - NH / 2}V58" stroke="#5d6c80" stroke-width="2" stroke-dasharray="5 4"/><g transform="translate(${p.x},40)"><ellipse rx="70" ry="20" fill="#111821" stroke="#5d6c80" stroke-width="1.5"/><text text-anchor="middle" y="4" fill="#8b9bb0" font-size="12" font-weight="600">Internet / WAN</text></g>`); }
+  // Liens
+  for (const l of tp.links) {
+    const a = pos.get(l.a), b = pos.get(l.b); if (!a || !b) continue;
+    const [u, d] = a.y <= b.y ? [a, b] : [b, a];
+    const st = l.pairs.some(([p, q]) => p.status === 'error' || q.status === 'error') ? 'error' : l.pairs.every(([p, q]) => p.status !== 'up' || q.status !== 'up') ? 'down' : 'up';
+    const hl = tr && l.pairs.some(([p, q]) => tr.nodeSet.has(p.id) && tr.nodeSet.has(q.id));
+    const path = u.y === d.y ? `M${u.x} ${u.y + NH / 2}C${u.x} ${u.y + NH / 2 + 34},${d.x} ${d.y + NH / 2 + 34},${d.x} ${d.y + NH / 2}` : `M${u.x} ${u.y + NH / 2}C${u.x} ${(u.y + d.y) / 2},${d.x} ${(u.y + d.y) / 2},${d.x} ${d.y - NH / 2}`;
+    const sp = Math.max(...l.pairs.map(([p]) => p.speed));
+    const tip = [`${byId(l.a).hostname} ↔ ${byId(l.b).hostname}`, ...l.pairs.map(([p, q]) => `${p.name} ↔ ${q.name} · ${fmtSpeed(Math.min(p.speed, q.speed))} · ${STATE_LABEL[p.status === 'up' && q.status === 'up' ? 'up' : p.status === 'error' || q.status === 'error' ? 'error' : 'down']}`)].join('|');
+    o.push(`<path d="${path}" fill="none" stroke="transparent" stroke-width="12" data-tip="${esc(tip)}"/><path class="tlink ${hl ? 'hl' : ''}" d="${path}" fill="none" stroke="${st === 'error' ? COL.crit : st === 'down' ? COL.down : sp >= 10000 ? '#6f8fb5' : '#4d6480'}" stroke-width="${l.pairs.length > 1 ? 3.2 : 1.8}" ${st === 'down' ? 'stroke-dasharray="5 4"' : ''} pointer-events="none"/>`);
+    if (l.pairs.length > 1) { const mx = (u.x + d.x) / 2, my = u.y === d.y ? u.y + NH / 2 + 26 : (u.y + d.y) / 2; o.push(`<g pointer-events="none"><rect x="${mx - 11}" y="${my - 8}" width="22" height="16" rx="8" fill="#111821" stroke="#2c3c50"/><text x="${mx}" y="${my + 4}" text-anchor="middle" fill="#8b9bb0" font-size="10" font-weight="700">×${l.pairs.length}</text></g>`); }
+  }
+  // Nœuds
+  const selDev = locOf(Carto.sel || '').device?.id;
+  for (const d of tp.nodes) {
+    const p = pos.get(d.id); if (!p) continue;
+    const c = catOf(d), cc = CATEGORIES[c.category], bad = d.status === 'fault' ? COL.crit : d.status === 'maintenance' ? COL.warn : portsOf(d.id).some(x => x.status === 'error') ? COL.crit : null;
+    const used = portsOf(d.id).filter(x => x.status === 'up').length;
+    o.push(`<g class="tnode ${selDev === d.id ? 'sel' : ''} ${tr?.devSet.has(d.id) ? 'hl' : ''}" transform="translate(${p.x - NW / 2},${p.y - NH / 2})" data-act="psel" data-id="${d.id}" data-tip="${esc([d.hostname, `${c.brand} ${c.model}`, d.ip ? `IP : ${d.ip}` : '', locLabel(d.id), `Ports actifs : ${used}/${portsOf(d.id).length}`, `Niveau : ${LAYERS[tp.layer.get(d.id)]}`].filter(Boolean).join('|'))}">
+      <rect class="tb" width="${NW}" height="${NH}" rx="7"/><rect width="5" height="${NH}" rx="2" fill="${cc.color}"/>
+      <path d="${ICONS[cc.icon]}" transform="translate(13,14) scale(.9)" fill="none" stroke="${cc.color}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="42" y="22" fill="#d7e0ea" font-size="11.5" font-weight="700">${esc(d.hostname)}</text><text x="42" y="37" fill="#8b9bb0" font-size="10">${esc(c.model.length > 19 ? c.model.slice(0, 18) + '…' : c.model)}</text>
+      ${bad ? `<circle cx="${NW - 9}" cy="9" r="4.5" fill="${bad}"/>` : ''}</g>`);
+    if (Topo.ends) {
+      const e = tp.ends.get(d.id) || [], g2 = groupBy(e, x => catOf(x).category);
+      const pcs = portsOf(d.id).filter(x => x.role === 'access' && x.status === 'up' && x.connected && !farEnd(x.id)).length;
+      const short = { ap: 'bornes', phone: 'tél.', camera: 'cam.', server: 'serveurs', ups: 'ond.' };
+      const parts = [...g2].map(([k, a]) => `${a.length} ${short[k] || CATEGORIES[k].label.toLowerCase()}`); if (pcs) parts.push(`${pcs} postes`);
+      const lines = []; for (let i = 0; i < parts.length; i += 2) lines.push(parts.slice(i, i + 2).join(' · '));
+      lines.slice(0, 2).forEach((s, i) => o.push(`<text x="${p.x}" y="${p.y + NH / 2 + 14 + i * 12}" text-anchor="middle" fill="#5d6c80" font-size="9.5" pointer-events="none">${esc(s)}</text>`));
+    }
+  }
+  const H = 720;
+  if (!Topo.vb || Topo.w !== W) { Topo.vb = { x: 0, y: 0, w: W, h: H }; Topo.w = W; }
+  host.innerHTML = `<svg class="topo" xmlns="http://www.w3.org/2000/svg" viewBox="${Topo.vb.x} ${Topo.vb.y} ${Topo.vb.w} ${Topo.vb.h}">${o.join('')}</svg>
+    <div class="overlay tl"><button class="btn icon" data-act="topo-fit" data-tip="Ajuster">${ico('fit')}</button><button class="btn ${Topo.ends ? 'on' : ''}" data-act="topo-ends" data-tip="Terminaux|Afficher le nombre de terminaux reliés à chaque équipement">${ico('phone')}Terminaux</button>${tr ? `<button class="btn on" data-act="trace-clear">${ico('x')}Effacer le tracé</button>` : ''}</div>
+    <div class="overlay bl legend"><b>Liens</b><span><i style="background:#6f8fb5;height:3px"></i>10 Gb/s et plus</span><span><i style="background:#4d6480;height:2px"></i>1 Gb/s</span><span><i style="background:${COL.down};height:2px"></i>inactif</span><span><i style="background:${COL.crit};height:3px"></i>en erreur</span><span>×2 : liens redondants</span><span>Niveaux calculés à partir du câblage</span></div>`;
+  if (!host.dataset.pz) { host.dataset.pz = '1'; panZoom(host, 'svg.topo', () => Topo.vb); }
+}
+Actions['topo-fit'] = () => { Topo.vb = null; renderTopo(); };
+Actions['topo-ends'] = () => { Topo.ends = !Topo.ends; renderTopo(); };
+/* Zoom à la molette et déplacement à la souris pour un SVG (cadrage fourni par getVb) */
+function panZoom(host, sel, getVb) {
+  const apply = svg => { const vb = getVb(); svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`); };
+  host.addEventListener('wheel', e => {
+    const svg = $(sel, host); if (!svg) return; e.preventDefault();
+    const vb = getVb(), pt = svgPoint(svg, e), k = e.deltaY > 0 ? 1.18 : 1 / 1.18;
+    vb.x = pt.x - (pt.x - vb.x) * k; vb.y = pt.y - (pt.y - vb.y) * k; vb.w *= k; vb.h *= k; apply(svg);
+  }, { passive: false });
+  host.addEventListener('pointerdown', e => {
+    const svg = $(sel, host); if (!svg || e.button !== 0 || !e.target.closest(sel)) return;
+    const vb = getVb(), sx = e.clientX, sy = e.clientY, inv = svg.getScreenCTM().inverse().a, x0 = vb.x, y0 = vb.y;
+    planDrag.moved = false;
+    const move = ev => { if (!planDrag.moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return; planDrag.moved = true; Tip.hide(); vb.x = x0 - (ev.clientX - sx) * inv; vb.y = y0 - (ev.clientY - sy) * inv; apply(svg); };
+    const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); };
+    addEventListener('pointermove', move); addEventListener('pointerup', up);
+  });
+  host.addEventListener('click', e => { if (planDrag.moved) { e.stopPropagation(); e.preventDefault(); planDrag.moved = false; } }, true);
+}
 /*@@CARTO*/
 
 /* ============================================================
@@ -2568,7 +2879,7 @@ function placeholder(name) {
    ============================================================ */
 Store.init();
 showTab(UI.tab);
-window.NetCarto = { Store, UI, Views, Views3D, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic
+window.NetCarto = { Store, UI, Views, Views3D, Carto, trace, topology, connect, disconnect, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic
 </script>
 </body>
 </html>
