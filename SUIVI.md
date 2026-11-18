@@ -371,6 +371,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-18 | Proposer d'autres palettes de couleurs | ✅ Répondu : 3 pistes proposées |
 | 2026-11-18 | Inventaire : lignes plus aérées, à la manière de Freshservice, avec des compteurs en haut (nombre d'équipements réseau, de switchs…) | ✅ Fait : bandeau « Vue d'ensemble » de 7 compteurs cliquables (ils filtrent la liste), tableau dans une carte, lignes plus hautes, pagination en haut à droite |
 | 2026-11-18 | Palette « Ardoise et vert », avec fond blanc et mode sombre au choix | ✅ Fait : deux thèmes et bouton de bascule dans l'en-tête (voir 3.5) |
+| 2026-11-18 | Tableau de bord : les informations conviennent, mais l'esthétique est à revoir (structuré, propre, agréable à l'œil) | ✅ Fait : nouvelle mise en page en cartes homogènes, indicateurs avec jauge circulaire, alertes en lignes avec niveau, anneau des états de ports, baies en jauges verticales, historique en frise. À valider par l'utilisateur ; les autres onglets pourront suivre le même style. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---

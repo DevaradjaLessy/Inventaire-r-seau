@@ -1,11 +1,11 @@
 /* Onglet Tableau de bord : indicateurs, barres, matrice, alertes, historique. */
 import { CATEGORIES, COL, HISTORY_TYPES, POE_WARN_PCT, PORT_STATUS, RACK_FULL_PCT } from '../config.js';
-import { $, esc, fmtDateTime, groupBy, pct, plural, sum } from '../utils.js';
+import { $, clamp, esc, fmtDateTime, groupBy, pct, plural, sum } from '../utils.js';
 import { ico } from '../icones.js';
 import { Cache, Store } from '../store.js';
-import { cablesOf, catOf, computeAlerts, isPassive, locOf, poeUsage, portsOf, rackUsage } from '../services/requetes.js';
+import { cablesOf, catOf, computeAlerts, isPassive, locLabel, locOf, poeUsage, portsOf, rackUsage } from '../services/requetes.js';
 import { isNetDev, outletInfo } from '../services/cablage.js';
-import { levelColor, stPort, Views } from './socle.js';
+import { levelColor, Views } from './socle.js';
 
 /* Statistiques globales (hors équipements hors service) */
 function computeStats() {
@@ -29,41 +29,61 @@ function computeStats() {
   });
 }
 const HIST_ICON = { add: 'plus', move: 'move', remove: 'out', edit: 'edit', stock: 'box', import: 'upload', catalog: 'list' };
+const LEVEL_LABEL = { crit: 'Critique', serious: 'Sérieux', warn: 'Avertissement' };
+/* Anneau de progression (0 à 100 %), avec une icône au centre */
+function ring(p, icon, color = 'var(--accent)') {
+  const r = 22, c = 2 * Math.PI * r, v = clamp(p, 0, 100);
+  return `<div class="ring"><svg viewBox="0 0 56 56"><circle cx="28" cy="28" r="${r}" fill="none" stroke="var(--panel3)" stroke-width="5"/><circle cx="28" cy="28" r="${r}" fill="none" stroke="${color}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${(c * v / 100).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 28 28)"/></svg>${ico(icon)}</div>`;
+}
+/* Anneau à plusieurs segments : parts = [{ n, color, label }] */
+function donut(parts, total, center, sub) {
+  const r = 52, c = 2 * Math.PI * r, gap = 3;
+  let off = 0;
+  const segs = parts.filter(x => x.n).map(x => { const len = c * x.n / total, d = Math.max(1, len - gap), seg = `<circle cx="70" cy="70" r="${r}" fill="none" stroke="${x.color}" stroke-width="15" stroke-dasharray="${d.toFixed(1)} ${(c - d).toFixed(1)}" stroke-dashoffset="${(-off).toFixed(1)}" transform="rotate(-90 70 70)" data-tip="${esc(x.label)}|${plural(x.n, 'port')} (${pct(x.n, total)} %)"/>`; off += len; return seg; }).join('');
+  return `<div class="donut"><svg viewBox="0 0 140 140">${segs}</svg><div class="c"><b>${center}</b><span>${sub}</span></div></div>`;
+}
 Views.dash = {
   render() {
     const s = computeStats(), d = Store.db, alerts = computeAlerts();
-    const kpi = (label, val, sub, p = null, tip = '') => `<div class="panel kpi" ${tip ? `data-tip="${esc(tip)}"` : ''}><div class="sec-t">${label}</div><div class="v">${val}</div><div class="s">${sub}</div>${p != null ? `<div class="bar"><i style="width:${Math.min(100, p)}%"></i></div>` : ''}</div>`;
+    const kpi = (icon, label, val, sub, p = null, color) => `<div class="dcard kpi"><div class="kt"><div class="lbl">${label}</div><div class="v">${val}</div><div class="s">${sub}</div></div>${p != null ? ring(p, icon, color) : `<div class="ring flat" ${color ? `style="color:${color}"` : ''}>${ico(icon)}</div>`}</div>`;
+    const title = (icon, t, right = '') => `<div class="dt"><span class="ti">${ico(icon)}</span><h3>${t}</h3><span class="grow"></span>${right}</div>`;
     /* Barres horizontales : une seule teinte, la longueur porte la valeur */
-    const hbars = (rows, max, fmt) => `<div class="hb">${rows.map(r => `<span class="l" title="${esc(r.label)}">${esc(r.label)}</span><div class="tr" ${r.id ? `data-act="go" data-id="${r.id}"` : ''} data-tip="${esc(r.label)}|${esc(r.tip)}"><i style="width:${max ? r.v * 100 / max : 0}%;${r.warn ? `background:${COL.serious}` : ''}"></i></div><span class="n">${r.warn ? ico('alert') + ' ' : ''}${fmt(r)}</span>`).join('')}</div>`;
+    const hbars = (rows, max, fmt) => `<div class="hb">${rows.map(r => `<span class="l" title="${esc(r.label)}">${r.icon ? ico(r.icon) : ''}${esc(r.label)}</span><div class="tr" ${r.id ? `data-act="go" data-id="${r.id}"` : ''} data-tip="${esc(r.label)}|${esc(r.tip)}"><i style="width:${max ? r.v * 100 / max : 0}%;${r.warn ? `background:${COL.serious}` : ''}"></i></div><span class="n">${r.warn ? `<span style="color:${COL.serious}">${ico('alert')}</span>` : ''}${fmt(r)}</span>`).join('')}</div>`;
     const cats = Object.keys(CATEGORIES).filter(k => s.byCat.has(k));
-    const catRows = cats.map(k => ({ label: CATEGORIES[k].label, v: s.byCat.get(k).length, tip: plural(s.byCat.get(k).length, 'équipement') })).sort((a, b) => b.v - a.v);
-    const bldRows = d.buildings.map(b => ({ id: b.id, label: b.name, v: (s.byBld.get(b.id) || []).length, tip: plural((s.byBld.get(b.id) || []).length, 'équipement') }));
-    const swRows = s.swPorts.map(x => ({ id: x.dev.id, label: x.dev.hostname, v: pct(x.used, x.total), tip: `${x.used} ports utilisés sur ${x.total}`, raw: x })).sort((a, b) => b.v - a.v);
-    const rackRows = s.racks.map(x => ({ id: x.r.id, label: x.r.name, v: x.pct, warn: x.pct >= RACK_FULL_PCT, tip: `${x.used} U occupées sur ${x.total}`, raw: x })).sort((a, b) => b.v - a.v);
-    const poeRows = s.poe.map(x => ({ id: x.dev.id, label: x.dev.hostname, v: x.pct, warn: x.pct >= POE_WARN_PCT, tip: `${x.used} W consommés sur ${x.budget} W`, raw: x })).sort((a, b) => b.v - a.v);
+    const catRows = cats.map(k => ({ label: CATEGORIES[k].label, icon: CATEGORIES[k].icon, v: s.byCat.get(k).length, tip: plural(s.byCat.get(k).length, 'équipement') })).sort((a, b) => b.v - a.v);
+    const swRows = s.swPorts.map(x => ({ id: x.dev.id, label: x.dev.hostname, v: pct(x.used, x.total), tip: `${x.used} ports utilisés sur ${x.total} (${pct(x.used, x.total)} %)`, raw: x })).sort((a, b) => b.v - a.v);
+    const poeRows = s.poe.map(x => ({ id: x.dev.id, label: x.dev.hostname, v: x.pct, warn: x.pct >= POE_WARN_PCT, tip: `${x.used} W consommés sur ${x.budget} W (${x.pct} %)`, raw: x })).sort((a, b) => b.v - a.v);
+    const racks = [...s.racks].sort((a, b) => b.pct - a.pct);
     // Matrice type × bâtiment : teinte unique, plus dense quand la valeur monte
     const mxMax = Math.max(1, ...cats.flatMap(k => d.buildings.map(b => s.byCat.get(k).filter(x => locOf(x.id).building?.id === b.id).length)));
-    const matrix = `<table class="mx"><thead><tr><th></th>${d.buildings.map(b => `<th style="text-align:center">Bât. ${esc(b.code)}</th>`).join('')}<th style="text-align:center">Total</th></tr></thead><tbody>${cats.map(k => { const row = d.buildings.map(b => s.byCat.get(k).filter(x => locOf(x.id).building?.id === b.id).length);
-      return `<tr><th>${CATEGORIES[k].label}</th>${row.map((n, i) => `<td style="background:color-mix(in srgb, var(--accent) ${n ? Math.round(10 + 50 * n / mxMax) : 3}%, transparent)" data-tip="${CATEGORIES[k].label} — Bât. ${esc(d.buildings[i].code)}|${plural(n, 'équipement')}">${n || '·'}</td>`).join('')}<td><b>${sum(row)}</b></td></tr>`; }).join('')}</tbody></table>`;
-    const states = ['up', 'down', 'disabled', 'error'].map(k => ({ k, n: (s.portStates.get(k) || []).length }));
-    const crit = alerts.filter(a => a.level === 'crit').length;
+    const matrix = `<table class="mx"><thead><tr><th></th>${d.buildings.map(b => `<th class="c">Bât. ${esc(b.code)}</th>`).join('')}<th class="c">Total</th></tr></thead><tbody>${cats.map(k => { const row = d.buildings.map(b => s.byCat.get(k).filter(x => locOf(x.id).building?.id === b.id).length);
+      return `<tr><th>${ico(CATEGORIES[k].icon)}${CATEGORIES[k].label}</th>${row.map((n, i) => `<td style="background:color-mix(in srgb, var(--accent) ${n ? Math.round(10 + 50 * n / mxMax) : 3}%, transparent)" data-tip="${CATEGORIES[k].label} — Bât. ${esc(d.buildings[i].code)}|${plural(n, 'équipement')}">${n || '·'}</td>`).join('')}<td class="tot">${sum(row)}</td></tr>`; }).join('')}</tbody></table>`;
+    const states = ['up', 'down', 'disabled', 'error'].map(k => ({ k, n: (s.portStates.get(k) || []).length, color: PORT_STATUS[k].color, label: PORT_STATUS[k].label }));
+    const nLevel = l => alerts.filter(a => a.level === l).length, crit = nLevel('crit');
+    const pill = l => nLevel(l) ? `<span class="pill" style="--c:${levelColor(l)}"><i></i>${nLevel(l)} ${LEVEL_LABEL[l].toLowerCase()}${nLevel(l) > 1 ? 's' : ''}</span>` : '';
+    const site = d.sites[0];
     $('#tab-dash').innerHTML = `<div class="dash">
-      ${kpi('Équipements', s.devices, `dont ${s.active} actifs · ${d.racks.length} baies`, null, 'Équipements installés|Hors équipements « hors service »')}
-      ${kpi('Ports occupés', `${pct(s.portsUsed, s.ports)} <small>%</small>`, `${s.portsUsed} sur ${s.ports} ports réseau`, pct(s.portsUsed, s.ports), 'Ports des switchs, routeurs et pare-feu|Un port est occupé s\'il est actif ou câblé')}
-      ${kpi('Baies', `${pct(s.uUsed, s.uTotal)} <small>%</small>`, `${s.uUsed} U occupées sur ${s.uTotal}`, pct(s.uUsed, s.uTotal))}
-      ${kpi('PoE consommé', `${s.poeUsed} <small>W</small>`, `budget total ${s.poeBudget} W (${pct(s.poeUsed, s.poeBudget)} %)`, pct(s.poeUsed, s.poeBudget))}
-      ${kpi('Prises brassées', `${pct(s.patched, s.outlets)} <small>%</small>`, `${s.patched} sur ${s.outlets} · ${s.outletsUp} actives`, pct(s.patched, s.outlets))}
-      ${kpi('Alertes', alerts.length, crit ? `<span class="st"><i style="background:${COL.crit}"></i>${crit} critique${crit > 1 ? 's' : ''}</span>` : 'aucune alerte critique')}
-      <div class="panel card c4"><h3>${ico('alert')}Alertes (${alerts.length})</h3><div class="scroll">${alerts.map(a => `<div class="al" data-act="go" data-id="${a.ref}"><span style="color:${levelColor(a.level)}">${ico(a.icon)}</span><div><b>${esc(a.text)}</b><small>${{ crit: 'Critique', serious: 'Sérieux', warn: 'Avertissement' }[a.level]} · ${esc(a.sub)}</small></div></div>`).join('') || '<div class="empty">Aucune alerte</div>'}</div></div>
-      <div class="panel card c4"><h3>${ico('box')}Équipements par type</h3>${hbars(catRows, Math.max(...catRows.map(r => r.v), 1), r => r.v)}</div>
-      <div class="panel card c4"><h3>${ico('building')}Équipements par bâtiment</h3>${hbars(bldRows, Math.max(...bldRows.map(r => r.v), 1), r => r.v)}
-        <h3 style="margin-top:18px">${ico('switch')}États des ports réseau</h3><div class="segbar">${states.filter(x => x.n).map(x => `<i style="flex:${x.n};background:${PORT_STATUS[x.k].color}" data-tip="${PORT_STATUS[x.k].label}|${plural(x.n, 'port')} (${pct(x.n, s.ports)} %)"></i>`).join('')}</div>
-        <div class="row wrap" style="margin-top:8px;gap:6px 14px">${states.map(x => `<span>${stPort(x.k)} <span class="muted">${x.n}</span></span>`).join('')}</div></div>
-      <div class="panel card c4"><h3>${ico('switch')}Occupation des ports par switch</h3>${hbars(swRows, 100, r => `${r.raw.used}/${r.raw.total}`)}</div>
-      <div class="panel card c4"><h3>${ico('rack')}Remplissage des baies</h3>${hbars(rackRows, 100, r => `${r.raw.used}/${r.raw.total} U`)}
-        <h3 style="margin-top:18px">${ico('bolt')}Budget PoE par switch</h3>${hbars(poeRows, 100, r => `${r.raw.used}/${r.raw.budget} W`)}</div>
-      <div class="panel card c4"><h3>${ico('list')}Type × bâtiment</h3>${matrix}</div>
-      <div class="panel card c12"><h3>${ico('history')}Dernières actions</h3><div class="scroll"><div class="hist">${d.history.slice(0, 60).map(h => `<span class="d">${fmtDateTime(h.ts)}</span><span class="chip">${ico(HIST_ICON[h.type] || 'edit')}${HISTORY_TYPES[h.type] || h.type}</span><span>${esc(h.text)}</span>`).join('') || '<span class="dim">Aucune action</span>'}</div></div></div>
+      <div class="dhead c12"><div><h2>Tableau de bord</h2><div class="muted">${esc(site ? site.name : 'Aucun site')} · ${plural(d.buildings.length, 'bâtiment')} · ${plural(d.floors.length, 'étage')} · mis à jour le ${fmtDateTime(d.meta.updatedAt)}</div></div></div>
+      ${kpi('box', 'Équipements', s.devices, `dont ${s.active} actifs · ${plural(d.racks.length, 'baie')}`)}
+      ${kpi('switch', 'Ports occupés', `${pct(s.portsUsed, s.ports)}<small> %</small>`, `${s.portsUsed} sur ${s.ports} ports`, pct(s.portsUsed, s.ports))}
+      ${kpi('rack', 'Baies', `${pct(s.uUsed, s.uTotal)}<small> %</small>`, `${s.uUsed} U sur ${s.uTotal}`, pct(s.uUsed, s.uTotal))}
+      ${kpi('bolt', 'PoE consommé', `${s.poeUsed}<small> W</small>`, `sur ${s.poeBudget} W de budget`, pct(s.poeUsed, s.poeBudget))}
+      ${kpi('outlet', 'Prises brassées', `${pct(s.patched, s.outlets)}<small> %</small>`, `${s.patched} sur ${s.outlets} · ${s.outletsUp} actives`, pct(s.patched, s.outlets))}
+      ${kpi('alert', 'Alertes', alerts.length, crit ? `dont ${crit} critique${crit > 1 ? 's' : ''}` : 'aucune critique', null, alerts.length ? (crit ? COL.crit : COL.serious) : null)}
+      <div class="dcard c5">${title('alert', 'Alertes', `<span class="row" style="gap:6px">${pill('crit')}${pill('serious')}${pill('warn')}</span>`)}
+        <div class="scroll alist">${alerts.map(a => `<div class="al" style="--c:${levelColor(a.level)}" data-act="go" data-id="${a.ref}"><span class="ai">${ico(a.icon)}</span><div><b>${esc(a.text)}</b><small>${esc(a.sub)}</small></div><span class="lv">${LEVEL_LABEL[a.level]}</span></div>`).join('') || '<div class="empty">Aucune alerte</div>'}</div></div>
+      <div class="dcard c4">${title('box', 'Parc par type', `<span class="muted">${s.devices} équipements</span>`)}${hbars(catRows, Math.max(...catRows.map(r => r.v), 1), r => r.v)}</div>
+      <div class="dcard c3">${title('switch', 'États des ports')}
+        ${donut(states, s.ports || 1, s.ports, 'ports réseau')}
+        <div class="dleg">${states.map(x => `<div><span class="st2"><i style="background:${x.color}"></i>${x.label}</span><b>${x.n}</b><span class="muted">${pct(x.n, s.ports)} %</span></div>`).join('')}</div></div>
+      <div class="dcard c4">${title('switch', 'Occupation des ports par switch')}<div class="scroll">${hbars(swRows, 100, r => `${r.raw.used}/${r.raw.total}`)}</div></div>
+      <div class="dcard c4">${title('rack', 'Remplissage des baies', `<span class="muted">${s.uUsed}/${s.uTotal} U</span>`)}
+        <div class="rgs">${racks.map(x => `<div class="rg ${x.pct >= RACK_FULL_PCT ? 'warn' : ''}" data-act="go" data-id="${x.r.id}" data-tip="${esc(x.r.name)}|${x.used} U occupées sur ${x.total}|${esc(locLabel(x.r.roomId))}"><b>${x.pct} %</b><div class="tube"><i style="height:${x.pct}%"></i></div><span>${esc(x.r.name.replace(/^(BAIE|COFFRET)-/, ''))}</span><small>${x.used}/${x.total} U</small></div>`).join('')}</div>
+        <div class="dnote">${racks.some(x => x.pct >= RACK_FULL_PCT) ? `<span style="color:${COL.serious}">${ico('alert')}</span>En orange : baie remplie à ${RACK_FULL_PCT} % ou plus` : 'Aucune baie proche de la saturation'}</div></div>
+      <div class="dcard c4">${title('bolt', 'Budget PoE par switch')}<div class="scroll">${hbars(poeRows, 100, r => `${r.raw.used}/${r.raw.budget} W`)}</div></div>
+      <div class="dcard c5">${title('building', 'Type × bâtiment')}${matrix}</div>
+      <div class="dcard c7">${title('history', 'Dernières actions', `<span class="muted">${plural(d.history.length, 'action')}</span>`)}
+        <div class="scroll tl">${d.history.slice(0, 40).map(h => `<div class="tli"><span class="td">${ico(HIST_ICON[h.type] || 'edit')}</span><div><b>${esc(h.text)}</b><small>${HISTORY_TYPES[h.type] || h.type} · ${fmtDateTime(h.ts)}</small></div></div>`).join('') || '<div class="empty">Aucune action</div>'}</div></div>
     </div>`;
   },
 };
