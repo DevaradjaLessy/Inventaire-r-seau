@@ -99,6 +99,7 @@ function renderPlan() {
   host.innerHTML = `<svg class="plan ${Carto.edit ? 'editing' : ''}" xmlns="http://www.w3.org/2000/svg">${planSvg(floor, false)}</svg>
     <div class="overlay tl"><select data-chg="plan-floor" data-tip="Changer d'étage">${floorsOpt}</select>
       <button class="btn icon" data-act="plan-fit" data-tip="Ajuster|Recadrer le plan sur l'étage">${ico('fit')}</button>
+      <button class="btn icon" data-act="plan-zoom" data-k="0.7" data-tip="Zoom avant">${ico('plus')}</button><button class="btn icon" data-act="plan-zoom" data-k="1.43" data-tip="Zoom arrière">${ico('minus')}</button>
       <button class="btn ${Carto.wifi ? 'on' : ''}" data-act="plan-wifi" data-tip="Couverture Wi-Fi|Portée indicative des bornes (9 m)">${ico('ap')}Wi-Fi</button>
       <button class="btn ${Carto.edit ? 'on' : ''}" data-act="plan-edit" data-tip="Mode Édition|Déplacer les prises, bornes, caméras, téléphones et baies à la souris">${ico('move')}Édition</button>
       <button class="btn ${Carto.palette ? 'on' : ''}" data-act="palette" data-tip="Stock|Glisser un modèle du stock sur le plan pour l'installer">${ico('box')}Stock</button>
@@ -112,6 +113,7 @@ function renderPlan() {
 }
 Changes['plan-floor'] = el => select(el.value, { view: 'plan' });
 Actions['plan-fit'] = () => { const f = byId(Carto.floorId); Carto.vbs[f.id] = fitVb(f); applyVb($('svg.plan')); };
+Actions['plan-zoom'] = el => { const vb = Carto.vbs[Carto.floorId], k = +el.dataset.k, cx = vb.x + vb.w / 2, cy = vb.y + vb.h / 2; vb.w = clamp(vb.w * k, 80, 6000); vb.h *= k; vb.x = cx - vb.w / 2; vb.y = cy - vb.h / 2; applyVb($('svg.plan')); };
 Actions['plan-wifi'] = () => { Carto.wifi = !Carto.wifi; renderPlan(); };
 Actions['plan-edit'] = () => { Carto.edit = !Carto.edit; renderPlan(); if (Carto.edit) toast('Mode Édition : faites glisser un objet pour le déplacer', 'ok'); };
 

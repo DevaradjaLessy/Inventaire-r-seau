@@ -38,6 +38,7 @@ function select(id, o = {}) {
   if (o.view) Carto.view = o.view;
   else if (!o.keep) Carto.view = l.rack ? 'rack' : 'plan';
   if (!o.keep) View3D.focusReq = true;
+  $('.carto')?.classList.remove('m-tree');   // sur téléphone, l'arbre se referme après un choix
   if (UI.tab !== 'carto') { UI.dirty.add('carto'); showTab('carto'); } else renderCarto();
   if (o.reveal !== false) revealInTree();
 }
@@ -45,6 +46,8 @@ function select(id, o = {}) {
 const goto = (id, o) => select(id, o);
 
 Actions.sel = el => select(el.dataset.id);
+/* Téléphone : ouvre ou ferme le panneau de l'arbre ou de la fiche */
+Actions['m-panel'] = el => { const c = $('.carto'), p = el.dataset.p; c.classList.toggle('m-tree', p === 'tree' && !c.classList.contains('m-tree')); c.classList.toggle('m-detail', p === 'detail' && !c.classList.contains('m-detail')); };
 Actions.psel = el => select(el.dataset.id, { keep: true });
 Actions['tree-toggle'] = (el, e) => { e.stopPropagation(); const id = el.dataset.id; Carto.open.has(id) ? Carto.open.delete(id) : Carto.open.add(id); renderTree(); };
 Actions['c-view'] = el => { Carto.view = el.dataset.v; renderCarto(); };
@@ -55,9 +58,9 @@ Views.carto = {
     const host = $('#tab-carto');
     if (!Carto.built) {
       host.innerHTML = `<div class="carto">
-        <aside class="c-tree"><div class="c-tree-h"><input type="search" data-inp="tree-filter" placeholder="Filtrer l'arborescence…"></div><div id="tree"></div></aside>
+        <aside class="c-tree"><div class="c-tree-h"><input type="search" data-inp="tree-filter" placeholder="Filtrer l'arborescence…"><button class="btn icon m-only" data-act="m-panel" data-p="" aria-label="Fermer">${ico('x')}</button></div><div id="tree"></div></aside>
         <div class="c-main">
-          <div class="c-bar"><div id="crumb"></div><div class="seg" id="c-views"></div></div>
+          <div class="c-bar"><button class="btn m-only" data-act="m-panel" data-p="tree">${ico('list')}Arbre</button><div id="crumb"></div><div class="seg" id="c-views"></div><button class="btn m-only" data-act="m-panel" data-p="detail">${ico('info')}Fiche</button></div>
           <div id="c-view"><div class="cv" id="v-plan"></div><div class="cv" id="v-rack"></div><div class="cv" id="v-topo"></div></div>
         </div>
         <aside class="c-detail" id="detail"></aside></div>`;

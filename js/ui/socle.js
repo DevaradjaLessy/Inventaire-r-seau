@@ -10,9 +10,11 @@ const UI = { tab: 'carto', dirty: new Set(['carto', 'inv', 'mat', 'dash']) };
 const TABS = [
   { id: 'carto', label: 'Cartographie', icon: 'carto' },
   { id: 'inv', label: 'Inventaire', icon: 'list' },
-  { id: 'mat', label: 'Matériel disponible', icon: 'box' },
-  { id: 'dash', label: 'Tableau de bord', icon: 'gauge' },
+  { id: 'mat', label: 'Matériel disponible', short: 'Matériel', icon: 'box' },
+  { id: 'dash', label: 'Tableau de bord', short: 'Tableau', icon: 'gauge' },
 ];
+/* Vrai sur un écran étroit (téléphone) : même seuil que la feuille de styles */
+const isMobile = () => matchMedia('(max-width: 900px)').matches;
 const Views = {};       // chaque onglet enregistre ici { render() }
 const Actions = {};     // gestionnaires des attributs data-act (clic)
 const Changes = {};     // gestionnaires des attributs data-chg (change)
@@ -36,7 +38,7 @@ const Theme = {
 };
 function renderShell() {
   const nAlerts = computeAlerts().filter(a => a.level !== 'warn' || a.kind === 'stock').length;
-  $('#tabs').innerHTML = TABS.map(t => `<button data-act="tab" data-tab="${t.id}" class="${UI.tab === t.id ? 'on' : ''}">${ico(t.icon)}${t.label}${t.id === 'dash' && nAlerts ? `<span class="badge" data-tip="${plural(nAlerts, 'alerte')} à traiter">${nAlerts}</span>` : ''}</button>`).join('');
+  $('#tabs').innerHTML = TABS.map(t => `<button data-act="tab" data-tab="${t.id}" class="${UI.tab === t.id ? 'on' : ''}">${ico(t.icon)}<span class="lg">${t.label}</span><span class="sh">${t.short || t.label}</span>${t.id === 'dash' && nAlerts ? `<span class="badge" data-tip="${plural(nAlerts, 'alerte')} à traiter">${nAlerts}</span>` : ''}</button>`).join('');
   $('#tools').innerHTML = `
     <button class="btn icon" data-act="theme" data-tip="${Theme.get() === 'dark' ? 'Passer au thème clair' : 'Passer au thème sombre'}|Le choix est mémorisé dans ce navigateur">${ico(Theme.get() === 'dark' ? 'sun' : 'moon')}</button>
     <button class="btn icon" data-act="import" data-tip="Importer|Charger un fichier JSON exporté depuis NetCarto">${ico('upload')}</button>
@@ -176,4 +178,4 @@ Actions.reset = () => Modal.confirm('Réinitialiser la démo', 'Recharger le jeu
   return true;
 }, 'Réinitialiser', 'danger');
 
-export { Actions, Changes, Inputs, levelColor, Modal, run, showTab, stDev, stPort, Tip, toast, UI, undoAction, Views, vlanChip };
+export { Actions, Changes, Inputs, isMobile, levelColor, Modal, run, showTab, stDev, stPort, Tip, toast, UI, undoAction, Views, vlanChip };

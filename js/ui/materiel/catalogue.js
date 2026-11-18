@@ -6,7 +6,7 @@ import { Store } from '../../store.js';
 import { locLabel } from '../../services/requetes.js';
 import { installedCount, stockMove, stockOf } from '../../services/installation.js';
 import { Viewer3D } from '../../3d/viewer.js';
-import { Actions, Changes, Inputs, Modal, toast, undoAction, Views } from '../socle.js';
+import { Actions, Changes, Inputs, isMobile, Modal, toast, undoAction, Views } from '../socle.js';
 import { Views3D } from '../carto/carto.js';
 import { dHead, kv, li, sec } from '../carto/fiches.js';
 
@@ -60,7 +60,7 @@ function renderMatInfo() {
 }
 Inputs['mat-q'] = el => { Mat.q = el.value; renderMatGrid(); };
 Actions['mat-cat'] = el => { Mat.cat = el.dataset.c; Views.mat.render(); };
-Actions['mat-sel'] = el => { Mat.sel = el.dataset.id; renderMatGrid(); renderMatInfo(); };
+Actions['mat-sel'] = el => { Mat.sel = el.dataset.id; renderMatGrid(); renderMatInfo(); if (isMobile()) $('.mat-side').scrollIntoView({ behavior: 'smooth' }); };
 Actions['stock-adj'] = el => stockMove(el.dataset.id, +el.dataset.d, 'ajustement manuel');
 Changes['stock-f'] = el => {
   const c = Store.idx.cat.get(el.dataset.id), f = el.dataset.f, v = f === 'threshold' ? Math.max(0, +el.value || 0) : el.value.trim();

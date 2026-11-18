@@ -39,7 +39,7 @@ function renderDetail() {
   if (!e) { host.innerHTML = '<div class="empty">Sélectionnez un élément dans l\'arbre ou sur le plan.</div>'; return; }
   const top = host.dataset.id === id ? host.scrollTop : 0;
   host.dataset.id = id;
-  host.innerHTML = Detail[typeOf(id)](e) + traceSection();
+  host.innerHTML = `<button class="btn m-only m-close" data-act="m-panel" data-p="">${ico('x')}Fermer la fiche</button>` + Detail[typeOf(id)](e) + traceSection();
   host.scrollTop = top;
 }
 const Detail = {
