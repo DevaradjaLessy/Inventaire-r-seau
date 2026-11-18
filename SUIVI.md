@@ -300,6 +300,25 @@ history    [{ id, ts, type, text, ref }]                                 // type
   2. dans Playwright, intercepter les URL jsDelivr avec `page.route` et servir les fichiers locaux.
 - Le fichier livré garde les URL CDN, qui fonctionnent sur GitHub Pages.
 
+### 3.10 Précisions apportées pendant la construction
+- **Three.js est chargé sans bloquer la page** (import dynamique). Si le CDN est inaccessible, seule la vue 3D est indisponible ; un message l'indique.
+- **Catégories :** les « Terminaux » sont séparés en deux catégories, Téléphones IP et Caméras IP, pour des comptages plus lisibles.
+- **Prise murale :** le modèle du catalogue est une prise simple (1 RJ45), en accord avec le modèle de données.
+- **Jeu de démo réel :** 121 prises murales (dont 21 pour les bornes et caméras), 102 équipements, 26 téléphones, 15 bornes, 6 caméras, 972 ports, 344 câbles, 34 modèles au catalogue.
+- **Topologie :** un switch n'est classé « cœur » que s'il est relié au pare-feu par un port d'uplink (un port de gestion ne suffit pas). Le routeur de secours RTR-B1-01 a son niveau forcé à « accès » (`device.layer`).
+- **Câblage :** un nœud passif accepte un câble vers un autre élément passif (arrière) et un câble vers un port actif (avant). Brancher deux ports actifs fait monter le lien ; débrancher le fait retomber.
+- **Retrait « hors service » :** l'équipement reste à l'inventaire, sans emplacement, avec son ancien emplacement en note. Il peut ensuite être remis en stock.
+- **Glisser-déposer :** sur l'élévation, la U visée devient la U la plus haute de l'équipement. L'installation est immédiate, avec un nom proposé automatiquement et un bouton Annuler.
+- **Modèle déjà installé :** ses ports, sa hauteur et son gabarit ne sont plus modifiables.
+- **Tests :** les scripts Playwright sont restés hors du dépôt (dossier temporaire), comme prévu en 3.9.
+
+### 3.11 Pistes pour la suite
+- Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
+- Remplacer le catalogue générique par les modèles réels, avec photos de façade.
+- Importer les plans réels des étages.
+- Ajouter et modifier des bâtiments, étages et pièces depuis l'interface (aujourd'hui : par import JSON).
+- Gérer les VLAN depuis l'interface.
+
 ---
 
 ## 4. Plan de réalisation par lots
@@ -312,8 +331,8 @@ history    [{ id, ts, type, text, ref }]                                 // type
 | 4 | Traçage du câblage (surbrillance 2D/3D/fiche), connexion et débranchement de câbles, topologie logique | Très élevé (xhigh) | ✅ Fait |
 | 5 | Inventaire : tableau, filtres, tri, recherche globale, exports CSV/JSON, navigation vers la Cartographie | Élevé (high) | ✅ Fait |
 | 6 | Matériel : catalogue, fiches et aperçu 3D, stock, installation et retrait, glisser-déposer, formulaire de modèle | Élevé (high) | ✅ Fait |
-| 7 | Tableau de bord : indicateurs, graphiques, alertes, historique | Moyen à élevé (medium/high) | ⏳ À faire |
-| 8 | Finitions : performances, tests complets, `README.md` (modèle de données, ajout d'un modèle ou d'un plan, sécurité), activation de GitHub Pages | Élevé (high) | ⏳ À faire |
+| 7 | Tableau de bord : indicateurs, graphiques, alertes, historique | Moyen à élevé (medium/high) | ✅ Fait |
+| 8 | Finitions : performances, tests complets, `README.md` (modèle de données, ajout d'un modèle ou d'un plan, sécurité), activation de GitHub Pages | Élevé (high) | ✅ Fait, sauf l'activation de GitHub Pages : elle se fait à la main dans les réglages du dépôt (voir `README.md`) |
 
 Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 
@@ -334,7 +353,8 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-18 | Ne pas lancer tout de suite la création de la solution | ✅ Respecté : aucun code livré pour l'instant |
 | 2026-11-18 | Remettre les instructions complètes du projet dans le suivi, pour qu'une nouvelle session Claude construise la solution | ✅ Fait (sections 1 à 3 + `CLAUDE.md`) |
 | 2026-11-18 | Conseil sur le niveau d'effort (l'utilisateur prévoit Fable 5.2) | ✅ Répondu : élevé par défaut, très élevé pour les lots 3 et 4 (colonne ajoutée en section 4) |
-| 2026-11-18 | « go » : lancer la construction en suivant le plan par lots | 🔄 En cours (voir section 4) |
+| 2026-11-18 | « go » : lancer la construction en suivant le plan par lots | ✅ Fait : lots 1 à 8 réalisés et testés dans Chromium |
+| 2026-11-18 | « Veux-tu des images ou des choses qui facilitent la création ? » | ✅ Répondu : rien de nécessaire pour la V1. Utile ensuite : liste exacte des modèles, photos de façade prises de face, plans en image avec une cote. Ne rien déposer de réel dans ce dépôt public. |
 
 ---
 
