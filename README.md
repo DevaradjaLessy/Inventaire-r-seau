@@ -26,7 +26,7 @@ Raccourcis : `/` pour la recherche, `Ctrl+Z` pour annuler, `Échap` pour fermer 
 
 - La base est un objet JSON unique, sauvegardé dans le navigateur (`localStorage`, clé `netcarto:db:v1`).
 - **Exporter / Importer** (boutons en haut à droite) : fichier JSON complet de la base.
-- **Réinitialiser la démo** : recharge le jeu de données fictif.
+- **Réinitialiser** : recharge le jeu de données fictif, ou repart d'une base vide.
 
 ### Modèle de données
 
@@ -50,6 +50,16 @@ history    [{ id, ts, type, text, ref }]
 - Un équipement en baie porte `rackId` et `u` (U la plus basse occupée). Un équipement hors baie porte `roomId`, `x` et `y`.
 - Un port de panneau de brassage ou de tiroir optique a le rôle `pp` (passif). Il accepte deux câbles : le lien permanent à l'arrière, le cordon à l'avant.
 - La quantité installée d'un modèle n'est pas stockée : elle est calculée à partir des équipements.
+
+## Démarrer sur votre propre réseau
+
+1. Cliquez sur *Réinitialiser* (flèche circulaire, en haut à droite) et choisissez **Base vide**. Le catalogue de modèles est conservé, le stock repart à zéro.
+2. Dans la Cartographie, créez le **site**, puis depuis la fiche de droite : *Ajouter un bâtiment*, *Ajouter un étage* (avec ses dimensions en mètres), *Ajouter une pièce*.
+3. Pour aller plus vite, utilisez le bouton **Pièce** du plan : tracez un rectangle à la souris, il s'aligne tous les 50 cm.
+4. Renseignez le stock dans *Matériel disponible*, puis installez les baies et les équipements.
+5. Adaptez les **VLAN** depuis le tableau de bord (bouton *VLAN*).
+
+Chaque étape est annulable avec `Ctrl+Z`. Pensez à *Exporter* régulièrement : les données restent dans votre navigateur.
 
 ## Ajouter un modèle d'équipement
 

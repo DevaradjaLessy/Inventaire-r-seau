@@ -301,7 +301,7 @@ history    [{ id, ts, type, text, ref }]                                 // type
 - **En-tête :**
   - logo NetCarto, onglets (avec un badge d'alertes)
   - recherche globale (raccourci `/`)
-  - Importer, Exporter, Annuler (Ctrl+Z), Réinitialiser la démo
+  - Thème clair ou sombre, Sources de données, Importer, Exporter, Annuler (Ctrl+Z), Réinitialiser (démonstration ou base vide)
   - mention « Données fictives »
 
 ### 3.9 Note technique pour les tests
@@ -325,6 +325,12 @@ history    [{ id, ts, type, text, ref }]                                 // type
 - **Modèle déjà installé :** ses ports, sa hauteur et son gabarit ne sont plus modifiables.
 - **Tests :** les scripts Playwright sont restés hors du dépôt (dossier temporaire), comme prévu en 3.9.
 
+### 3.13 Structure et base vide (lot 10)
+- Logique dans `js/services/structure.js`, interface dans `js/ui/carto/structure.js`.
+- **Base vide** (`emptyBase`) : aucun site, VLAN usuels, catalogue par défaut, stock à zéro, `meta.demo = false`.
+- **Règles :** une pièce reste dans l'étage et ne chevauche pas une autre (tolérance de 5 cm) ; un étage ne peut pas être réduit sous ses pièces ; une pièce ne peut pas être réduite en laissant dehors une baie, un équipement ou une prise ; un élément ne se supprime que vide ; un VLAN ne se supprime que si aucun port ne l'utilise. Renuméroter un VLAN met à jour les ports concernés.
+- **Tracé à la souris :** bouton « Pièce » du plan, rectangle aligné sur une grille de 50 cm, 1 m au minimum de chaque côté, puis fenêtre pour le nom et le type.
+
 ### 3.12 Supervision en direct et relais (décision du 2026-11-18)
 - **État saisi et état mesuré sont séparés.** Les mesures vivent dans `js/services/mesures.js` (objet `Live`). Elles ne sont ni enregistrées ni annulables, et remplacent l'état saisi seulement à l'affichage (`effStatus`) : LEDs de la vue 3D, ports, prises du plan, alertes. La fiche d'un port montre les deux et signale un écart.
 - **Sources côté navigateur** (table `SOURCES`) : aucune, simulation (fait vivre la démo sans équipement), relais.
@@ -336,12 +342,11 @@ history    [{ id, ts, type, text, ref }]                                 // type
 - **À faire ensuite :** API des constructeurs (Cisco, Aruba, UniFi, Meraki) une fois les modèles connus ; table MAC, voisins LLDP et PoE par SNMP ; comparaison automatique entre topologie saisie et topologie mesurée.
 
 ### 3.11 Pistes pour la suite
-- **Avant la mise en service réelle :** permettre de démarrer sur une base vide (aujourd'hui la page charge le jeu de démonstration au premier lancement), et ajouter la création de sites, bâtiments, étages et pièces depuis l'interface.
+- **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
 - Remplacer le catalogue générique par les modèles réels, avec photos de façade.
 - Importer les plans réels des étages.
-- Ajouter et modifier des bâtiments, étages et pièces depuis l'interface (aujourd'hui : par import JSON).
-- Gérer les VLAN depuis l'interface.
+- Déplacer et redimensionner une pièce à la souris (aujourd'hui : par le formulaire « Modifier »).
 
 ---
 
@@ -359,7 +364,7 @@ history    [{ id, ts, type, text, ref }]                                 // type
 | 8 | Finitions : performances, tests complets, `README.md` (modèle de données, ajout d'un modèle ou d'un plan, sécurité), activation de GitHub Pages | Élevé (high) | ✅ Fait, sauf l'activation de GitHub Pages : elle se fait à la main dans les réglages du dépôt (voir `README.md`) |
 
 | 9 | **Sécuriser le développement :** tests Playwright dans le dépôt (dossier `tests/`), sauvegarde locale plus sûre (IndexedDB et sauvegarde automatique téléchargeable), annulation plus légère | Élevé (high) | 🔄 En cours : tests faits (13 scénarios, `npm test` dans `tests/`). Restent la sauvegarde et l'annulation. |
-| 10 | **Saisir un vrai réseau :** démarrage sur base vide ; création, modification et suppression des sites, bâtiments, étages et pièces depuis l'interface (dessin des pièces sur le plan) ; gestion des VLAN | Élevé (high) | ⏳ À faire |
+| 10 | **Saisir un vrai réseau :** démarrage sur base vide ; création, modification et suppression des sites, bâtiments, étages et pièces depuis l'interface (dessin des pièces sur le plan) ; gestion des VLAN | Élevé (high) | ✅ Fait |
 | 11 | **Qualité des données :** import CSV des équipements et des prises ; contrôle des doublons (IP, nom d'hôte, MAC, repère de prise) ; vérification du brassage lors du déplacement d'un équipement | Élevé (high) | ⏳ À faire |
 | 12 | **Harmonisation visuelle :** appliquer le style du tableau de bord et de l'inventaire à la Cartographie et au Matériel ; sol et baie de la vue 3D adaptés au thème clair | Moyen à élevé | ⏳ À faire |
 | 13 | **Téléphone :** zoom du plan par pincement, élévation de baie accessible, glisser-déposer au doigt, vérification sur un vrai appareil | Moyen à élevé | ⏳ À faire |
@@ -398,6 +403,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-18 | Bilan des points forts, des inconvénients et des évolutions indispensables ; « il faudra corriger tout ça », « note-le » | ✅ Noté : lots 9 à 15 ajoutés en section 4, avec les points en attente de décision. Rien n'est encore réalisé. |
 | 2026-11-18 | Peut-on brancher une supervision réelle (PRTG), ou interroger directement un switch ? Développer et préparer ces connecteurs en interne, comme un vrai outil professionnel | ✅ Fait pour la première étape (voir 3.12) : couche de mesures en direct dans NetCarto, écran « Sources de données », relais interne avec sources PRTG, SNMP et simulation. Testé contre des simulateurs ; reste à valider sur du matériel réel et à ajouter les API des constructeurs. |
 | 2026-11-18 | Auditer et peaufiner la solution, améliorer encore les visuels 3D | ✅ Fait. **Audit :** faille corrigée à l'import (un fichier JSON pouvait injecter du code par un identifiant ou une couleur : le contenu est maintenant contrôlé élément par élément) ; suite de tests ajoutée au dépôt ; boutons à icône nommés pour les lecteurs d'écran ; message clair si l'on installe sans étage ; états de ports du tableau de bord alignés sur l'affichage ; jeton du relais comparé en temps constant ; code mort retiré. **3D :** ombres portées douces, mur de fond et plinthe, sol et éclairage adaptés au thème clair, passe-câbles verticaux à doigts, bandeaux de prises au fond de la baie, halo lumineux des LEDs, fiches en deux parties (corps clair et manchon à la couleur du cordon), dessus des équipements ajouré, façades légèrement auto-éclairées, bords de scène assombris. |
+| 2026-11-18 | Continuer avec le lot 10 : base vide et création des bâtiments | ✅ Fait. Le bouton Réinitialiser propose « démonstration » ou « base vide » (aucun site, catalogue conservé, stock à zéro). Sites, bâtiments, étages et pièces se créent, se modifient et se suppriment depuis la fiche de droite ; une pièce peut aussi se tracer à la souris sur le plan (alignement tous les 50 cm). Contrôles : pièces sans chevauchement et dans l'étage, codes de bâtiment et niveaux uniques, suppression seulement si l'élément est vide. Gestion des VLAN depuis le tableau de bord ou la fiche d'un port. L'étiquette « Données fictives » ne s'affiche plus que pour la démonstration. Un scénario de test complet a été ajouté (14 tests au total). |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---
