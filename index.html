@@ -216,6 +216,35 @@ svg.plan .trace-halo{fill:rgba(56,189,248,.18);stroke:var(--accent);stroke-width
 .hop .n{width:20px;height:20px;border-radius:50%;background:var(--accent-bg);border:1px solid var(--accent);color:var(--accent);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
 .hop .cabl{color:var(--txt3);font-size:11px}
 .hop b{font-weight:600}
+
+/* --- Vue 3D et élévation de baie --- */
+.rackview{display:grid;grid-template-columns:236px minmax(0,1fr);width:100%;height:100%}
+.elev{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:10px}
+.elev h4{font-size:13px;display:flex;align-items:center;gap:6px;margin-bottom:2px}
+.elev .sub{color:var(--txt2);font-size:11.5px;margin-bottom:8px}
+.elev-grid{display:grid;grid-template-columns:22px 1fr;gap:1px;background:#05080c;border:1px solid var(--line2);border-radius:4px;padding:2px}
+.eu-n{font:10px var(--mono);color:var(--txt3);display:flex;align-items:center;justify-content:center;background:#0c1219}
+.eu{background:#0c1219;min-height:0;font-size:11px;display:flex;align-items:center;padding:0 6px;gap:5px;overflow:hidden;white-space:nowrap}
+.eu.free{color:transparent;cursor:pointer}
+.eu.free:hover,.eu.free.over{background:var(--accent-bg);color:var(--accent);outline:1px dashed var(--accent);outline-offset:-1px}
+.eu.free.bad{background:rgba(208,59,59,.2);outline:1px dashed var(--crit)}
+.eu.dev{background:var(--panel3);border-left:3px solid var(--cc,#8b9bb0);cursor:pointer;color:var(--txt)}
+.eu.dev:hover{background:#243446}
+.eu.dev.sel{background:var(--accent-bg);box-shadow:inset 0 0 0 1px var(--accent)}
+.eu.dev .ico{width:12px;height:12px;color:var(--txt2)}
+.eu.dev span{overflow:hidden;text-overflow:ellipsis}
+.r3d{position:relative;min-width:0;min-height:0;background:#0a0f15}
+.v3d{position:absolute;inset:0}
+.v3d canvas{outline:none}
+.palette{position:absolute;right:10px;top:10px;bottom:10px;width:230px;background:rgba(17,24,33,.96);border:1px solid var(--line2);border-radius:8px;display:flex;flex-direction:column;z-index:6}
+.palette h4{padding:9px 11px;border-bottom:1px solid var(--line);font-size:12.5px;display:flex;align-items:center;gap:6px}
+.palette .list{overflow:auto;padding:6px;display:flex;flex-direction:column;gap:5px}
+.pal-it{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel2);cursor:grab;font-size:12px}
+.pal-it:hover{border-color:var(--accent)}
+.pal-it .ico{color:var(--txt2)}
+.pal-it b{font-weight:600;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px}
+.pal-it small{color:var(--txt2)}
+.pal-it .q{margin-left:auto;font-weight:700;color:var(--accent)}
 /*@@CSS*/
 </style>
 </head>
@@ -1162,6 +1191,647 @@ const rackSize = rack => { const v = catOf(rack)?.visual || {}; return { w: v.wi
 /* ============================================================
    === SECTION 8 — MOTEUR 3D
    ============================================================ */
+/* Three.js est chargé sans bloquer le reste de l'application : si le CDN est
+   inaccessible, tout fonctionne sauf la vue 3D. */
+let THREE = null, OrbitControls = null, RoomEnvironment = null;
+const threeReady = (async () => {
+  try {
+    THREE = await import('three');
+    ({ OrbitControls } = await import('three/addons/controls/OrbitControls.js'));
+    ({ RoomEnvironment } = await import('three/addons/environments/RoomEnvironment.js'));
+    return true;
+  } catch (e) { console.warn('Three.js indisponible :', e.message); return false; }
+})();
+
+const FACE_W = 0.44;                 // largeur d'une façade 19", hors oreilles (m)
+const FACE_PPM = 2048 / FACE_W;      // pixels de texture par mètre
+const PORT_DIM = {                   // taille d'un port et pas entre deux ports (m)
+  rj45: { w: 0.0118, h: 0.0098, pitch: 0.0136 },
+  sfp: { w: 0.0136, h: 0.0088, pitch: 0.0152 },
+  'sfp+': { w: 0.0136, h: 0.0088, pitch: 0.0152 },
+  lc: { w: 0.0105, h: 0.0085, pitch: 0.0128 },
+};
+
+/* ---------- Registre des gabarits 3D ----------
+   type « facade »    : équipement 19" dont la façade est dessinée sur un canvas
+                        (left / right = marges réservées au décor, depth = profondeur)
+   type « enclosure » : baie ou coffret
+   type « object »    : objet autonome construit en géométrie (borne, téléphone…)
+   Pour ajouter une forme : GABARITS.monGabarit = { type, … } */
+const GABARITS = {
+  switch:   { type: 'facade', left: 0.036, right: 0.008, depth: 0.30, decor: 'active' },
+  router:   { type: 'facade', left: 0.060, right: 0.070, depth: 0.30, decor: 'active', vent: true },
+  firewall: { type: 'facade', left: 0.062, right: 0.012, depth: 0.25, decor: 'active' },
+  patch:    { type: 'facade', left: 0.020, right: 0.020, depth: 0.09, decor: 'patch', center: true, rowMajor: true },
+  fiber:    { type: 'facade', left: 0.040, right: 0.040, depth: 0.25, decor: 'fiber', center: true },
+  cablemgr: { type: 'facade', left: 0.020, right: 0.020, depth: 0.05, decor: 'cablemgr' },
+  server:   { type: 'facade', left: 0.325, right: 0.010, depth: 0.72, decor: 'server' },
+  ups:      { type: 'facade', left: 0.400, right: 0.012, depth: 0.62, decor: 'ups' },
+  rack:     { type: 'enclosure' },
+  wallrack: { type: 'enclosure', wall: true },
+  ap:       { type: 'object' }, phone: { type: 'object' }, camera: { type: 'object' }, outlet: { type: 'object' }, sfp: { type: 'object' }, cable: { type: 'object' },
+};
+const gabarit = cat => GABARITS[cat.template] || GABARITS.switch;
+const portNames = cat => (cat.ports || []).flatMap(g => g.names ? g.names : Array.from({ length: g.count }, (_, i) => `${g.prefix || ''}${(g.start ?? 1) + i}`));
+
+/* Position de chaque port sur la façade (repère centré, en mètres). Sert à la
+   texture, aux zones de clic, aux LEDs et aux points d'accroche des cordons. */
+const layoutCache = new Map();
+function facadeLayout(cat) {
+  const key = JSON.stringify([cat.template, cat.heightU, cat.ports]);
+  if (layoutCache.has(key)) return layoutCache.get(key);
+  const tpl = gabarit(cat), hU = cat.heightU || 1, H = hU * U_M - 0.002;
+  const left = tpl.left ?? 0.03, right = tpl.right ?? 0.01, avail = FACE_W - left - right, GAP = 0.008, BLOCK = 0.004;
+  const groups = (cat.ports || []).map(g => {
+    const n = g.names ? g.names.length : g.count, d = PORT_DIM[g.kind] || PORT_DIM.rj45;
+    const rows = tpl.center ? (hU >= 2 && n > 24 ? 2 : 1) : n >= 16 ? 2 : 1, cols = Math.ceil(n / rows), blocks = g.kind === 'rj45' || g.kind === 'lc';
+    return { g, n, d, rows, cols, blocks, width: cols * d.pitch + (blocks ? Math.floor((cols - 1) / 6) * BLOCK : 0) };
+  });
+  const total = sum(groups, x => x.width) + Math.max(0, groups.length - 1) * GAP;
+  const k = total > avail ? avail / total : 1;
+  let cx = -FACE_W / 2 + left + (tpl.center ? (avail - total * k) / 2 : 0), idx = 0;
+  const ports = [];
+  for (const G of groups) {
+    const rowPitch = hU >= 2 && G.rows === 2 ? U_M : 0.0145;
+    for (let i = 0; i < G.n; i++) {
+      const col = tpl.rowMajor ? i % G.cols : Math.floor(i / G.rows), row = tpl.rowMajor ? Math.floor(i / G.cols) : i % G.rows;
+      const x = cx + (col * G.d.pitch + (G.blocks ? Math.floor(col / 6) * BLOCK : 0) + G.d.pitch / 2) * k;
+      const y = G.rows === 2 ? (row === 0 ? rowPitch / 2 : -rowPitch / 2) : 0;
+      ports.push({ idx: idx++, x, y, w: G.d.w * k, h: G.d.h, kind: G.g.kind, role: G.g.role, top: G.rows === 1 || row === 0, col, block: G.blocks ? Math.floor(col / 6) : 0 });
+    }
+    cx += (G.width + GAP) * k;
+  }
+  const L = { H, hU, ports, freeFrom: cx, left, right };
+  layoutCache.set(key, L);
+  return L;
+}
+
+/* Dessine la façade d'un modèle sur un canvas (une texture par modèle, mise en cache) */
+const facadeCache = new Map();
+function drawFacade(cat) {
+  const key = JSON.stringify([cat.template, cat.heightU, cat.ports, cat.visual, cat.brand, cat.model]);
+  if (facadeCache.has(key)) return facadeCache.get(key);
+  const L = facadeLayout(cat), tpl = gabarit(cat), v = cat.visual || {};
+  const cw = 2048, ch = Math.round(L.H * FACE_PPM);
+  const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
+  const c = cv.getContext('2d');
+  const X = m => (m + FACE_W / 2) * FACE_PPM, Y = m => (L.H / 2 - m) * FACE_PPM, S = m => m * FACE_PPM;
+  const base = v.color || '#2a3038', light = luminance(base) > 0.5;
+  const ink = light ? '#1b2026' : '#dfe4ea', ink2 = light ? 'rgba(20,24,28,.6)' : 'rgba(225,231,238,.55)', accent = v.accent || '#38bdf8';
+  const names = portNames(cat);
+  const text = (s, x, y, px, o = {}) => { c.font = `${o.w || 600} ${px}px system-ui, Arial, sans-serif`; c.textAlign = o.a || 'left'; c.textBaseline = o.b || 'alphabetic'; c.fillStyle = o.c || ink; if (o.max) { const m = c.measureText(s).width; if (m > o.max) c.font = `${o.w || 600} ${Math.max(8, px * o.max / m)}px system-ui, Arial, sans-serif`; } c.fillText(s, x, y); };
+  const dot = (x, y, r, col) => { c.fillStyle = '#05070a'; c.beginPath(); c.arc(x, y, r + 1.5, 0, 7); c.fill(); c.fillStyle = col; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); };
+  const vent = (x0, x1, y0 = 0.2, y1 = 0.8) => { c.fillStyle = 'rgba(0,0,0,.72)'; for (let y = ch * y0; y < ch * y1; y += 13) for (let x = X(x0) + ((Math.round(y / 13) % 2) * 7); x < X(x1); x += 14) { c.beginPath(); c.arc(x, y, 4.2, 0, 7); c.fill(); } };
+  // Fond : dégradé, effet brossé, liseré
+  const gr = c.createLinearGradient(0, 0, 0, ch);
+  gr.addColorStop(0, shade(base, 0.1)); gr.addColorStop(0.5, base); gr.addColorStop(1, shade(base, -0.2));
+  c.fillStyle = gr; c.fillRect(0, 0, cw, ch);
+  const rnd = mulberry32(7);
+  c.globalAlpha = 0.05; for (let i = 0; i < 200; i++) { c.fillStyle = rnd() > 0.5 ? '#fff' : '#000'; c.fillRect(0, rnd() * ch, cw, 1); } c.globalAlpha = 1;
+  c.strokeStyle = 'rgba(0,0,0,.6)'; c.lineWidth = 4; c.strokeRect(2, 2, cw - 4, ch - 4);
+  c.fillStyle = 'rgba(255,255,255,.1)'; c.fillRect(4, 4, cw - 8, 2);
+  const lx = 14, lw = S(L.left) - 22;   // colonne de gauche : logo, modèle, voyants
+  const logo = v.logo ?? cat.brand;
+  if (tpl.decor === 'active') {
+    text(logo, lx, 40, 30, { w: 800, max: lw });
+    c.fillStyle = accent; c.fillRect(lx, 48, Math.min(lw, 70), 4);
+    text(cat.model, lx, 72, 13, { c: ink2, max: lw });
+    ['SYS', 'STA', 'PWR'].forEach((t, i) => { dot(lx + 8 + i * 34, 96, 4.5, i === 1 && cat.category === 'firewall' ? '#ffb020' : '#2fe05a'); text(t, lx + 8 + i * 34, 116, 9, { a: 'center', c: ink2 }); });
+    if (tpl.vent) vent(FACE_W / 2 - L.right + 0.006, FACE_W / 2 - 0.008);
+    else if (FACE_W / 2 - L.right - L.freeFrom > 0.05) vent(L.freeFrom + 0.004, FACE_W / 2 - L.right - 0.004);
+  } else if (tpl.decor === 'patch') {
+    text(logo, cw - 14, ch / 2 + 5, 15, { a: 'right', c: ink2, max: S(L.right + 0.03) });
+    // Bandeau d'étiquettes blanc au-dessus de chaque bloc de 6 ports
+    const seen = new Set();
+    for (const p of L.ports) { const k = `${p.block}:${p.y}`; if (seen.has(k)) continue; seen.add(k); const blk = L.ports.filter(q => q.block === p.block && q.y === p.y); const x0 = X(blk[0].x - blk[0].w / 2), x1 = X(blk.at(-1).x + blk.at(-1).w / 2); c.fillStyle = '#e9ecef'; c.fillRect(x0, Y(p.y + p.h / 2 + 0.0078), x1 - x0, S(0.0052)); }
+  } else if (tpl.decor === 'fiber') {
+    text(logo, lx, ch / 2 + 6, 17, { w: 700, c: ink2 });
+    c.fillStyle = '#e8c21d'; c.beginPath(); c.moveTo(cw - 60, ch / 2 + 22); c.lineTo(cw - 34, ch / 2 - 24); c.lineTo(cw - 8, ch / 2 + 22); c.fill();
+    text('!', cw - 34, ch / 2 + 16, 26, { a: 'center', w: 800, c: '#111' });
+    c.fillStyle = 'rgba(0,0,0,.5)'; c.fillRect(S(0.03), ch - 16, cw - S(0.06), 6);
+  } else if (tpl.decor === 'cablemgr') {
+    c.fillStyle = 'rgba(0,0,0,.45)'; for (let i = 0; i < 5; i++) c.fillRect(X(-0.16 + i * 0.08) - 46, ch * 0.3, 92, ch * 0.4);
+  } else if (tpl.decor === 'server') {
+    text(logo, lx, 30, 20, { w: 800, max: 90 });
+    dot(lx + 12, ch / 2 + 6, 9, '#2fe05a'); text(cat.model, lx, ch - 46, 10, { c: ink2, max: 96 });
+    // Baies de disques
+    const x0 = 0.03 - FACE_W / 2, x1 = L.left - FACE_W / 2 - 0.012, hor = L.hU === 1;
+    const cols = hor ? 4 : 16, rows = hor ? 2 : 1, bw = (x1 - x0) / cols, bh = (L.H - 0.008) / rows;
+    for (let r = 0; r < rows; r++) for (let i = 0; i < cols; i++) {
+      const bx = X(x0 + i * bw) + 3, by = Y(L.H / 2 - 0.004 - r * bh) + 3, w = S(bw) - 6, h = S(bh) - 6;
+      c.fillStyle = '#0b0c0e'; c.fillRect(bx, by, w, h);
+      c.fillStyle = '#191c20'; c.fillRect(bx + 3, by + 3, w - 6, h - 6);
+      c.fillStyle = 'rgba(0,0,0,.8)'; for (let yy = by + 9; yy < by + h - 12; yy += 9) for (let xx = bx + 9 + (Math.round(yy / 9) % 2) * 5; xx < bx + w - 8; xx += 10) { c.beginPath(); c.arc(xx, yy, 2.6, 0, 7); c.fill(); }
+      c.fillStyle = '#2fe05a'; c.fillRect(bx + w - 14, by + h - 9, 6, 3); c.fillStyle = accent; c.fillRect(bx + 6, by + h - 9, 14, 3);
+    }
+  } else if (tpl.decor === 'ups') {
+    text(logo, lx, 44, 30, { w: 800, max: 130 }); text(cat.model, lx, 70, 13, { c: ink2, max: 200 });
+    c.fillStyle = accent; c.fillRect(lx, ch - 30, 120, 6);
+    // Grille d'aération et afficheur
+    c.fillStyle = 'rgba(0,0,0,.6)'; for (let y = 26; y < ch - 26; y += 16) c.fillRect(S(0.05), y, S(0.2), 8);
+    const sx = S(0.275), sy = ch / 2 - 62, sw = S(0.085), sh = 124;
+    c.fillStyle = '#05070a'; c.fillRect(sx - 8, sy - 8, sw + 16, sh + 16);
+    const sg = c.createLinearGradient(0, sy, 0, sy + sh); sg.addColorStop(0, '#1d4f8f'); sg.addColorStop(1, '#0d2a52'); c.fillStyle = sg; c.fillRect(sx, sy, sw, sh);
+    text('230 V', sx + 14, sy + 36, 24, { w: 700, c: '#d8ecff' }); text('CHARGE 42 %', sx + 14, sy + 66, 17, { c: '#a9d0ff' }); text('AUTONOMIE 18 min', sx + 14, sy + 94, 15, { c: '#a9d0ff' });
+    c.fillStyle = '#7fd08a'; c.fillRect(sx + 14, sy + 104, sw * 0.42, 8);
+    for (let i = 0; i < 3; i++) { c.fillStyle = '#0a0c0f'; c.beginPath(); c.arc(S(0.375) + i * 34, ch / 2, 12, 0, 7); c.fill(); c.strokeStyle = ink2; c.lineWidth = 2; c.stroke(); }
+  }
+  // Ports
+  for (const p of L.ports) {
+    const x = X(p.x - p.w / 2), y = Y(p.y + p.h / 2), w = S(p.w), h = S(p.h), nm = names[p.idx] || '';
+    const num = /\d+$/.test(nm) && nm.length > 5 ? nm.match(/\d+$/)[0] : nm;
+    if (p.kind === 'rj45') {
+      const metal = p.role !== 'pp';
+      c.fillStyle = metal ? '#a7adb4' : '#2b2f35'; c.fillRect(x - 3, y - 3, w + 6, h + 6);
+      c.fillStyle = '#050607'; c.fillRect(x, y, w, h);
+      // Ergot du connecteur et contacts dorés
+      const tw = w * 0.4, th = h * 0.2;
+      c.fillStyle = metal ? '#a7adb4' : '#2b2f35'; if (p.top) { c.fillRect(x, y, (w - tw) / 2, th); c.fillRect(x + (w + tw) / 2, y, (w - tw) / 2, th); } else { c.fillRect(x, y + h - th, (w - tw) / 2, th); c.fillRect(x + (w + tw) / 2, y + h - th, (w - tw) / 2, th); }
+      c.fillStyle = '#c8a64e'; for (let k2 = 0; k2 < 8; k2++) c.fillRect(x + w * 0.15 + k2 * w * 0.09, p.top ? y + h - h * 0.3 : y + 2, w * 0.045, h * 0.26);
+    } else if (p.kind === 'lc') {
+      c.fillStyle = '#12151a'; c.fillRect(x - 3, y - 3, w + 6, h + 6);
+      c.fillStyle = p.idx % 2 ? '#2c9aa0' : '#35c2c2'; c.fillRect(x, y, w, h);
+      c.fillStyle = '#06080a'; c.beginPath(); c.arc(x + w * 0.28, y + h / 2, h * 0.24, 0, 7); c.arc(x + w * 0.72, y + h / 2, h * 0.24, 0, 7); c.fill();
+    } else {
+      c.fillStyle = '#b9bec5'; c.fillRect(x - 3, y - 3, w + 6, h + 6);
+      c.fillStyle = '#08090b'; c.fillRect(x, y, w, h);
+      c.fillStyle = '#23272d'; c.fillRect(x + 3, y + h * 0.55, w - 6, h * 0.3);
+      c.fillStyle = '#8d939b'; c.beginPath(); c.moveTo(x + w / 2 - 6, p.top ? y - 3 : y + h + 3); c.lineTo(x + w / 2 + 6, p.top ? y - 3 : y + h + 3); c.lineTo(x + w / 2, p.top ? y + 4 : y + h - 4); c.fill();
+    }
+    const ty = p.top ? Y(p.y + p.h / 2 + 0.0032) : Y(p.y - p.h / 2 - 0.0032);
+    const onLabel = tpl.decor === 'patch';
+    text(num, X(p.x) + (p.role === 'pp' ? 0 : S(0.0018)), ty, num.length > 3 ? 11 : 14, { a: 'center', b: p.top ? 'alphabetic' : 'hanging', c: onLabel ? '#15181c' : ink, max: w - (p.role === 'pp' ? 0 : 8), w: 700 });
+  }
+  facadeCache.set(key, cv);
+  return cv;
+}
+/* Petite texture de texte (étiquette de nom d'hôte, plaque de baie) */
+function labelCanvas(str, { w = 256, h = 48, bg = '#f2f4f6', fg = '#14181d', px = 26 } = {}) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const c = cv.getContext('2d');
+  c.fillStyle = bg; c.fillRect(0, 0, w, h);
+  c.font = `700 ${px}px ui-monospace, Menlo, Consolas, monospace`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = fg;
+  const m = c.measureText(str).width; if (m > w - 12) c.font = `700 ${px * (w - 12) / m}px ui-monospace, Menlo, Consolas, monospace`;
+  c.fillText(str, w / 2, h / 2 + 1);
+  return cv;
+}
+/* Infobulle d'un port (texte « Titre|ligne|ligne ») */
+function portTip(p, withHost) {
+  const st = effStatus(p), far = connectedLabel(p);
+  return [withHost ? labelOf(p.id) : p.name, `${PORT_KIND[p.kind]} · ${PORT_ROLE[p.role]}`, `État : ${STATE_LABEL[st]}`, p.role !== 'pp' ? `VLAN : ${p.vlan == null ? 'Trunk' : p.vlan + ' ' + vlanOf(p.vlan).name}` : '', p.role !== 'pp' ? `Débit : ${fmtSpeed(p.speed)}` : '', p.poe.watts ? `PoE : ${p.poe.watts} W` : '', far ? `Connecté : ${far}` : '', p.description].filter(Boolean).join('|');
+}
+/* Couleur d'un port selon le mode de coloration */
+function portModeColor(p, mode) {
+  if (mode === 'status') return STATE_COL[effStatus(p)];
+  if (mode === 'vlan') {
+    let q = p;
+    if (p.role === 'pp') { q = null; for (const n of segment(p.id).nodes) { if (typeOf(n) !== 'port') continue; const x = byId(n); if (x.role !== 'pp' && isNetDev(byId(x.deviceId))) q = x; } if (!q) return '#161b21'; }
+    else if (!cablesOf(p.id).length && p.status !== 'up') return '#161b21';
+    return q.vlan == null ? '#e4e9ef' : vlanOf(q.vlan).color;
+  }
+  if (mode === 'poe') return p.poe?.watts ? poeColor(p.poe.watts) : p.poe?.capable ? '#2a3646' : '#11151a';
+  return '#000000';
+}
+
+class Viewer3D {
+  constructor(host, o = {}) {
+    Object.assign(this, { host, o, ok: false, mode: 'none', cablesOn: true, kind: null, key: '', ports: [], portIdx: new Map(), devGroups: new Map(), cableMeshes: new Map(), bodies: [], texCache: new Map(), matCache: new Map(), hl: null, anim: null, dirty: true, lastLed: 0, queue: null, selId: null, hover: null });
+    host.classList.add('v3d');
+    threeReady.then(ok => {
+      if (ok) run(() => this.init());
+      if (!this.ok) host.innerHTML = '<div class="empty">Vue 3D indisponible : Three.js n\'a pas pu être chargé (CDN inaccessible ou WebGL désactivé).<br>Le reste de l\'application fonctionne normalement.</div>';
+      else if (this.queue) this.queue();
+    });
+  }
+  init() {
+    const T = THREE;
+    const r = this.renderer = new T.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    r.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    r.toneMapping = T.ACESFilmicToneMapping; r.toneMappingExposure = 1.1;
+    this.host.appendChild(r.domElement);
+    const s = this.scene = new T.Scene();
+    s.background = new T.Color('#0a0f15'); s.fog = new T.Fog('#0a0f15', 7, 16);
+    const pm = new T.PMREMGenerator(r); s.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture; pm.dispose();
+    this.camera = new T.PerspectiveCamera(35, 1, 0.01, 60);
+    const ct = this.controls = new OrbitControls(this.camera, r.domElement);
+    ct.enableDamping = true; ct.dampingFactor = 0.12; ct.minDistance = 0.12; ct.maxDistance = 9; ct.maxPolarAngle = Math.PI * 0.55; ct.zoomSpeed = 1.1;
+    ct.addEventListener('change', () => { this.dirty = true; });
+    ct.addEventListener('start', () => { ct.autoRotate = false; this.anim = null; });
+    const dl = new T.DirectionalLight('#ffffff', 1.7); dl.position.set(1.5, 3, 4); s.add(dl);
+    const fill = new T.DirectionalLight('#9fc4ff', 0.7); fill.position.set(-3, 1.5, 2); s.add(fill);
+    s.add(new T.HemisphereLight('#cfe3ff', '#1c2026', 0.45));
+    this.root = new T.Group(); s.add(this.root);
+    this.ray = new T.Raycaster();
+    // Géométries partagées
+    this.unitBox = new T.BoxGeometry(1, 1, 1);
+    const sh = new T.Shape(); sh.moveTo(-0.64, -0.66); sh.lineTo(0.64, -0.66); sh.lineTo(0.64, 0.66); sh.lineTo(-0.64, 0.66); sh.closePath();
+    const hole = new T.Path(); hole.moveTo(-0.5, -0.5); hole.lineTo(-0.5, 0.5); hole.lineTo(0.5, 0.5); hole.lineTo(0.5, -0.5); hole.closePath(); sh.holes.push(hole);
+    this.frameGeo = new T.ShapeGeometry(sh);
+    const fr = col => { const m = new T.Mesh(this.frameGeo, new T.MeshBasicMaterial({ color: col, toneMapped: false, depthTest: false, transparent: true })); m.visible = false; m.renderOrder = 10; s.add(m); return m; };
+    this.hoverFrame = fr('#ffffff'); this.selFrame = fr(COL.accent);
+    this.selBox = new T.LineSegments(new T.EdgesGeometry(this.unitBox), new T.LineBasicMaterial({ color: COL.accent, toneMapped: false })); this.selBox.visible = false; s.add(this.selBox);
+    this.hlCableMat = new T.MeshBasicMaterial({ color: COL.accent, toneMapped: false });
+    // Souris : survol (infobulle) et clic
+    const el = r.domElement; let down = null;
+    el.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY }; });
+    el.addEventListener('pointermove', e => { if (e.buttons) { Tip.hide(); return; } this.onHover(e); });
+    el.addEventListener('pointerleave', () => { this.setHover(null); Tip.hide(); });
+    el.addEventListener('pointerup', e => { if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5) this.onClick(e); down = null; });
+    el.dataset.tipkeep = '1';
+    new ResizeObserver(() => this.resize()).observe(this.host);
+    this.ok = true;
+    this.tick = this.tick.bind(this); requestAnimationFrame(this.tick);
+  }
+  resize() {
+    const w = this.host.clientWidth, h = this.host.clientHeight;
+    if (!w || !h || !this.ok) return;
+    this.renderer.setSize(w, h, false); this.renderer.domElement.style.cssText = 'width:100%;height:100%;display:block';
+    this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); this.dirty = true;
+  }
+  /* Boucle de rendu : en pause si la vue est cachée ; LEDs rafraîchies environ 10 fois par seconde */
+  tick(t) {
+    requestAnimationFrame(this.tick);
+    if (!this.host.offsetParent) return;
+    if (this.renderer.domElement.width < 2) this.resize();
+    if (this.anim) this.stepAnim(t);
+    this.controls.update();
+    if (t - this.lastLed > 100) { this.lastLed = t; if (this.updateLeds(t)) this.dirty = true; if (this.hlMesh) { this.hlMesh.material.opacity = 0.55 + 0.45 * Math.sin(t / 160); this.dirty = true; } }
+    if (this.dirty) { this.dirty = false; this.renderer.render(this.scene, this.camera); }
+  }
+  /* --- Matériaux et textures --- */
+  mat(color, metal = 0.5, rough = 0.5, extra = null) {
+    const k = `${color}|${metal}|${rough}|${extra ? JSON.stringify(extra) : ''}`;
+    if (!this.matCache.has(k)) { const m = new THREE.MeshStandardMaterial({ color, metalness: metal, roughness: rough, ...(extra || {}) }); m.userData.keep = true; this.matCache.set(k, m); }
+    return this.matCache.get(k);
+  }
+  canvasTex(cv) { const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = this.renderer.capabilities.getMaxAnisotropy(); return t; }
+  facadeMat(cat) {
+    const img = cat.visual?.frontImage, key = img ? 'img:' + img : drawFacade(cat);
+    if (!this.texCache.has(key)) {
+      let tex;
+      if (img) { tex = new THREE.TextureLoader().load(img, () => { this.dirty = true; }); tex.colorSpace = THREE.SRGBColorSpace; }
+      else tex = this.canvasTex(key);
+      const m = new THREE.MeshStandardMaterial({ map: tex, metalness: 0.3, roughness: 0.55 }); m.userData.keep = true;
+      this.texCache.set(key, m);
+    }
+    return this.texCache.get(key);
+  }
+  clear() {
+    this.root.traverse(o => {
+      if (o.geometry && o.geometry !== this.unitBox && o.geometry !== this.frameGeo && !o.geometry.userData.keep) o.geometry.dispose();
+      for (const m of [].concat(o.material || [])) if (!m.userData.keep) { m.map?.dispose(); m.dispose(); }
+      if (o.isInstancedMesh) o.dispose();
+    });
+    this.root.clear();
+    Object.assign(this, { ports: [], portIdx: new Map(), devGroups: new Map(), cableMeshes: new Map(), bodies: [], overlay: null, leds: null, hlMesh: null, cableGroup: null, ledPorts: [] });
+    this.hoverFrame.visible = this.selFrame.visible = this.selBox.visible = false;
+    this.controls.autoRotate = false;
+  }
+  box(parent, w, h, d, x, y, z, m) { const me = new THREE.Mesh(this.unitBox, m); me.scale.set(w, h, d); me.position.set(x, y, z); parent.add(me); return me; }
+  /* Sol en dalles de faux plancher et ombre de contact */
+  addFloor(shadowW, shadowD) {
+    const T = THREE;
+    if (!this.floorMat) {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 256; const c = cv.getContext('2d'), rnd = mulberry32(3);
+      c.fillStyle = '#5c636b'; c.fillRect(0, 0, 256, 256);
+      for (let i = 0; i < 900; i++) { c.fillStyle = `rgba(${rnd() > 0.5 ? '255,255,255' : '0,0,0'},${rnd() * 0.07})`; c.fillRect(rnd() * 256, rnd() * 256, 2 + rnd() * 3, 2); }
+      c.strokeStyle = '#2a2e33'; c.lineWidth = 5; c.strokeRect(0, 0, 256, 256);
+      const t = this.canvasTex(cv); t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(30, 30);
+      this.floorMat = new T.MeshStandardMaterial({ map: t, metalness: 0.15, roughness: 0.62, color: '#8b929a' }); this.floorMat.userData.keep = true;
+      const sc = document.createElement('canvas'); sc.width = sc.height = 128; const s2 = sc.getContext('2d'), g2 = s2.createRadialGradient(64, 64, 20, 64, 64, 64);
+      g2.addColorStop(0, 'rgba(0,0,0,.75)'); g2.addColorStop(1, 'rgba(0,0,0,0)'); s2.fillStyle = g2; s2.fillRect(0, 0, 128, 128);
+      this.shadowMat = new T.MeshBasicMaterial({ map: new T.CanvasTexture(sc), transparent: true, depthWrite: false }); this.shadowMat.userData.keep = true;
+    }
+    const fl = new T.Mesh(new T.PlaneGeometry(18, 18), this.floorMat); fl.rotation.x = -Math.PI / 2; this.root.add(fl);
+    const sd = new T.Mesh(new T.PlaneGeometry(shadowW, shadowD), this.shadowMat); sd.rotation.x = -Math.PI / 2; sd.position.y = 0.002; this.root.add(sd);
+  }
+  /* --- Baie ou coffret --- */
+  buildEnclosure(rc, HU, name) {
+    const T = THREE, g = new T.Group(), wall = !!gabarit(rc).wall;
+    const W = rc.visual?.width || 0.75, D = rc.visual?.depth || 1.07, innerH = HU * U_M, fr = 0.05, H = innerH + 2 * fr;
+    const y0 = wall ? 1.05 : 0.06, zF = D / 2 - (wall ? 0.07 : 0.11);
+    const mF = this.mat(rc.visual?.color || '#17191c', 0.55, 0.5), mIn = this.mat('#0c0e11', 0.3, 0.8);
+    this.box(g, W, fr, D, 0, y0 + fr / 2, 0, mF); this.box(g, W, fr, D, 0, y0 + H - fr / 2, 0, mF);
+    for (const sx of [-1, 1]) {
+      this.box(g, 0.012, innerH, D - 0.02, sx * (W / 2 - 0.006), y0 + fr + innerH / 2, 0, mF);
+      for (const sz of [-1, 1]) this.box(g, 0.04, innerH, 0.04, sx * (W / 2 - 0.02), y0 + fr + innerH / 2, sz * (D / 2 - 0.02), mF);
+    }
+    this.box(g, W - 0.02, innerH, 0.012, 0, y0 + fr + innerH / 2, -D / 2 + 0.006, mIn);
+    // Montants 19" percés, avec le numéro de chaque U
+    const rc2 = document.createElement('canvas'); rc2.width = 64; rc2.height = HU * 48; const c = rc2.getContext('2d');
+    c.fillStyle = '#868d95'; c.fillRect(0, 0, 64, rc2.height);
+    for (let u = 1; u <= HU; u++) {
+      const yb = rc2.height - u * 48;
+      c.fillStyle = '#0a0c0e'; for (const k of [7, 24, 41]) c.fillRect(8, yb + k - 4, 9, 9);
+      c.fillStyle = '#14181c'; c.font = '700 20px system-ui, Arial'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(u, 42, yb + 25);
+      c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(0, yb, 64, 1);
+    }
+    const railMat = new T.MeshStandardMaterial({ map: this.canvasTex(rc2), metalness: 0.6, roughness: 0.45 });
+    for (const sx of [-1, 1]) this.box(g, 0.02, innerH, 0.003, sx * 0.2326, y0 + fr + innerH / 2, zF - 0.0035, railMat);
+    if (!wall) for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const f = new T.Mesh(new T.CylinderGeometry(0.025, 0.03, 0.06, 12), this.mat('#0c0d0f', 0.4, 0.6)); f.position.set(sx * (W / 2 - 0.06), 0.03, sz * (D / 2 - 0.06)); g.add(f); }
+    if (wall) { const wl = new T.Mesh(new T.PlaneGeometry(6, 3.2), this.mat('#2b3138', 0, 0.95)); wl.position.set(0, 1.6, -D / 2 - 0.002); g.add(wl); }
+    if (name) { const pl = new T.Mesh(new T.PlaneGeometry(0.2, 0.034), new T.MeshBasicMaterial({ map: this.canvasTex(labelCanvas(name, { w: 384, h: 64, bg: '#0d1117', fg: '#e6edf3', px: 34 })) })); pl.position.set(0, y0 + H - fr / 2, D / 2 + 0.001); g.add(pl); }
+    return { g, geo: { W, D, HU, H, yBase: y0 + fr, yTop: y0 + H, zF, sideX: W / 2 - (wall ? 0.028 : 0.085), wall } };
+  }
+  /* --- Équipement 19" --- */
+  buildDevice(cat, dev) {
+    const T = THREE, g = new T.Group(), tpl = gabarit(cat), L = facadeLayout(cat), depth = tpl.depth || 0.3, base = cat.visual?.color || '#2a3038';
+    const side = this.mat(shade(base, -0.3), 0.55, 0.5);
+    const body = new T.Mesh(this.unitBox, [side, side, side, side, this.facadeMat(cat), side]);
+    body.scale.set(FACE_W, L.H, depth); body.position.z = -depth / 2; body.userData.devId = dev?.id || null;
+    g.add(body); this.bodies.push(body);
+    const earM = this.mat(shade(base, -0.1), 0.6, 0.45), scr = this.mat('#c9ced4', 0.9, 0.3);
+    for (const sx of [-1, 1]) {
+      this.box(g, 0.0215, L.H, 0.003, sx * (FACE_W / 2 + 0.0107), 0, -0.0015, earM);
+      for (const sy of L.hU > 1 ? [-1, 1] : [0]) { const s = new T.Mesh(this.screwGeo || (this.screwGeo = Object.assign(new T.CylinderGeometry(0.0042, 0.0042, 0.002, 10).rotateX(Math.PI / 2), { userData: { keep: true } })), scr); s.position.set(sx * 0.2326, sy * (L.H / 2 - 0.012), 0.001); g.add(s); }
+    }
+    if (tpl.decor === 'cablemgr') {
+      const rg = this.ringGeo || (this.ringGeo = Object.assign(new T.TorusGeometry(0.0155, 0.0024, 6, 16).rotateY(Math.PI / 2), { userData: { keep: true } }));
+      for (let i = 0; i < 5; i++) { const r = new T.Mesh(rg, this.mat('#15171a', 0.5, 0.5)); r.position.set(-0.16 + i * 0.08, 0, 0.0155); g.add(r); }
+    }
+    if (dev) {
+      const st = new T.Mesh(new T.PlaneGeometry(0.034, 0.0068), new T.MeshBasicMaterial({ map: this.canvasTex(labelCanvas(dev.hostname, { w: 240, h: 48 })) }));
+      st.position.set(-FACE_W / 2 + 0.019, -L.H / 2 + 0.0056, 0.0004); g.add(st);
+    }
+    return { g, L };
+  }
+  /* Affiche une baie complète */
+  showRack(rackId, keepCam) {
+    if (!this.ok) { this.queue = () => this.showRack(rackId); return; }
+    const T = THREE, rack = byId(rackId);
+    this.clear(); this.kind = 'rack'; this.rackId = rackId;
+    const rc = catOf(rack), { g, geo } = this.buildEnclosure(rc, rack.heightU, rack.name);
+    this.geo = geo; this.root.add(g); this.addFloor(geo.W * 2.2, geo.D * 1.9);
+    const ledPorts = [], plugs = [];
+    for (const dev of Store.idx.devByRack.get(rackId) || []) {
+      const cat = catOf(dev), { g: dg, L } = this.buildDevice(cat, dev);
+      const yc = geo.yBase + (dev.u - 1) * U_M + L.hU * U_M / 2;
+      dg.position.set(0, yc, geo.zF); this.root.add(dg);
+      this.devGroups.set(dev.id, { g: dg, y: yc, H: L.H, depth: gabarit(cat).depth || 0.3 });
+      portsOf(dev.id).forEach((p, i) => {
+        const lp = L.ports[i]; if (!lp) return;
+        const e = { p, dev, lp, x: lp.x, y: yc + lp.y, z: geo.zF, w: lp.w, h: lp.h };
+        this.portIdx.set(p.id, this.ports.length); this.ports.push(e);
+        if (p.role !== 'pp') ledPorts.push(e);
+        const fc = this.frontCable(p); if (fc) { e.cable = fc; plugs.push(e); }
+      });
+    }
+    this.buildPortMeshes(ledPorts, plugs);
+    this.buildCables(plugs);
+    this.refreshColors(); this.applyHighlight(); this.setSelected(this.selId);
+    if (!keepCam) this.frameAll(false);
+    this.dirty = true;
+  }
+  /* Câble visible en façade : le cordon (et non le lien permanent à l'arrière d'un panneau) */
+  frontCable(p) { return cablesOf(p.id).find(c => p.role !== 'pp' || !isPassiveNode(otherEnd(c, p.id))) || null; }
+  buildPortMeshes(ledPorts, plugs) {
+    const T = THREE, M = new T.Matrix4(), q = new T.Quaternion(), V = (x, y, z) => new T.Vector3(x, y, z), col = new T.Color();
+    const n = this.ports.length;
+    if (!n) return;
+    // Zones de clic et surcouche de couleur
+    this.overlay = new T.InstancedMesh(this.unitBox, new T.MeshBasicMaterial({ transparent: true, opacity: 0, toneMapped: false, depthWrite: false }), n);
+    this.ports.forEach((e, i) => { M.compose(V(e.x, e.y, e.z + 0.0007), q, V(e.w + 0.0012, e.h + 0.0012, 0.0012)); this.overlay.setMatrixAt(i, M); this.overlay.setColorAt(i, col.set('#000')); });
+    this.root.add(this.overlay);
+    // LEDs
+    this.ledPorts = ledPorts;
+    if (ledPorts.length) {
+      this.leds = new T.InstancedMesh(this.unitBox, new T.MeshBasicMaterial({ toneMapped: false }), ledPorts.length);
+      ledPorts.forEach((e, i) => { M.compose(V(e.x - e.w / 2 + 0.0019, e.y + (e.lp.top ? 1 : -1) * (e.h / 2 + 0.002), e.z + 0.0004), q, V(0.0028, 0.0014, 0.0008)); this.leds.setMatrixAt(i, M); this.leds.setColorAt(i, col.set('#11151a')); e.phase = Math.random() * 10; });
+      this.root.add(this.leds);
+    }
+    // Fiches branchées
+    if (plugs.length) {
+      this.plugs = new T.InstancedMesh(this.unitBox, this.mat('#ffffff', 0.1, 0.55), plugs.length);
+      plugs.forEach((e, i) => { const sf = e.lp.kind !== 'rj45'; M.compose(V(e.x, e.y, e.z + (sf ? 0.011 : 0.008)), q, V(e.w * 0.82, e.h * 0.74, sf ? 0.022 : 0.016)); this.plugs.setMatrixAt(i, M); this.plugs.setColorAt(i, col.set(sf ? '#c9ced4' : e.cable.color || '#3987e5')); });
+      this.root.add(this.plugs);
+    }
+  }
+  /* Cordons de brassage : un tube par cordon, qui passe par le côté de la baie */
+  buildCables(plugs) {
+    const T = THREE, grp = this.cableGroup = new T.Group(), geo = this.geo, done = new Set();
+    grp.visible = this.cablesOn; this.root.add(grp);
+    let k = 0;
+    for (const a of plugs) {
+      const cab = a.cable; if (done.has(cab.id)) continue; done.add(cab.id);
+      const bi = this.portIdx.get(otherEnd(cab, a.p.id)), b = bi != null ? this.ports[bi] : null;
+      const j = ((k * 37) % 17) / 17, zo = 0.03 + j * 0.03, fib = CABLE_TYPES[cab.type]?.fiber && cab.type !== 'dac'; k++;
+      const side = ((a.x + (b ? b.x : a.x)) >= 0 ? 1 : -1), sx = side * (geo.sideX - j * 0.022);
+      const A = new T.Vector3(a.x, a.y, a.z + 0.014), pts = [A, new T.Vector3(a.x, a.y - 0.004, a.z + zo)];
+      if (b) {
+        const B = new T.Vector3(b.x, b.y, b.z + 0.014);
+        if (Math.abs(a.y - b.y) < 0.03 && Math.abs(a.x - b.x) < 0.1) pts.push(new T.Vector3((a.x + b.x) / 2, (a.y + b.y) / 2 - 0.012, a.z + zo + 0.01));
+        else pts.push(new T.Vector3(sx, a.y - 0.012, a.z + zo * 0.6), new T.Vector3(sx, b.y + (a.y > b.y ? 0.012 : -0.012), b.z + zo * 0.6));
+        pts.push(new T.Vector3(b.x, b.y - 0.004, b.z + zo), B);
+      } else {
+        // L'autre extrémité est ailleurs : le cordon part par le côté puis vers le haut de la baie
+        pts.push(new T.Vector3(sx, a.y + 0.02, a.z + zo * 0.5), new T.Vector3(sx, geo.yTop - 0.06, a.z - 0.02));
+      }
+      const tube = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts, false, 'catmullrom', 0.25), b ? 26 : 16, fib ? 0.0016 : cab.type === 'dac' ? 0.003 : 0.0027, 5), this.mat(cab.color || CABLE_TYPES[cab.type].color, 0.05, 0.6));
+      tube.userData.cabId = cab.id; grp.add(tube); this.cableMeshes.set(cab.id, tube);
+    }
+  }
+  /* Affiche un objet seul : aperçu d'un modèle du catalogue, ou équipement hors baie */
+  showObject(cat, dev = null) {
+    if (!this.ok) { this.queue = () => this.showObject(cat, dev); return; }
+    const T = THREE, tpl = gabarit(cat);
+    this.clear(); this.kind = 'object'; this.rackId = null;
+    let size = 0.3, cy = 0.1;
+    if (tpl.type === 'enclosure') {
+      const { g, geo } = this.buildEnclosure(cat, cat.heightU || 42, cat.model.split(' ').slice(0, 2).join(' '));
+      this.root.add(g); this.addFloor(geo.W * 2.2, geo.D * 1.9); size = geo.H * 0.9; cy = geo.yBase + geo.H / 2 - 0.05;
+    } else {
+      this.addFloor(0.9, 0.9);
+      const ped = new T.Mesh(new T.CylinderGeometry(0.36, 0.38, 0.03, 48), this.mat('#161b22', 0.4, 0.5)); ped.position.y = 0.015; this.root.add(ped);
+      if (tpl.type === 'facade') {
+        const { g, L } = this.buildDevice(cat, dev);
+        const yc = 0.03 + L.H / 2 + 0.002; g.position.set(0, yc, (tpl.depth || 0.3) / 2 > 0.3 ? 0.3 : (tpl.depth || 0.3) / 2);
+        this.root.add(g);
+        // Ports survolables (informations du catalogue)
+        const names = portNames(cat); let gi = 0, n = 0;
+        for (const grp of cat.ports || []) { const cnt = grp.names ? grp.names.length : grp.count; for (let i = 0; i < cnt; i++, n++) { const lp = L.ports[n]; this.ports.push({ info: { name: names[n], grp }, lp, x: lp.x, y: yc + lp.y, z: g.position.z, w: lp.w, h: lp.h }); } gi++; }
+        this.buildPortMeshes([], []);
+        size = 0.36; cy = yc;
+      } else {
+        const o = OBJECTS[cat.template] ? OBJECTS[cat.template](this, cat) : OBJECTS.sfp(this, cat);
+        o.g.position.y = 0.03; this.root.add(o.g); size = o.size; cy = 0.03 + o.h / 2;
+      }
+    }
+    const dist = size / Math.tan(this.camera.fov * Math.PI / 360) * 0.95;
+    this.controls.target.set(0, cy, 0); this.camera.position.set(dist * 0.42, cy + dist * 0.42, dist * 0.82);
+    this.controls.autoRotate = !dev; this.controls.autoRotateSpeed = 1.2;
+    this.controls.update(); this.dirty = true;
+  }
+  /* --- Couleurs, LEDs, surbrillance --- */
+  setMode(m) { this.mode = m; this.refreshColors(); }
+  setCables(on) { this.cablesOn = on; if (this.cableGroup) this.cableGroup.visible = on; this.dirty = true; }
+  refreshColors() {
+    if (!this.overlay) return;
+    const col = new THREE.Color();
+    this.overlay.material.opacity = this.mode === 'none' ? 0 : 0.86;
+    if (this.mode !== 'none') { this.ports.forEach((e, i) => { if (e.p) this.overlay.setColorAt(i, col.set(portModeColor(e.p, this.mode))); }); this.overlay.instanceColor.needsUpdate = true; }
+    this.dirty = true;
+  }
+  updateLeds(t) {
+    if (!this.leds) return this.controls?.autoRotate;
+    const col = new THREE.Color();
+    this.ledPorts.forEach((e, i) => {
+      const s = e.p.status;
+      let c = '#161b20';
+      if (s === 'up') c = Math.random() < 0.22 ? '#0e5a1c' : '#3dff66';
+      else if (s === 'error') c = Math.sin(t / 220 + e.phase) > 0 ? '#ff9a1f' : '#4a2b05';
+      this.leds.setColorAt(i, col.set(c));
+    });
+    this.leds.instanceColor.needsUpdate = true;
+    return true;
+  }
+  /* Surbrillance d'un chemin : { nodeSet, cableSet } */
+  setHighlight(hl) { this.hl = hl; if (this.ok) this.applyHighlight(); }
+  applyHighlight() {
+    const T = THREE;
+    if (this.hlMesh) { this.root.remove(this.hlMesh); this.hlMesh.material.dispose(); this.hlMesh.dispose(); this.hlMesh = null; }
+    for (const [id, m] of this.cableMeshes) { const on = this.hl?.cableSet.has(id); if (on && !m.userData.orig) { m.userData.orig = m.material; m.material = this.hlCableMat; m.scale.setScalar(1); } else if (!on && m.userData.orig) { m.material = m.userData.orig; m.userData.orig = null; } }
+    const list = this.hl ? this.ports.filter(e => e.p && this.hl.nodeSet.has(e.p.id)) : [];
+    if (list.length) {
+      const M = new T.Matrix4(), q = new T.Quaternion();
+      this.hlMesh = new T.InstancedMesh(this.frameGeo, new T.MeshBasicMaterial({ color: COL.accent, toneMapped: false, transparent: true, depthTest: false }), list.length);
+      list.forEach((e, i) => { M.compose(new T.Vector3(e.x, e.y, e.z + 0.002), q, new T.Vector3(e.w * 1.25, e.h * 1.25, 1)); this.hlMesh.setMatrixAt(i, M); });
+      this.hlMesh.renderOrder = 9; this.root.add(this.hlMesh);
+    }
+    this.dirty = true;
+  }
+  placeFrame(fr, e) { if (!e) { fr.visible = false; return; } fr.position.set(e.x, e.y, e.z + 0.0025); fr.scale.set(e.w, e.h, 1); fr.visible = true; }
+  setSelected(id) {
+    this.selId = id; if (!this.ok) return;
+    const i = this.portIdx.get(id), dg = this.devGroups.get(id);
+    this.placeFrame(this.selFrame, i != null ? this.ports[i] : null);
+    this.selBox.visible = !!dg;
+    if (dg) { this.selBox.position.set(0, dg.y, this.geo.zF - dg.depth / 2); this.selBox.scale.set(FACE_W + 0.05, dg.H + 0.003, dg.depth + 0.004); }
+    this.dirty = true;
+  }
+  setHover(e) { if (this.hover === e) return; this.hover = e; this.placeFrame(this.hoverFrame, e); this.host.style.cursor = e ? 'pointer' : ''; this.dirty = true; }
+  /* --- Souris --- */
+  pick(ev) {
+    const r = this.renderer.domElement.getBoundingClientRect();
+    this.ray.setFromCamera(new THREE.Vector2((ev.clientX - r.left) / r.width * 2 - 1, -(ev.clientY - r.top) / r.height * 2 + 1), this.camera);
+    const hit = this.ray.intersectObjects([this.overlay, ...this.bodies].filter(Boolean), false)[0];
+    if (!hit) return null;
+    if (hit.object === this.overlay) return { port: this.ports[hit.instanceId] };
+    return { devId: hit.object.userData.devId };
+  }
+  onHover(ev) {
+    const h = this.pick(ev);
+    if (h?.port) {
+      this.setHover(h.port);
+      const e = h.port;
+      Tip.show(Tip.fmt(e.p ? portTip(e.p, true) : `${e.info.name}|${PORT_KIND[e.info.grp.kind]} · ${PORT_ROLE[e.info.grp.role]}|Débit : ${fmtSpeed(e.info.grp.speed)}${e.info.grp.poe ? '|PoE : oui' : ''}`), ev.clientX, ev.clientY);
+    } else {
+      this.setHover(null);
+      const d = h?.devId && byId(h.devId);
+      if (d) { const c = catOf(d); Tip.show(Tip.fmt(`${d.hostname}|${c.brand} ${c.model}|${d.rackId ? `U${d.u}${c.heightU > 1 ? '–' + (d.u + c.heightU - 1) : ''}` : ''}${d.ip ? ' · ' + d.ip : ''}|État : ${DEVICE_STATUS[d.status].label}`), ev.clientX, ev.clientY); this.host.style.cursor = 'pointer'; }
+      else Tip.hide();
+    }
+  }
+  onClick(ev) {
+    const h = this.pick(ev);
+    if (h?.port?.p) this.o.onPort?.(h.port.p.id);
+    else if (h?.devId) this.o.onDevice?.(h.devId);
+  }
+  /* --- Caméra --- */
+  flyTo(pos, target, animate = true) {
+    if (!animate) { this.camera.position.copy(pos); this.controls.target.copy(target); this.controls.update(); this.dirty = true; return; }
+    this.anim = { t0: performance.now(), p0: this.camera.position.clone(), q0: this.controls.target.clone(), p1: pos, q1: target };
+  }
+  stepAnim(t) {
+    const a = this.anim, k = clamp((t - a.t0) / 450, 0, 1), e = k * k * (3 - 2 * k);
+    this.camera.position.lerpVectors(a.p0, a.p1, e); this.controls.target.lerpVectors(a.q0, a.q1, e);
+    this.dirty = true; if (k >= 1) this.anim = null;
+  }
+  frameAll(animate = true) {
+    const g = this.geo; if (!g) return;
+    const yc = g.yBase + g.H / 2 - 0.05, dist = (g.H / 2) / Math.tan(this.camera.fov * Math.PI / 360) * 1.12;
+    this.flyTo(new THREE.Vector3(dist * 0.3, yc + dist * 0.08, g.zF + dist * 0.95), new THREE.Vector3(0, yc, 0), animate);
+  }
+  /* Rapproche la caméra d'un équipement ou d'un port de la baie affichée */
+  focus(id) {
+    const i = this.portIdx.get(id), dg = this.devGroups.get(id), g = this.geo;
+    if (i != null) { const e = this.ports[i]; this.flyTo(new THREE.Vector3(e.x * 0.7 + 0.05, e.y + 0.06, g.zF + 0.5), new THREE.Vector3(e.x, e.y, g.zF)); }
+    else if (dg) this.flyTo(new THREE.Vector3(0.18, dg.y + 0.14, g.zF + 1.2), new THREE.Vector3(0, dg.y, g.zF));
+    else this.frameAll();
+  }
+}
+
+/* ---------- Objets autonomes (géométrie procédurale) ----------
+   Chaque fonction renvoie { g: groupe posé sur y = 0, h: hauteur, size: rayon de cadrage } */
+function roundedSlab(T, w, d, h, r) {
+  const s = new T.Shape(), x = -w / 2, y = -d / 2;
+  s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r); s.lineTo(x + w, y + d - r); s.quadraticCurveTo(x + w, y + d, x + w - r, y + d);
+  s.lineTo(x + r, y + d); s.quadraticCurveTo(x, y + d, x, y + d - r); s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
+  const b = Math.min(h * 0.25, 0.004);
+  const g = new T.ExtrudeGeometry(s, { depth: h - 2 * b, bevelEnabled: true, bevelSize: b, bevelThickness: b, bevelSegments: 3, curveSegments: 8 });
+  g.rotateX(-Math.PI / 2); g.translate(0, b, 0);
+  return g;
+}
+const OBJECTS = {
+  ap(v, cat) {
+    const T = THREE, g = new T.Group(), col = cat.visual?.color || '#f1f2f3';
+    const body = new T.Mesh(roundedSlab(T, 0.22, 0.22, 0.04, 0.045), v.mat(col, 0.05, 0.42)); g.add(body);
+    const plate = new T.Mesh(roundedSlab(T, 0.17, 0.17, 0.006, 0.03), v.mat(shade(col, -0.05), 0.05, 0.35)); plate.position.y = 0.038; g.add(plate);
+    const led = new T.Mesh(new T.CylinderGeometry(0.006, 0.006, 0.002, 16), new T.MeshBasicMaterial({ color: '#3dff66', toneMapped: false })); led.position.set(0, 0.0455, 0.06); g.add(led);
+    const lg = new T.Mesh(new T.PlaneGeometry(0.09, 0.022), new T.MeshBasicMaterial({ map: v.canvasTex(labelCanvas(cat.visual?.logo || cat.brand, { w: 256, h: 64, bg: shade(col, -0.05), fg: cat.visual?.accent || '#555', px: 34 })) })); lg.rotation.x = -Math.PI / 2; lg.position.set(0, 0.0445, -0.01); g.add(lg);
+    return { g, h: 0.045, size: 0.19 };
+  },
+  phone(v, cat) {
+    const T = THREE, g = new T.Group(), col = cat.visual?.color || '#2a2d31', m = v.mat(col, 0.1, 0.5);
+    // Corps incliné : profil extrudé
+    const s = new T.Shape(); s.moveTo(-0.09, 0); s.lineTo(0.09, 0); s.lineTo(0.09, 0.02); s.lineTo(-0.07, 0.095); s.lineTo(-0.09, 0.085); s.closePath();
+    const bg = new T.ExtrudeGeometry(s, { depth: 0.2, bevelEnabled: true, bevelSize: 0.003, bevelThickness: 0.003, bevelSegments: 2 }); bg.translate(0, 0, -0.1); bg.rotateY(-Math.PI / 2);
+    g.add(new T.Mesh(bg, m));
+    const ang = Math.atan2(0.075, 0.16), tilt = new T.Group(); tilt.position.set(0, 0.0605, 0.01); tilt.rotation.x = -Math.PI / 2 + ang; g.add(tilt);
+    // Écran
+    const sc = document.createElement('canvas'); sc.width = 256; sc.height = 160; const c = sc.getContext('2d');
+    const gr = c.createLinearGradient(0, 0, 0, 160); gr.addColorStop(0, '#16335c'); gr.addColorStop(1, '#0a1a33'); c.fillStyle = gr; c.fillRect(0, 0, 256, 160);
+    c.fillStyle = '#dbe9ff'; c.font = '700 30px system-ui'; c.fillText('10:42', 14, 40); c.font = '16px system-ui'; c.fillStyle = '#9fc0ee'; c.fillText('Poste 4217 (fictif)', 14, 68);
+    for (let i = 0; i < 4; i++) { c.fillStyle = 'rgba(255,255,255,.12)'; c.fillRect(14, 86 + i * 18, 228, 12); }
+    const scr = new T.Mesh(new T.PlaneGeometry(0.085, 0.053), new T.MeshBasicMaterial({ map: v.canvasTex(sc) })); scr.position.set(0.035, 0.045, 0.004); tilt.add(scr);
+    const bez = new T.Mesh(new T.PlaneGeometry(0.095, 0.063), v.mat('#050607', 0.2, 0.3)); bez.position.set(0.035, 0.045, 0.0035); tilt.add(bez);
+    // Clavier
+    for (let r = 0; r < 4; r++) for (let k = 0; k < 3; k++) { const key = v.box(tilt, 0.016, 0.011, 0.004, 0.012 + k * 0.022, -0.012 - r * 0.016, 0.004, v.mat('#40454c', 0.1, 0.6)); key.userData.k = 1; }
+    // Combiné
+    const hs = new T.Mesh(roundedSlab(T, 0.045, 0.19, 0.026, 0.018), v.mat(shade(col, -0.15), 0.1, 0.45)); hs.rotation.x = Math.PI / 2; hs.position.set(-0.062, 0.01, 0.018); tilt.add(hs);
+    return { g, h: 0.1, size: 0.17 };
+  },
+  camera(v, cat) {
+    const T = THREE, g = new T.Group(), col = cat.visual?.color || '#f0f0ee';
+    const base = new T.Mesh(new T.CylinderGeometry(0.075, 0.078, 0.035, 40), v.mat(col, 0.05, 0.45)); base.position.y = 0.0175; g.add(base);
+    const ring = new T.Mesh(new T.CylinderGeometry(0.066, 0.075, 0.012, 40), v.mat(shade(col, -0.08), 0.05, 0.4)); ring.position.y = 0.041; g.add(ring);
+    const inner = new T.Mesh(new T.SphereGeometry(0.05, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2), v.mat('#0b0c0e', 0.3, 0.4)); inner.position.y = 0.045; g.add(inner);
+    const lens = new T.Mesh(new T.CylinderGeometry(0.014, 0.016, 0.02, 20), v.mat('#15181c', 0.8, 0.2)); lens.position.set(0, 0.078, 0.03); lens.rotation.x = 0.9; g.add(lens);
+    const glass = new T.Mesh(new T.SphereGeometry(0.063, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), new T.MeshPhysicalMaterial({ color: '#20262c', metalness: 0, roughness: 0.05, transparent: true, opacity: 0.38 })); glass.position.y = 0.045; g.add(glass);
+    return { g, h: 0.11, size: 0.15 };
+  },
+  outlet(v, cat) {
+    const T = THREE, g = new T.Group(), up = new T.Group(); up.rotation.x = -Math.PI / 2 + 1.15; up.position.y = 0.045; g.add(up);
+    up.add(new T.Mesh(roundedSlab(T, 0.086, 0.086, 0.011, 0.008).rotateX(Math.PI / 2), v.mat(cat.visual?.color || '#eceeef', 0.02, 0.5)));
+    v.box(up, 0.05, 0.05, 0.003, 0, 0, 0.012, v.mat('#dfe2e4', 0.02, 0.5));
+    v.box(up, 0.0125, 0.0105, 0.002, 0, -0.004, 0.0142, v.mat('#050607', 0.2, 0.5));
+    v.box(up, 0.03, 0.007, 0.0006, 0, 0.012, 0.0138, v.mat('#ffffff', 0, 0.8));
+    return { g, h: 0.09, size: 0.085 };
+  },
+  sfp(v, cat) {
+    const g = new THREE.Group(), y = 0.006;
+    v.box(g, 0.0135, 0.0085, 0.056, 0, y, 0, v.mat('#b9bec4', 0.9, 0.3));
+    v.box(g, 0.014, 0.0098, 0.012, 0, y, 0.031, v.mat('#22262b', 0.3, 0.5));
+    v.box(g, 0.0045, 0.0045, 0.002, -0.0032, y, 0.0372, v.mat('#050607', 0.2, 0.5)); v.box(g, 0.0045, 0.0045, 0.002, 0.0032, y, 0.0372, v.mat('#050607', 0.2, 0.5));
+    v.box(g, 0.0145, 0.0012, 0.014, 0, y + 0.0054, 0.03, v.mat(cat.visual?.accent || '#d8cbb0', 0.4, 0.4));
+    return { g, h: 0.012, size: 0.04 };
+  },
+  cable(v, cat) {
+    const T = THREE, g = new T.Group(), m = v.mat(cat.visual?.color || '#3987e5', 0.05, 0.55);
+    for (let i = 0; i < 4; i++) { const t = new T.Mesh(new T.TorusGeometry(0.06 + (i % 2) * 0.004, 0.0032, 8, 48), m); t.rotation.x = Math.PI / 2; t.position.y = 0.004 + i * 0.0062; g.add(t); }
+    v.box(g, 0.012, 0.008, 0.022, 0.066, 0.006, 0.02, v.mat('#e9ecef', 0.1, 0.4)); v.box(g, 0.012, 0.008, 0.022, 0.062, 0.02, -0.024, v.mat('#e9ecef', 0.1, 0.4));
+    return { g, h: 0.03, size: 0.085 };
+  },
+};
 /*@@3D*/
 
 /* ============================================================
@@ -1353,6 +2023,7 @@ function select(id, o = {}) {
   for (const k of ['site', 'building', 'floor', 'room', 'rack']) if (l[k] && l[k].id !== id) Carto.open.add(l[k].id);
   if (o.view) Carto.view = o.view;
   else if (!o.keep) Carto.view = l.rack ? 'rack' : 'plan';
+  if (!o.keep) View3D.focusReq = true;
   if (UI.tab !== 'carto') showTab('carto'); else renderCarto();
   if (o.reveal !== false) revealInTree();
 }
@@ -1797,8 +2468,74 @@ $('#file-image').addEventListener('change', e => {
 Actions['plan-img-del'] = () => { const floor = byId(Carto.floorId); Store.commit('edit', `Fond de plan retiré pour ${labelOf(floor.id)}`, () => { floor.planImage = ''; }, floor.id); };
 
 /* Vues provisoires, remplacées par les lots suivants */
-function renderRackView() { $('#v-rack').innerHTML = '<div class="empty">Vue 3D en cours de construction.</div>'; }
 function renderTopo() { $('#v-topo').innerHTML = '<div class="empty">Topologie en cours de construction.</div>'; }
+/* ---------- Vue « Baie 3D » : élévation 2D à gauche, scène 3D à droite ---------- */
+const View3D = { mode: 'none', cables: true, key: '', focusReq: false };
+function renderRackView() {
+  const host = $('#v-rack');
+  if (!host.dataset.built) {
+    host.dataset.built = '1';
+    host.innerHTML = `<div class="rackview"><div class="elev" id="elev"></div>
+      <div class="r3d"><div id="r3d-canvas"></div><div class="overlay tl wrap" id="r3d-tools"></div><div class="overlay bl legend" id="r3d-legend"></div><div id="palette-host-r"></div></div></div>`;
+    Views3D.main = new Viewer3D($('#r3d-canvas'), { onPort: id => select(id, { keep: true }), onDevice: id => select(id, { keep: true }) });
+    initElevEvents?.($('#elev'));
+  }
+  const v = Views3D.main, sel = Carto.sel, t = typeOf(sel || ''), l = locOf(sel || '');
+  const racksOpt = cur => Store.db.buildings.map(b => `<optgroup label="${esc(b.name)}">${Store.db.racks.filter(r => locOf(r.id).building?.id === b.id).map(r => opt(r.id, `${r.name} — ${locOf(r.id).floor.name}`, cur)).join('')}</optgroup>`).join('');
+  const objDev = l.device && !l.rack && l.device.roomId ? l.device : null;
+  const objCat = objDev ? catOf(objDev) : t === 'outlet' ? Store.idx.cat.get('cat-outlet') || Store.db.catalog.find(c => c.template === 'outlet') : null;
+  let legend = '';
+  if (objCat) {
+    // Objet seul : équipement hors baie ou prise murale
+    const key = `obj|${objDev?.id || sel}|${Store.rev}`;
+    if (View3D.key !== key) { View3D.key = key; v.showObject(objCat, objDev); }
+    $('#elev').innerHTML = `<h4>${ico(objDev ? deviceIcon(objDev) : 'outlet')}${esc(labelOf(objDev?.id || sel))}</h4><div class="sub">${esc(objCat.brand)} ${esc(objCat.model)}</div><p class="muted">Aperçu 3D de l'objet seul. Cet élément n'est pas installé dans une baie.</p>
+      <label class="f"><span>Ouvrir une baie</span><select data-chg="rack-pick"><option value="">Choisir…</option>${racksOpt('')}</select></label>`;
+    $('#r3d-tools').innerHTML = ''; legend = 'Aperçu 3D · glisser pour tourner, molette pour zoomer';
+  } else {
+    const rack = byId(Carto.rackId) || Store.db.racks[0];
+    if (!rack) { $('#elev').innerHTML = '<div class="empty">Aucune baie</div>'; $('#r3d-tools').innerHTML = ''; $('#r3d-legend').innerHTML = ''; return; }
+    Carto.rackId = rack.id;
+    const key = `rack|${rack.id}|${Store.rev}`, same = View3D.key.startsWith(`rack|${rack.id}|`);
+    if (View3D.key !== key) { View3D.key = key; v.showRack(rack.id, same); }
+    v.setSelected(sel); v.setHighlight(Carto.trace);
+    if (View3D.focusReq && v.ok) { View3D.focusReq = false; if (t === 'rack') v.frameAll(); else if (l.rack?.id === rack.id) v.focus(t === 'port' ? sel : l.device?.id); }
+    $('#elev').innerHTML = elevHtml(rack);
+    const modes = [['none', 'Réel'], ['status', 'État'], ['vlan', 'VLAN'], ['poe', 'PoE']];
+    $('#r3d-tools').innerHTML = `<select data-chg="rack-pick" data-tip="Changer de baie">${racksOpt(rack.id)}</select>
+      <div class="seg" data-tip="Coloration des ports">${modes.map(([m, lb]) => `<button data-act="r3d-mode" data-m="${m}" class="${View3D.mode === m ? 'on' : ''}">${lb}</button>`).join('')}</div>
+      <button class="btn ${View3D.cables ? 'on' : ''}" data-act="r3d-cables" data-tip="Cordons|Afficher ou masquer les cordons de brassage">${ico('cable')}Cordons</button>
+      <button class="btn icon" data-act="r3d-fit" data-tip="Recentrer|Recadrer la vue sur toute la baie">${ico('fit')}</button>
+      <button class="btn ${Carto.palette ? 'on' : ''}" data-act="palette" data-tip="Stock|Glisser un modèle du stock sur une U libre de l'élévation">${ico('box')}Stock</button>
+      ${Carto.trace ? `<button class="btn on" data-act="trace-clear">${ico('x')}Effacer le tracé</button>` : ''}`;
+    const lg = (c, lb, extra = '') => `<span><i style="background:${c};${extra}"></i>${lb}</span>`;
+    if (View3D.mode === 'status') legend = '<b>État</b>' + ['up', 'down', 'disabled', 'error', 'idle', 'free'].map(s => lg(STATE_COL[s], STATE_LABEL[s])).join('');
+    else if (View3D.mode === 'vlan') { const used = new Set(rackUsage(rack.id).devices.flatMap(d => portsOf(d.id)).filter(p => p.role !== 'pp' && (p.status === 'up' || cablesOf(p.id).length)).map(p => p.vlan)); legend = '<b>VLAN</b>' + [...used].sort((a, b) => (a ?? 1e9) - (b ?? 1e9)).map(x => x == null ? lg('#e4e9ef', 'Trunk') : lg(vlanOf(x).color, `${x} ${esc(vlanOf(x).name)}`)).join(''); }
+    else if (View3D.mode === 'poe') legend = '<b>PoE</b>' + POE_STEPS.map(s => lg(s.color, s.label)).join('') + lg('#2a3646', 'Port PoE sans charge');
+    else legend = `<b>Aspect réel</b>${lg('#3dff66', 'LED verte : lien actif', 'border-radius:50%')}${lg('#ff9a1f', 'LED orange : erreur', 'border-radius:50%')}<span>Survol : détails du port · clic : fiche</span>`;
+  }
+  $('#r3d-legend').innerHTML = legend;
+  renderPalette?.('rack');
+}
+/* Élévation 2D de la baie : une ligne par U, de haut en bas */
+function elevHtml(rack) {
+  const u = rackUsage(rack.id), map = rackMap(rack.id), H = rack.heightU, rowH = H > 30 ? 15 : 22, out = [], selDev = locOf(Carto.sel || '').device?.id;
+  for (let n = H; n >= 1; n--) {
+    const row = H - n + 1, d = map[n];
+    out.push(`<div class="eu-n" style="grid-row:${row}">${n}</div>`);
+    if (!d) { out.push(`<div class="eu free" style="grid-row:${row}" data-u="${n}" data-act="elev-free" data-tip="U${n} libre|Clic : installer ici un équipement du stock">+ U${n}</div>`); continue; }
+    const c = catOf(d), hU = c.heightU || 1;
+    if (n !== d.u + hU - 1) continue;   // l'équipement est dessiné une seule fois, à partir de sa U la plus haute
+    out.push(`<div class="eu dev ${selDev === d.id ? 'sel' : ''}" style="grid-row:${row}/span ${hU};--cc:${CATEGORIES[c.category].color}" data-act="psel" data-id="${d.id}" data-tip="${esc(d.hostname)}|${esc(c.brand)} ${esc(c.model)}|U${d.u}${hU > 1 ? '–' + (d.u + hU - 1) : ''}">${ico(deviceIcon(d))}<span>${esc(d.hostname)}</span>${d.status !== 'active' ? `<i class="dotst" style="background:${DEVICE_STATUS[d.status].color};width:7px;height:7px;border-radius:50%;flex:none"></i>` : ''}</div>`);
+  }
+  return `<h4>${ico('rack')}${esc(rack.name)}</h4><div class="sub">${esc(locLabel(rack.roomId))}<br>${u.used}/${u.total} U occupées (${u.pct} %)</div>
+    <div class="elev-grid" style="grid-template-rows:repeat(${H},${rowH}px)" data-rack="${rack.id}">${out.join('')}</div>`;
+}
+let initElevEvents = null;   // glisser-déposer depuis le stock : défini avec l'onglet Matériel
+Changes['rack-pick'] = el => { if (el.value) { View3D.focusReq = true; select(el.value, { view: 'rack' }); } };
+Actions['r3d-mode'] = el => { View3D.mode = el.dataset.m; Views3D.main.setMode(View3D.mode); renderRackView(); };
+Actions['r3d-cables'] = () => { View3D.cables = !View3D.cables; Views3D.main.setCables(View3D.cables); renderRackView(); };
+Actions['r3d-fit'] = () => Views3D.main.frameAll();
 /*@@CARTO*/
 
 /* ============================================================
@@ -1831,7 +2568,7 @@ function placeholder(name) {
    ============================================================ */
 Store.init();
 showTab(UI.tab);
-window.NetCarto = { Store, UI, Views, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic
+window.NetCarto = { Store, UI, Views, Views3D, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic
 </script>
 </body>
 </html>
