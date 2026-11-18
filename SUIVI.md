@@ -304,18 +304,22 @@ history    [{ id, ts, type, text, ref }]                                 // type
 
 ## 4. Plan de réalisation par lots
 
-| Lot | Contenu | Statut |
-|---|---|---|
-| 1 | Socle : structure HTML/CSS (thème sombre), onglets, modèle de données, store, catalogue, jeu de démo, sauvegarde locale, import/export, annulation | ⏳ À faire |
-| 2 | Cartographie 2D : arbre hiérarchique, fil d'Ariane, plan d'étage SVG, fiches (site → port), fiche port et prise modifiable | ⏳ À faire |
-| 3 | Vue 3D : baies, équipements procéduraux, ports cliquables, LEDs, cordons, coloration, élévation 2D, mode objet | ⏳ À faire |
-| 4 | Traçage du câblage (surbrillance 2D/3D/fiche), connexion et débranchement de câbles, topologie logique | ⏳ À faire |
-| 5 | Inventaire : tableau, filtres, tri, recherche globale, exports CSV/JSON, navigation vers la Cartographie | ⏳ À faire |
-| 6 | Matériel : catalogue, fiches et aperçu 3D, stock, installation et retrait, glisser-déposer, formulaire de modèle | ⏳ À faire |
-| 7 | Tableau de bord : indicateurs, graphiques, alertes, historique | ⏳ À faire |
-| 8 | Finitions : performances, tests complets, `README.md` (modèle de données, ajout d'un modèle ou d'un plan, sécurité), activation de GitHub Pages | ⏳ À faire |
+| Lot | Contenu | Niveau d'effort conseillé | Statut |
+|---|---|---|---|
+| 1 | Socle : structure HTML/CSS (thème sombre), onglets, modèle de données, store, catalogue, jeu de démo, sauvegarde locale, import/export, annulation | Élevé (high) | ⏳ À faire |
+| 2 | Cartographie 2D : arbre hiérarchique, fil d'Ariane, plan d'étage SVG, fiches (site → port), fiche port et prise modifiable | Élevé (high) | ⏳ À faire |
+| 3 | Vue 3D : baies, équipements procéduraux, ports cliquables, LEDs, cordons, coloration, élévation 2D, mode objet | Très élevé (xhigh) | ⏳ À faire |
+| 4 | Traçage du câblage (surbrillance 2D/3D/fiche), connexion et débranchement de câbles, topologie logique | Très élevé (xhigh) | ⏳ À faire |
+| 5 | Inventaire : tableau, filtres, tri, recherche globale, exports CSV/JSON, navigation vers la Cartographie | Élevé (high) | ⏳ À faire |
+| 6 | Matériel : catalogue, fiches et aperçu 3D, stock, installation et retrait, glisser-déposer, formulaire de modèle | Élevé (high) | ⏳ À faire |
+| 7 | Tableau de bord : indicateurs, graphiques, alertes, historique | Moyen à élevé (medium/high) | ⏳ À faire |
+| 8 | Finitions : performances, tests complets, `README.md` (modèle de données, ajout d'un modèle ou d'un plan, sécurité), activation de GitHub Pages | Élevé (high) | ⏳ À faire |
 
 Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
+
+**Réglage de l'effort :**
+- Moyen (medium) pour les petites corrections.
+- Max seulement pour débloquer un bug difficile : c'est le plus lent et le plus coûteux.
 
 ---
 
@@ -329,6 +333,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-18 | Quel modèle d'IA est le plus adapté ? | ✅ Répondu : Claude Opus 5.5 (niveau le plus adapté à ce projet), construction par lots testés |
 | 2026-11-18 | Ne pas lancer tout de suite la création de la solution | ✅ Respecté : aucun code livré pour l'instant |
 | 2026-11-18 | Remettre les instructions complètes du projet dans le suivi, pour qu'une nouvelle session Claude construise la solution | ✅ Fait (sections 1 à 3 + `CLAUDE.md`) |
+| 2026-11-18 | Conseil sur le niveau d'effort (l'utilisateur prévoit Fable 5.2) | ✅ Répondu : élevé par défaut, très élevé pour les lots 3 et 4 (colonne ajoutée en section 4) |
 
 ---
 
