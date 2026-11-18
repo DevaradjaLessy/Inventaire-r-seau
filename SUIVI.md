@@ -355,6 +355,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-18 | Conseil sur le niveau d'effort (l'utilisateur prévoit Fable 5.2) | ✅ Répondu : élevé par défaut, très élevé pour les lots 3 et 4 (colonne ajoutée en section 4) |
 | 2026-11-18 | « go » : lancer la construction en suivant le plan par lots | ✅ Fait : lots 1 à 8 réalisés et testés dans Chromium |
 | 2026-11-18 | « Veux-tu des images ou des choses qui facilitent la création ? » | ✅ Répondu : rien de nécessaire pour la V1. Utile ensuite : liste exacte des modèles, photos de façade prises de face, plans en image avec une cote. Ne rien déposer de réel dans ce dépôt public. |
+| 2026-11-18 | Ne plus tout garder dans un seul fichier `index.html` : répartir le code dans plusieurs fichiers, pour un projet plus propre et plus évolutif | ⏳ En attente : l'utilisateur regarde l'application puis donnera son feu vert. Découpage proposé : `css/style.css`, puis `js/` (config, utilitaires, catalogue, démo, store, services, moteur 3D, un fichier par onglet), en modules JavaScript natifs, sans outil de build. Effet neutre sur les performances. À faire alors : mettre à jour la règle « un seul fichier » dans `CLAUDE.md` et la section 3.1. |
 
 ---
 
