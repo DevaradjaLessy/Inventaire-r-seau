@@ -85,6 +85,8 @@ label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--tx
 label.f>span{white-space:nowrap}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
 .form-grid .full{grid-column:1/-1}
+.form-grid>*{min-width:0}
+label.f input,label.f select,label.f textarea{width:100%}
 .chip{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:20px;font-size:11.5px;font-weight:600;border:1px solid var(--line2);background:var(--panel2);white-space:nowrap}
 .chip .dot{width:8px;height:8px;border-radius:50%;flex:none}
 .st{display:inline-flex;align-items:center;gap:5px;font-weight:600;font-size:12px;white-space:nowrap}
@@ -254,6 +256,34 @@ svg.topo .tnode:hover .tb{stroke:#5b7696}
 svg.topo .tnode.hl .tb{stroke:var(--accent);stroke-width:2;fill:#0f2a3a}
 svg.topo .tnode.sel .tb{stroke:#fff;stroke-width:2}
 svg.topo .tlink.hl{stroke:var(--accent)!important;stroke-width:4;stroke-dasharray:9 6;animation:dash 1s linear infinite}
+
+/* --- Inventaire --- */
+.inv{display:flex;flex-direction:column;width:100%;height:100%;min-height:0}
+.inv-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+.inv-bar .gsearch{flex:1}
+.inv-other{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--line);background:#0c1219;max-height:92px;overflow:auto}
+.inv-other .chip .ico{width:12px;height:12px}
+.inv-other .chip:hover{border-color:var(--accent);color:var(--accent)}
+.inv-table{flex:1;overflow:auto;min-height:0}
+.inv-foot{display:flex;align-items:center;justify-content:center;gap:12px;padding:8px;border-top:1px solid var(--line);background:var(--panel)}
+.inv-foot:empty{display:none}
+/* --- Matériel disponible --- */
+.mat{display:grid;grid-template-columns:210px minmax(0,1fr) 390px;width:100%;height:100%;min-height:0}
+.mat-cats{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding-bottom:10px}
+.mat-cats .li{margin:1px 6px}
+.mat-cats .li.on{background:var(--accent-bg);color:var(--accent)}
+.mat-cats .li.on .ico{color:var(--accent)}
+.mat-main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.mat-grid{flex:1;overflow:auto;padding:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;align-content:start}
+.mcard{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;cursor:pointer;display:flex;flex-direction:column;gap:9px}
+.mcard:hover{border-color:#3a4d66}
+.mcard.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.mcard .dico{width:34px;height:34px;border-radius:8px;background:var(--panel3);display:flex;align-items:center;justify-content:center;flex:none}
+.mcard b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mat-side{background:var(--panel);border-left:1px solid var(--line);overflow:auto;min-height:0}
+.mat-prev{height:250px;position:relative;border-bottom:1px solid var(--line);background:#0a0f15}
+.pg-row{display:grid;grid-template-columns:105px 64px 100px 90px minmax(0,1fr) 64px auto auto;gap:6px;align-items:center;margin-bottom:6px}
+.pg-row input,.pg-row select{width:100%}
 /*@@CSS*/
 </style>
 </head>
@@ -1302,6 +1332,114 @@ function disconnect(cableId) {
     if (ends.length === 2) for (const p of ends) if (p.status === 'up') { p.status = 'down'; p.poe.watts = 0; }
   }, cab.a);
 }
+/* --- Recherche globale : équipements, ports, prises, pièces, baies, modèles --- */
+function search(q, limit = 6) {
+  const n = norm(q.trim());
+  if (n.length < 2) return [];
+  const d = Store.db, hit = (...f) => f.some(x => x && norm(x).includes(n));
+  const groups = [
+    ['Équipements', d.devices.filter(x => hit(x.hostname, x.ip, x.mac, x.serial)).map(x => ({ id: x.id, icon: deviceIcon(x), label: x.hostname, sub: [x.ip, locLabel(x.id, { short: true })].filter(Boolean).join(' · ') }))],
+    ['Prises murales', d.outlets.filter(x => hit(x.label)).map(x => ({ id: x.id, icon: 'outlet', label: `Prise ${x.label}`, sub: locLabel(x.roomId) }))],
+    ['Ports', d.ports.filter(p => hit(p.mac, p.connected, p.description, `${byId(p.deviceId)?.hostname} ${p.name}`)).map(p => ({ id: p.id, icon: 'passive', label: labelOf(p.id), sub: [p.connected, p.mac, p.description].filter(Boolean).join(' · ') }))],
+    ['Pièces', d.rooms.filter(x => hit(x.name)).map(x => ({ id: x.id, icon: 'room', label: x.name, sub: locLabel(x.floorId) }))],
+    ['Baies', d.racks.filter(x => hit(x.name, x.serial)).map(x => ({ id: x.id, icon: 'rack', label: x.name, sub: locLabel(x.roomId) }))],
+    ['Catalogue', d.catalog.filter(x => hit(x.brand, x.model, x.ref)).map(x => ({ id: x.id, icon: CATEGORIES[x.category].icon, label: `${x.brand} ${x.model}`, sub: CATEGORIES[x.category].one }))],
+  ];
+  return groups.filter(([, a]) => a.length).map(([name, a]) => ({ name, total: a.length, items: a.slice(0, limit) }));
+}
+
+/* --- Installation, déplacement et retrait --- */
+const HOST_PREFIX = { switch: 'SW', router: 'RTR', firewall: 'FW', ap: 'AP', ups: 'OND', server: 'SRV', phone: 'TEL', camera: 'CAM', rack: 'BAIE' };
+const stockOf = catId => Store.idx.stock.get(catId) || { catalogId: catId, available: 0, threshold: 0, location: '' };
+const installedCount = catId => (Store.idx.devByCat.get(catId) || []).length + (catId === 'cat-outlet' ? Store.db.outlets.length : 0);
+/* Propose un nom libre : préfixe du type + bâtiment et niveau + numéro */
+function suggestName(cat, roomId) {
+  const l = locOf(roomId), zone = l.floor ? `${l.building.code}${l.floor.level}` : 'X0';
+  const pre = cat.category === 'passive' ? ({ patch: 'PP', fiber: 'FO', cablemgr: 'PC' }[cat.template] || 'PAS') : cat.template === 'wallrack' ? 'COFFRET' : HOST_PREFIX[cat.category] || 'EQ';
+  const used = new Set([...Store.db.devices.map(x => x.hostname), ...Store.db.racks.map(x => x.name), ...Store.db.outlets.map(x => x.label)]);
+  if (cat.template === 'outlet') { for (let i = 1; ; i++) { const s = `${zone}-${String(i).padStart(3, '0')}`; if (!used.has(s)) return s; } }
+  for (let i = 1; ; i++) { const s = `${pre}-${zone}-${pad2(i)}`; if (!used.has(s)) return s; }
+}
+/* U libres où un équipement de hauteur hU peut être posé (U la plus basse), de haut en bas */
+function freeSlots(rackId, hU, ignoreDevId = null) {
+  const rack = byId(rackId), map = rackMap(rackId, ignoreDevId), out = [];
+  for (let u = rack.heightU - hU + 1; u >= 1; u--) { let ok = true; for (let k = u; k < u + hU; k++) if (map[k]) ok = false; if (ok) out.push(u); }
+  return out;
+}
+function checkPlace(cat, o, ignoreDevId = null) {
+  if (cat.mount === 'rack') {
+    const rack = byId(o.rackId);
+    if (!rack) throw new Error('Choisissez une baie.');
+    if (!freeSlots(o.rackId, cat.heightU || 1, ignoreDevId).includes(+o.u)) throw new Error(`Emplacement U${o.u} indisponible dans ${rack.name} (${cat.heightU || 1} U nécessaires).`);
+  } else {
+    const room = byId(o.roomId);
+    if (!room) throw new Error('Choisissez une pièce.');
+    if (!(o.x >= room.x && o.x <= room.x + room.w && o.y >= room.y && o.y <= room.y + room.h)) throw new Error(`Position hors de la pièce ${room.name}.`);
+  }
+}
+/* Installe un modèle du stock. o : { rackId, u } ou { roomId, x, y }, plus name, ip, outletId */
+function installFromStock(catId, o) {
+  const cat = Store.idx.cat.get(catId), st = stockOf(catId);
+  if (!cat) throw new Error('Modèle inconnu.');
+  if (cat.mount === 'none') throw new Error('Ce modèle est un consommable : utilisez « Sortie de stock ».');
+  if (st.available < 1) throw new Error(`Stock épuisé pour ${cat.brand} ${cat.model}.`);
+  checkPlace(cat, o);
+  const name = (o.name || '').trim() || suggestName(cat, o.roomId || byId(o.rackId).roomId);
+  const where = cat.mount === 'rack' ? `${byId(o.rackId).name}, U${o.u}` : byId(o.roomId).name;
+  return Store.commit('add', `Installation de ${name} — ${cat.brand} ${cat.model} (${where})`, db => {
+    db.stock.find(s => s.catalogId === catId).available--;
+    if (cat.category === 'rack') { const r = { id: nextId(db, 'rack'), roomId: o.roomId, catalogId: catId, name, heightU: cat.heightU, x: o.x, y: o.y, serial: '', installDate: today(), status: 'active' }; db.racks.push(r); return r.id; }
+    if (cat.template === 'outlet') { const ot = { id: nextId(db, 'o'), roomId: o.roomId, label: name, x: o.x, y: o.y, usage: o.usage || 'data' }; db.outlets.push(ot); return ot.id; }
+    const { dev, ports } = mkDevice(db, cat, { hostname: name, ip: o.ip || '', ...(cat.mount === 'rack' ? { rackId: o.rackId, u: +o.u } : { roomId: o.roomId, x: o.x, y: o.y }) });
+    if (o.outletId && ports[0] && canAccept(o.outletId, ports[0].id)) {
+      db.cables.push({ id: nextId(db, 'cab'), a: ports[0].id, b: o.outletId, type: 'patch', length: 2, color: '#8b9bb0', label: '' });
+      const net = outletInfo(o.outletId).net;
+      if (net && net.status !== 'disabled') { net.status = 'up'; ports[0].status = 'up'; ports[0].vlan = net.vlan; if (net.poe.capable && cat.poeDrawW) net.poe.watts = cat.poeDrawW; }
+    }
+    return dev.id;
+  });
+}
+function moveDevice(id, o) {
+  const dev = byId(id), cat = catOf(dev);
+  checkPlace(cat, o, id);
+  const where = cat.mount === 'rack' ? `${byId(o.rackId).name}, U${o.u}` : byId(o.roomId).name;
+  Store.commit('move', `Déplacement de ${dev.hostname} vers ${where}`, () => {
+    if (cat.mount === 'rack') Object.assign(dev, { rackId: o.rackId, u: +o.u, roomId: null, x: null, y: null });
+    else Object.assign(dev, { roomId: o.roomId, x: o.x, y: o.y, rackId: null, u: null });
+  }, id);
+}
+/* Retire un équipement : mode « stock » (retour en stock) ou « retire » (hors service, reste à l'inventaire) */
+function removeDevice(id, mode) {
+  const dev = byId(id), cat = catOf(dev), was = locLabel(id);
+  Store.commit('remove', `Retrait de ${dev.hostname} (${mode === 'stock' ? 'retour en stock' : 'hors service'})`, db => {
+    const pids = new Set(portsOf(id).map(p => p.id));
+    // Les ports reliés à l'équipement retiré retombent
+    for (const p of portsOf(id)) { const far = p.role !== 'pp' ? farEnd(p.id) : null; if (far && far.status === 'up') { far.status = 'down'; far.poe.watts = 0; } }
+    db.cables = db.cables.filter(c => !pids.has(c.a) && !pids.has(c.b));
+    if (mode === 'stock') {
+      db.ports = db.ports.filter(p => !pids.has(p.id));
+      db.devices.splice(db.devices.indexOf(dev), 1);
+      const s = db.stock.find(x => x.catalogId === cat.id); if (s) s.available++; else db.stock.push({ catalogId: cat.id, available: 1, threshold: 0, location: '' });
+    } else {
+      Object.assign(dev, { status: 'retired', rackId: null, u: null, roomId: null, x: null, y: null, notes: `${dev.notes ? dev.notes + ' — ' : ''}Retiré le ${fmtDate(today())}. Ancien emplacement : ${was}` });
+      for (const p of portsOf(id)) { if (p.role !== 'pp') p.status = 'down'; p.poe.watts = 0; }
+    }
+  });
+}
+function removeRack(id) {
+  const rack = byId(id);
+  if ((Store.idx.devByRack.get(id) || []).length) throw new Error('La baie contient encore des équipements : retirez-les d\'abord.');
+  Store.commit('remove', `Retrait de la baie ${rack.name} (retour en stock)`, db => { db.racks.splice(db.racks.indexOf(rack), 1); const s = db.stock.find(x => x.catalogId === rack.catalogId); if (s) s.available++; });
+}
+/* Mouvement de stock : entrée (qty > 0) ou sortie (qty < 0) */
+function stockMove(catId, qty, reason = '') {
+  const cat = Store.idx.cat.get(catId), st = stockOf(catId);
+  if (st.available + qty < 0) throw new Error(`Stock insuffisant : ${st.available} disponible(s).`);
+  Store.commit('stock', `${qty > 0 ? 'Entrée en' : 'Sortie de'} stock : ${Math.abs(qty)} × ${cat.brand} ${cat.model}${reason ? ` (${reason})` : ''}`, db => {
+    let s = db.stock.find(x => x.catalogId === catId); if (!s) { s = { catalogId: catId, available: 0, threshold: 0, location: '' }; db.stock.push(s); }
+    s.available += qty;
+  }, catId);
+}
 /*@@SERVICES*/
 
 /* ============================================================
@@ -1766,7 +1904,7 @@ class Viewer3D {
         const names = portNames(cat); let gi = 0, n = 0;
         for (const grp of cat.ports || []) { const cnt = grp.names ? grp.names.length : grp.count; for (let i = 0; i < cnt; i++, n++) { const lp = L.ports[n]; this.ports.push({ info: { name: names[n], grp }, lp, x: lp.x, y: yc + lp.y, z: g.position.z, w: lp.w, h: lp.h }); } gi++; }
         this.buildPortMeshes([], []);
-        size = 0.36; cy = yc;
+        size = 0.27; cy = yc;
       } else {
         const o = OBJECTS[cat.template] ? OBJECTS[cat.template](this, cat) : OBJECTS.sfp(this, cat);
         o.g.position.y = 0.03; this.root.add(o.g); size = o.size; cy = 0.03 + o.h / 2;
@@ -2140,7 +2278,7 @@ function select(id, o = {}) {
   if (o.view) Carto.view = o.view;
   else if (!o.keep) Carto.view = l.rack ? 'rack' : 'plan';
   if (!o.keep) View3D.focusReq = true;
-  if (UI.tab !== 'carto') showTab('carto'); else renderCarto();
+  if (UI.tab !== 'carto') { UI.dirty.add('carto'); showTab('carto'); } else renderCarto();
   if (o.reveal !== false) revealInTree();
 }
 /* Ouvre la Cartographie sur un objet (utilisé par les autres onglets) */
@@ -2852,14 +2990,362 @@ function panZoom(host, sel, getVb) {
 /* ============================================================
    === SECTION 11 — UI : INVENTAIRE
    ============================================================ */
+const Inv = { q: '', type: '', bld: '', status: '', brand: '', sort: 'hostname', dir: 1, page: 0, built: false, PAGE: 100 };
+const INV_COLS = [
+  ['type', 'Type'], ['hostname', 'Nom'], ['brand', 'Marque'], ['model', 'Modèle'], ['loc', 'Emplacement'], ['serial', 'N° de série'],
+  ['ip', 'Adresse IP'], ['firmware', 'Firmware'], ['installDate', 'Installé le'], ['status', 'Statut'],
+];
+/* Lignes de l'inventaire : équipements et baies */
+function invRows() {
+  return Cache.get('inv', () => {
+    const row = (e, kind) => {
+      const c = catOf(e), l = locOf(e.id);
+      return { id: e.id, kind, cat: c.category, type: CATEGORIES[c.category].one, hostname: e.hostname || e.name, brand: c.brand, model: c.model, loc: locLabel(e.id), bld: l.building?.id || '',
+        serial: e.serial || '', ip: e.ip || '', mac: e.mac || '', firmware: e.firmware || '', installDate: e.installDate || '', status: e.status,
+        text: norm([e.hostname || e.name, c.brand, c.model, c.ref, locLabel(e.id), e.serial, e.ip, e.mac, e.firmware, CATEGORIES[c.category].one, DEVICE_STATUS[e.status].label, e.notes].join(' ')) };
+    };
+    return [...Store.db.devices.filter(catOf).map(d => row(d, 'device')), ...Store.db.racks.filter(catOf).map(r => row(r, 'rack'))];
+  });
+}
+const ipKey = ip => ip ? ip.split('.').map(n => n.padStart(3, '0')).join('.') : '~';
+function invFiltered() {
+  const q = norm(Inv.q.trim());
+  const rows = invRows().filter(r => (!Inv.type || r.cat === Inv.type) && (!Inv.bld || r.bld === Inv.bld) && (!Inv.status || r.status === Inv.status) && (!Inv.brand || r.brand === Inv.brand) && (!q || r.text.includes(q)));
+  const k = Inv.sort, val = r => k === 'ip' ? ipKey(r.ip) : k === 'status' ? DEVICE_STATUS[r.status].label : String(r[k] || '~');
+  return rows.sort((a, b) => val(a).localeCompare(val(b), 'fr', { numeric: true }) * Inv.dir || a.hostname.localeCompare(b.hostname));
+}
+Views.inv = {
+  render() {
+    const host = $('#tab-inv'), d = Store.db;
+    const brands = [...new Set(invRows().map(r => r.brand))].sort(), cats = [...new Set(invRows().map(r => r.cat))];
+    const sel = (name, label, opts) => `<select data-chg="inv-f" data-f="${name}" data-tip="Filtrer par ${label}"><option value="">${label} : tous</option>${opts}</select>`;
+    if (!Inv.built) {
+      host.innerHTML = `<div class="inv"><div class="inv-bar" id="inv-bar"></div><div id="inv-other"></div><div class="inv-table" id="inv-table"></div><div class="inv-foot" id="inv-foot"></div></div>`;
+      Inv.built = true;
+    }
+    $('#inv-bar').innerHTML = `<div class="gsearch" style="margin:0;max-width:340px">${ico('search')}<input type="search" id="inv-q" data-inp="inv-q" placeholder="Filtrer : nom, IP, MAC, série, pièce…" value="${esc(Inv.q)}" style="width:100%;padding-left:30px"></div>
+      ${sel('type', 'Type', Object.keys(CATEGORIES).filter(k => cats.includes(k)).map(k => opt(k, CATEGORIES[k].one, Inv.type)).join(''))}
+      ${sel('bld', 'Bâtiment', d.buildings.map(b => opt(b.id, `Bât. ${b.code}`, Inv.bld)).join(''))}
+      ${sel('status', 'Statut', Object.entries(DEVICE_STATUS).map(([k, v]) => opt(k, v.label, Inv.status)).join(''))}
+      ${sel('brand', 'Marque', brands.map(b => opt(b, b, Inv.brand)).join(''))}
+      <button class="btn" data-act="inv-reset" data-tip="Effacer tous les filtres">${ico('x')}Effacer</button>
+      <span class="grow"></span><span class="muted" id="inv-count"></span>
+      <button class="btn" data-act="inv-csv" data-tip="Export CSV|Télécharger la vue filtrée (séparateur point-virgule, compatible Excel)">${ico('download')}CSV</button>
+      <button class="btn" data-act="inv-json" data-tip="Export JSON|Télécharger la vue filtrée">${ico('download')}JSON</button>`;
+    renderInvTable();
+  },
+};
+function renderInvTable() {
+  const rows = invFiltered(), pages = Math.max(1, Math.ceil(rows.length / Inv.PAGE));
+  Inv.page = clamp(Inv.page, 0, pages - 1);
+  const page = rows.slice(Inv.page * Inv.PAGE, (Inv.page + 1) * Inv.PAGE);
+  $('#inv-count').textContent = `${plural(rows.length, 'élément')} sur ${invRows().length}`;
+  $('#inv-table').innerHTML = rows.length ? `<table class="t"><thead><tr>${INV_COLS.map(([k, l]) => `<th data-act="inv-sort" data-k="${k}" style="cursor:pointer">${l}${Inv.sort === k ? (Inv.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}<th></th></tr></thead><tbody>
+    ${page.map(r => `<tr data-act="inv-go" data-id="${r.id}" style="cursor:pointer" data-tip="${esc(r.hostname)}|Clic : ouvrir dans la Cartographie">
+      <td><span class="chip"><span class="dot" style="background:${CATEGORIES[r.cat].color}"></span>${r.type}</span></td><td><b>${esc(r.hostname)}</b></td><td>${esc(r.brand)}</td><td>${esc(r.model)}</td><td class="muted">${esc(r.loc)}</td>
+      <td class="mono">${esc(r.serial) || '—'}</td><td class="mono">${esc(r.ip) || '—'}</td><td>${esc(r.firmware) || '—'}</td><td>${fmtDate(r.installDate)}</td><td>${stDev(r.status)}</td>
+      <td><div class="row" style="gap:4px;justify-content:flex-end"><button class="btn sm icon" data-act="${r.kind === 'rack' ? 'rack-edit' : 'dev-edit'}" data-id="${r.id}" data-tip="Modifier">${ico('edit')}</button><button class="btn sm icon danger" data-act="${r.kind === 'rack' ? 'rack-del' : r.status === 'retired' ? 'dev-restock' : 'dev-remove'}" data-id="${r.id}" data-tip="${r.status === 'retired' ? 'Remettre en stock ou supprimer' : 'Retirer'}">${ico(r.status === 'retired' ? 'box' : 'out')}</button></div></td></tr>`).join('')}</tbody></table>` : '<div class="empty">Aucun équipement ne correspond aux filtres.</div>';
+  $('#inv-foot').innerHTML = pages > 1 ? `<button class="btn sm" data-act="inv-page" data-d="-1" ${Inv.page ? '' : 'disabled'}>Précédent</button><span class="muted">Page ${Inv.page + 1} / ${pages}</span><button class="btn sm" data-act="inv-page" data-d="1" ${Inv.page < pages - 1 ? '' : 'disabled'}>Suivant</button>` : '';
+  // Autres résultats de la recherche : prises, ports, pièces
+  const other = Inv.q.trim().length >= 2 ? search(Inv.q, 8).filter(g => !['Équipements', 'Baies', 'Catalogue'].includes(g.name)) : [];
+  $('#inv-other').innerHTML = other.length ? `<div class="inv-other"><span class="sec-t">Autres résultats</span>${other.map(g => `<span class="muted">${g.name} (${g.total}) :</span>${g.items.map(i => `<span class="chip" style="cursor:pointer" data-act="go" data-id="${i.id}" data-tip="${esc(i.label)}|${esc(i.sub)}">${ico(i.icon)}${esc(i.label)}</span>`).join('')}`).join('')}</div>` : '';
+}
+Inputs['inv-q'] = el => { Inv.q = el.value; Inv.page = 0; renderInvTable(); };
+Changes['inv-f'] = el => { Inv[el.dataset.f] = el.value; Inv.page = 0; renderInvTable(); };
+Actions['inv-reset'] = () => { Object.assign(Inv, { q: '', type: '', bld: '', status: '', brand: '', page: 0 }); Views.inv.render(); };
+Actions['inv-sort'] = el => { const k = el.dataset.k; if (Inv.sort === k) Inv.dir = -Inv.dir; else { Inv.sort = k; Inv.dir = 1; } renderInvTable(); };
+Actions['inv-page'] = el => { Inv.page += +el.dataset.d; renderInvTable(); $('#inv-table').scrollTop = 0; };
+Actions['inv-go'] = el => goto(el.dataset.id);
+/* Ouvre un objet quelconque : Cartographie, ou onglet Matériel pour un modèle du catalogue */
+Actions.go = el => { const id = el.dataset.id; if (typeOf(id) === 'catalog') { Mat.sel = id; Mat.cat = ''; UI.dirty.add('mat'); showTab('mat'); } else goto(id); };
+const invExportRows = () => invFiltered().map(r => ({ type: r.type, nom: r.hostname, marque: r.brand, modele: r.model, emplacement: r.loc, numero_serie: r.serial, ip: r.ip, mac: r.mac, firmware: r.firmware, date_installation: r.installDate, statut: DEVICE_STATUS[r.status].label }));
+Actions['inv-csv'] = () => {
+  const rows = invExportRows(), cols = Object.keys(rows[0] || { type: '' }), q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  download(`netcarto-inventaire-${today()}.csv`, '﻿' + [cols.join(';'), ...rows.map(r => cols.map(c => q(r[c])).join(';'))].join('\r\n'), 'text/csv');
+  toast(`${plural(rows.length, 'ligne')} exportée(s) en CSV`);
+};
+Actions['inv-json'] = () => { const rows = invExportRows(); download(`netcarto-inventaire-${today()}.json`, JSON.stringify(rows, null, 1)); toast(`${plural(rows.length, 'ligne')} exportée(s) en JSON`); };
+
+/* --- Recherche globale de l'en-tête --- */
+function renderGSearch() {
+  const box = $('#gsearch-res'), q = $('#gsearch').value, res = search(q, 5);
+  if (q.trim().length < 2) { box.classList.add('hidden'); return; }
+  box.innerHTML = res.length ? res.map(g => `<div class="grp">${g.name}${g.total > g.items.length ? ` — ${g.items.length} sur ${g.total}` : ''}</div>${g.items.map(i => `<div class="it" data-act="gs-go" data-id="${i.id}">${ico(i.icon)}<span>${esc(i.label)}</span><small>${esc(i.sub)}</small></div>`).join('')}`).join('') + `<div class="it" data-act="gs-all" style="border-top:1px solid var(--line)">${ico('list')}<span>Voir tous les résultats dans l'Inventaire</span><small>Entrée</small></div>` : '<div class="empty">Aucun résultat</div>';
+  box.classList.remove('hidden');
+}
+$('#gsearch').addEventListener('input', renderGSearch);
+$('#gsearch').addEventListener('focus', renderGSearch);
+$('#gsearch').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); Actions['gs-all'](); } });
+Actions['gs-go'] = el => { $('#gsearch-res').classList.add('hidden'); Actions.go(el); };
+Actions['gs-all'] = () => { Object.assign(Inv, { q: $('#gsearch').value, type: '', bld: '', status: '', brand: '', page: 0 }); $('#gsearch-res').classList.add('hidden'); $('#gsearch').blur(); UI.dirty.add('inv'); showTab('inv'); };
 /*@@INV*/
-Views.inv = { render() { $('#tab-inv').innerHTML = placeholder('Inventaire'); } };
 
 /* ============================================================
    === SECTION 12 — UI : MATÉRIEL DISPONIBLE
    ============================================================ */
+const Mat = { cat: '', sel: null, q: '', built: false, shown: '' };
+const stockChip = c => { const s = stockOf(c.id), low = s.threshold > 0 && s.available <= s.threshold; return `<span class="chip" style="${low ? `border-color:${s.available ? COL.warn : COL.serious};color:${s.available ? COL.warn : COL.serious}` : ''}" data-tip="Stock disponible|Seuil d'alerte : ${s.threshold}">${low ? ico('alert') : ''}${s.available} en stock</span>`; };
+Views.mat = {
+  render() {
+    const host = $('#tab-mat'), d = Store.db;
+    if (!Mat.built) {
+      host.innerHTML = `<div class="mat"><aside class="mat-cats" id="mat-cats"></aside>
+        <div class="mat-main"><div class="inv-bar"><div class="gsearch" style="margin:0;max-width:320px">${ico('search')}<input type="search" data-inp="mat-q" placeholder="Filtrer les modèles…" style="width:100%;padding-left:30px"></div><span class="grow"></span><span class="muted" id="mat-count"></span><button class="btn pri" data-act="model-new">${ico('plus')}Nouveau modèle</button></div><div class="mat-grid" id="mat-grid"></div></div>
+        <aside class="mat-side"><div class="mat-prev"><div id="mat-3d"></div></div><div id="mat-info"></div></aside></div>`;
+      Mat.built = true;
+      Views3D.preview = new Viewer3D($('#mat-3d'));
+    }
+    if (!Mat.sel || !Store.idx.cat.has(Mat.sel)) Mat.sel = d.catalog[0]?.id || null;
+    const n = k => d.catalog.filter(c => c.category === k).length;
+    $('#mat-cats').innerHTML = `<div class="sec-t" style="padding:12px 12px 6px">Catégories</div>
+      <div class="li ${Mat.cat === '' ? 'on' : ''}" data-act="mat-cat" data-c="">${ico('box')}<span>Tout le catalogue</span><small>${d.catalog.length}</small></div>
+      ${Object.entries(CATEGORIES).map(([k, v]) => `<div class="li ${Mat.cat === k ? 'on' : ''}" data-act="mat-cat" data-c="${k}">${ico(v.icon)}<span>${v.label}</span><small>${n(k)}</small></div>`).join('')}`;
+    renderMatGrid(); renderMatInfo();
+  },
+};
+function renderMatGrid() {
+  const q = norm(Mat.q), list = Store.db.catalog.filter(c => (!Mat.cat || c.category === Mat.cat) && (!q || norm(`${c.brand} ${c.model} ${c.ref} ${CATEGORIES[c.category].label}`).includes(q)));
+  $('#mat-count').textContent = plural(list.length, 'modèle');
+  $('#mat-grid').innerHTML = list.map(c => { const cc = CATEGORIES[c.category], inst = installedCount(c.id);
+    return `<div class="mcard ${Mat.sel === c.id ? 'on' : ''}" data-act="mat-sel" data-id="${c.id}">
+      <div class="row"><div class="dico" style="color:${cc.color}">${ico(cc.icon)}</div><div style="min-width:0"><div class="muted" style="font-size:11.5px">${esc(c.brand)} · ${cc.one}</div><b>${esc(c.model)}</b></div></div>
+      <div class="muted" style="font-size:12px;min-height:34px">${esc(c.description)}</div>
+      <div class="row wrap" style="gap:5px">${stockChip(c)}${c.mount !== 'none' ? `<span class="chip">${inst} installé${inst > 1 ? 's' : ''}</span>` : ''}${c.heightU && c.mount === 'rack' ? `<span class="chip">${c.heightU} U</span>` : ''}</div></div>`; }).join('') || '<div class="empty">Aucun modèle</div>';
+}
+const portSummary = c => (c.ports || []).map(g => `${g.names ? g.names.length : g.count} × ${PORT_KIND[g.kind]} ${fmtSpeed(g.speed)}${g.poe ? ' PoE' : ''}`).join(', ');
+function renderMatInfo() {
+  const c = Store.idx.cat.get(Mat.sel), host = $('#mat-info');
+  if (!c) { host.innerHTML = '<div class="empty">Sélectionnez un modèle.</div>'; return; }
+  const key = JSON.stringify([c.id, c.template, c.heightU, c.ports, c.visual]);
+  if (Mat.shown !== key) { Mat.shown = key; Views3D.preview.showObject(c); }
+  const s = stockOf(c.id), cc = CATEGORIES[c.category], inst = Store.idx.devByCat.get(c.id) || [], consumable = c.mount === 'none';
+  host.innerHTML = dHead(cc.icon, c.model, `${esc(c.brand)} · ${cc.one} · réf. ${esc(c.ref)}`) +
+    sec('', `<div class="btns">${consumable ? `<button class="btn sm pri" data-act="stock-out" data-id="${c.id}" ${s.available ? '' : 'disabled'}>${ico('out')}Sortie de stock</button>` : `<button class="btn sm pri" data-act="install" data-cat="${c.id}" ${s.available ? '' : 'disabled'} data-tip="Installer|${s.available ? 'Choisir l\'emplacement dans la Cartographie' : 'Stock épuisé'}">${ico('plus')}Installer</button>`}
+      <button class="btn sm" data-act="model-edit" data-id="${c.id}">${ico('edit')}Modifier</button><button class="btn sm danger" data-act="model-del" data-id="${c.id}">${ico('trash')}Supprimer</button></div>`) +
+    sec('Stock', `<div class="fld"><label>Disponible</label><div class="row"><button class="btn sm icon" data-act="stock-adj" data-id="${c.id}" data-d="-1" ${s.available ? '' : 'disabled'}>${ico('minus')}</button><b style="min-width:34px;text-align:center;font-size:15px">${s.available}</b><button class="btn sm icon" data-act="stock-adj" data-id="${c.id}" data-d="1">${ico('plus')}</button>${s.threshold > 0 && s.available <= s.threshold ? `<span class="st" style="color:${COL.warn}">${ico('alert')}Stock bas</span>` : ''}</div>
+      <label>Installé</label><div class="ro"><b>${installedCount(c.id)}</b></div>
+      <label>Seuil d'alerte</label><input type="number" min="0" data-chg="stock-f" data-id="${c.id}" data-f="threshold" value="${s.threshold}">
+      <label>Lieu de stockage</label><input type="text" data-chg="stock-f" data-id="${c.id}" data-f="location" value="${esc(s.location)}"></div>`) +
+    sec('Fiche technique', kv([c.ports?.length ? ['Ports', esc(portSummary(c))] : null, c.poeBudgetW ? ['Budget PoE', `${c.poeBudgetW} W`] : null, c.poeDrawW ? ['Consommation PoE', `${c.poeDrawW} W`] : null,
+      c.heightU ? ['Hauteur', `${c.heightU} U`] : null, c.powerW ? ['Puissance', `${c.powerW} W`] : null, c.firmware ? ['Firmware', esc(c.firmware)] : null, ['Montage', { rack: 'Baie 19"', ceiling: 'Plafond', desk: 'Bureau', wall: 'Mural', floor: 'Au sol', none: 'Consommable' }[c.mount]],
+      ...Object.entries(c.specs || {}).map(([k, v]) => [esc(k), esc(v)])]) + (c.description ? `<p class="muted" style="margin:10px 0 0">${esc(c.description)}</p>` : '')) +
+    (inst.length ? sec(`Installés (${inst.length})`, inst.slice(0, 12).map(x => li(x.id, x.hostname || x.name, esc(locLabel(x.id, { short: true })))).join('') + (inst.length > 12 ? `<div class="dim" style="padding:4px 7px">… et ${inst.length - 12} autres (voir l'Inventaire)</div>` : '')) : '');
+}
+Inputs['mat-q'] = el => { Mat.q = el.value; renderMatGrid(); };
+Actions['mat-cat'] = el => { Mat.cat = el.dataset.c; Views.mat.render(); };
+Actions['mat-sel'] = el => { Mat.sel = el.dataset.id; renderMatGrid(); renderMatInfo(); };
+Actions['stock-adj'] = el => stockMove(el.dataset.id, +el.dataset.d, 'ajustement manuel');
+Changes['stock-f'] = el => {
+  const c = Store.idx.cat.get(el.dataset.id), f = el.dataset.f, v = f === 'threshold' ? Math.max(0, +el.value || 0) : el.value.trim();
+  Store.commit('stock', `Stock de ${c.model} : ${f === 'threshold' ? 'seuil d\'alerte' : 'lieu'} → ${v}`, db => { let s = db.stock.find(x => x.catalogId === c.id); if (!s) { s = { catalogId: c.id, available: 0, threshold: 0, location: '' }; db.stock.push(s); } s[f] = v; }, c.id);
+};
+Actions['stock-out'] = el => {
+  const c = Store.idx.cat.get(el.dataset.id), s = stockOf(c.id);
+  Modal.open({ title: `Sortie de stock — ${esc(c.model)}`, ok: 'Sortir du stock',
+    body: `<div class="form-grid"><label class="f"><span>Quantité (disponible : ${s.available})</span><input type="number" name="qty" min="1" max="${s.available}" value="1" autofocus></label><label class="f"><span>Motif</span><input type="text" name="reason" placeholder="Ex. : brassage baie A1"></label></div>`,
+    onOk(v) { if (!(v.qty >= 1)) throw new Error('Quantité invalide.'); stockMove(c.id, -Math.floor(v.qty), v.reason); toast('Sortie de stock enregistrée', 'ok', undoAction); return true; } });
+};
+
+/* ---------- Installation et déplacement (fenêtre en cascade) ---------- */
+let Inst = null;
+/* Ouvre la fenêtre. o : { catId } pour installer, { moveId } pour déplacer ; préréglages possibles : rackId, u, roomId, x, y */
+function openInstall(o) {
+  const dev = o.moveId ? byId(o.moveId) : null, cat = dev ? catOf(dev) : Store.idx.cat.get(o.catId);
+  if (!cat) return;
+  if (!dev && stockOf(cat.id).available < 1) throw new Error(`Stock épuisé pour ${cat.brand} ${cat.model}.`);
+  const start = o.rackId ? locOf(o.rackId) : o.roomId ? locOf(o.roomId) : dev ? locOf(dev.id) : locOf(Carto.rackId && cat.mount === 'rack' ? Carto.rackId : Carto.floorId || Store.db.floors[0].id);
+  Inst = { cat, dev, bld: start.building?.id || Store.db.buildings[0].id, floor: start.floor?.id || '', room: (cat.mount === 'rack' ? start.rack && start.room?.id : start.room?.id) || '', rack: start.rack?.id || '', u: o.u || '', x: o.x ?? '', y: o.y ?? '', outlet: '', name: dev ? dev.hostname : '', ip: dev ? dev.ip : '', usage: 'data', auto: !dev };
+  Modal.open({
+    title: dev ? `Déplacer ${esc(dev.hostname)}` : `Installer — ${esc(cat.brand)} ${esc(cat.model)}`, ok: dev ? 'Déplacer' : 'Installer', body: `<div id="inst-body">${instBody()}</div>`,
+    onOk() {
+      const I = Inst, place = cat.mount === 'rack' ? { rackId: I.rack, u: +I.u } : { roomId: I.room, x: +I.x, y: +I.y };
+      if (dev) { moveDevice(dev.id, place); toast('Équipement déplacé', 'ok', undoAction); select(dev.id); return true; }
+      const id = installFromStock(cat.id, { ...place, name: I.name, ip: I.ip, outletId: I.outlet || null, usage: I.usage });
+      toast('Équipement installé : le stock a été décrémenté', 'ok', undoAction);
+      select(id);
+      return true;
+    },
+  });
+}
+function instBody() {
+  const I = Inst, X = Store.idx, rackMount = I.cat.mount === 'rack', isRack = I.cat.category === 'rack', isOutlet = I.cat.template === 'outlet';
+  const floors = X.floorsByBld.get(I.bld) || [];
+  if (!floors.some(f => f.id === I.floor)) I.floor = floors[0]?.id || '';
+  let rooms = X.roomsByFloor.get(I.floor) || [];
+  if (rackMount) rooms = rooms.filter(r => (X.racksByRoom.get(r.id) || []).length);
+  if (!rooms.some(r => r.id === I.room)) { I.room = rooms[0]?.id || ''; I.x = I.y = ''; }
+  const room = byId(I.room), racks = rackMount && room ? X.racksByRoom.get(room.id) || [] : [];
+  if (rackMount && !racks.some(r => r.id === I.rack)) I.rack = racks[0]?.id || '';
+  const slots = rackMount && I.rack ? freeSlots(I.rack, I.cat.heightU || 1, I.dev?.id) : [];
+  if (rackMount && !slots.includes(+I.u)) I.u = slots[0] || '';
+  if (!rackMount && room && (I.x === '' || I.y === '')) { I.x = +(room.x + room.w / 2).toFixed(2); I.y = +(room.y + room.h / 2).toFixed(2); }
+  if (I.auto && room) I.name = suggestName(I.cat, room.id);
+  const outs = !rackMount && !isRack && !isOutlet && room ? (X.outByRoom.get(room.id) || []).filter(o => !cablesOf(o.id).some(c => !isPassiveNode(otherEnd(c, o.id)))) : [];
+  const s = (name, label, options, full) => `<label class="f ${full ? 'full' : ''}"><span>${label}</span><select data-chg="inst" name="${name}">${options}</select></label>`;
+  const hU = I.cat.heightU || 1;
+  return `<div class="form-grid">
+    ${s('bld', 'Bâtiment', Store.db.buildings.map(b => opt(b.id, b.name, I.bld)).join(''))}
+    ${s('floor', 'Étage', floors.map(f => opt(f.id, f.name, I.floor)).join(''))}
+    ${s('room', rackMount ? 'Pièce (avec baie)' : 'Pièce', rooms.map(r => opt(r.id, r.name, I.room)).join('') || '<option value="">Aucune pièce avec baie à cet étage</option>', !rackMount)}
+    ${rackMount ? s('rack', 'Baie', racks.map(r => opt(r.id, `${r.name} (${rackUsage(r.id).used}/${r.heightU} U)`, I.rack)).join('')) +
+      s('u', `Emplacement (${hU} U nécessaire${hU > 1 ? 's' : ''})`, slots.map(u => opt(u, hU > 1 ? `U${u} à U${u + hU - 1}` : `U${u}`, I.u)).join('') || '<option value="">Aucun emplacement libre</option>', true)
+      : `<label class="f"><span>Position X (m)${room ? ` — de ${room.x} à ${room.x + room.w}` : ''}</span><input type="number" step="0.1" data-inp="inst" name="x" value="${I.x}"></label>
+         <label class="f"><span>Position Y (m)${room ? ` — de ${room.y} à ${room.y + room.h}` : ''}</span><input type="number" step="0.1" data-inp="inst" name="y" value="${I.y}"></label>`}
+    ${I.dev ? '' : `<label class="f"><span>${isOutlet ? 'Repère de la prise' : isRack ? 'Nom de la baie' : 'Nom d\'hôte'}</span><input type="text" data-inp="inst" name="name" value="${esc(I.name)}"></label>
+      ${isOutlet ? s('usage', 'Usage', Object.entries(OUTLET_USAGE).map(([k, v]) => opt(k, v, I.usage)).join('')) : isRack ? '<span></span>' : `<label class="f"><span>Adresse IP (facultatif)</span><input type="text" class="mono" data-inp="inst" name="ip" value="${esc(I.ip)}" placeholder="10.10.x.x"></label>`}
+      ${outs.length ? s('outlet', 'Brancher sur la prise', `<option value="">Ne pas brancher</option>` + outs.map(o => opt(o.id, `Prise ${o.label} — ${STATE_LABEL[outletInfo(o.id).status]}`, I.outlet)).join(''), true) : ''}`}
+    </div><p class="muted" style="margin:12px 0 0">${I.dev ? 'Les câbles restent branchés : pensez à vérifier le brassage après le déplacement.' : `Stock disponible : ${stockOf(I.cat.id).available}. L'installation décrémente le stock et ajoute l'équipement à l'Inventaire.`}</p>`;
+}
+Changes.inst = el => { Inst[el.name] = el.value; if (el.name === 'room' || el.name === 'floor' || el.name === 'bld') { Inst.x = Inst.y = ''; Inst.outlet = ''; } $('#inst-body').innerHTML = instBody(); };
+Inputs.inst = el => { Inst[el.name] = el.value; if (el.name === 'name') Inst.auto = false; };
+Actions.install = el => openInstall({ catId: el.dataset.cat });
+Actions['dev-move'] = el => openInstall({ moveId: el.dataset.id });
+Actions['dev-remove'] = el => {
+  const d = byId(el.dataset.id), n = portsOf(d.id).filter(p => cablesOf(p.id).length).length;
+  Modal.open({ title: `Retirer ${esc(d.hostname)}`, ok: 'Retirer', okClass: 'danger',
+    body: `<p style="margin:0 0 12px">${n ? `${plural(n, 'câble')} branché${n > 1 ? 's' : ''} sur cet équipement ${n > 1 ? 'seront débranchés' : 'sera débranché'}.` : 'Aucun câble n\'est branché sur cet équipement.'}</p>
+      <label class="row" style="margin-bottom:8px"><input type="radio" name="mode" value="stock" checked> <span><b>Retour en stock</b> — l'équipement quitte l'inventaire, le stock augmente de 1</span></label>
+      <label class="row"><input type="radio" name="mode" value="retire"> <span><b>Hors service</b> — l'équipement reste à l'inventaire avec le statut « Hors service »</span></label>`,
+    onOk() { const mode = $('#modal-root input[name=mode]:checked').value, l = locOf(d.id), back = l.rack?.id || l.room?.id; removeDevice(d.id, mode); toast('Équipement retiré', 'ok', undoAction); if (UI.tab === 'carto' && back) select(back, { keep: true }); return true; } });
+};
+Actions['dev-restock'] = el => {
+  const d = byId(el.dataset.id);
+  Modal.confirm(`Remettre ${esc(d.hostname)} en stock`, 'L\'équipement hors service quitte l\'inventaire et le stock du modèle augmente de 1.', () => { removeDevice(d.id, 'stock'); toast('Équipement remis en stock', 'ok', undoAction); return true; }, 'Remettre en stock');
+};
+Actions['rack-del'] = el => { const r = byId(el.dataset.id); Modal.confirm(`Retirer ${esc(r.name)}`, 'La baie doit être vide. Elle retourne en stock.', () => { const room = r.roomId; removeRack(r.id); toast('Baie retirée', 'ok', undoAction); if (UI.tab === 'carto') select(room, { view: 'plan' }); return true; }, 'Retirer', 'danger'); };
+
+/* ---------- Palette « Stock » et glisser-déposer ---------- */
+Actions.palette = () => { Carto.palette = !Carto.palette; renderCarto(); };
+renderPalette = kind => {
+  const host = $(kind === 'plan' ? '#palette-host' : '#palette-host-r');
+  if (!host) return;
+  if (!Carto.palette) { host.innerHTML = ''; return; }
+  const list = Store.db.catalog.filter(c => stockOf(c.id).available > 0 && (kind === 'rack' ? c.mount === 'rack' : !['rack', 'none'].includes(c.mount)));
+  host.innerHTML = `<div class="palette"><h4>${ico('box')}Stock disponible<button class="btn sm icon" style="margin-left:auto" data-act="palette">${ico('x')}</button></h4>
+    <div class="muted" style="padding:7px 11px 0;font-size:11.5px">${kind === 'rack' ? 'Glissez un modèle sur une U libre de l\'élévation.' : 'Glissez un modèle sur une pièce du plan.'}</div>
+    <div class="list">${list.map(c => `<div class="pal-it" draggable="true" data-cat="${c.id}" data-tip="${esc(c.brand)} ${esc(c.model)}|${c.mount === 'rack' ? (c.heightU || 1) + ' U' : CATEGORIES[c.category].one}">${ico(CATEGORIES[c.category].icon)}<div><b>${esc(c.model)}</b><small>${esc(c.brand)}${c.mount === 'rack' ? ` · ${c.heightU || 1} U` : ''}</small></div><span class="q">${stockOf(c.id).available}</span></div>`).join('') || '<div class="empty">Rien en stock pour cette vue</div>'}</div></div>`;
+};
+let dragCat = null;
+document.addEventListener('dragstart', e => { const it = e.target.closest?.('.pal-it'); if (!it) return; dragCat = it.dataset.cat; e.dataTransfer.setData('text/plain', dragCat); e.dataTransfer.effectAllowed = 'copy'; Tip.hide(); });
+document.addEventListener('dragend', () => { dragCat = null; $$('.eu.over,.eu.bad').forEach(x => x.classList.remove('over', 'bad')); });
+/* Dépôt sur l'élévation : la U visée devient la U la plus haute de l'équipement */
+initElevEvents = elev => {
+  const target = e => { const slot = e.target.closest('.eu.free'), cat = Store.idx.cat.get(dragCat); if (!slot || !cat || cat.mount !== 'rack') return null; const hU = cat.heightU || 1, u = +slot.dataset.u - hU + 1, rackId = slot.parentElement.dataset.rack; return { slot, cat, u, rackId, ok: freeSlots(rackId, hU).includes(u) }; };
+  elev.addEventListener('dragover', e => { const t = target(e); if (!t) return; e.preventDefault(); $$('.eu.over,.eu.bad', elev).forEach(x => x.classList.remove('over', 'bad')); for (let k = t.u; k < t.u + (t.cat.heightU || 1); k++) $(`.eu.free[data-u="${k}"]`, elev)?.classList.add(t.ok ? 'over' : 'bad'); if (!t.ok) t.slot.classList.add('bad'); });
+  elev.addEventListener('dragleave', e => { if (!elev.contains(e.relatedTarget)) $$('.eu.over,.eu.bad', elev).forEach(x => x.classList.remove('over', 'bad')); });
+  elev.addEventListener('drop', e => { const t = target(e); if (!t) return; e.preventDefault(); run(() => { const id = installFromStock(t.cat.id, { rackId: t.rackId, u: t.u }); toast(`${byId(id).hostname} installé en U${t.u}`, 'ok', undoAction); select(id, { keep: true }); }); });
+};
+/* Dépôt sur le plan : l'équipement est posé à l'endroit visé */
+(() => {
+  const host = $('#tab-carto');
+  host.addEventListener('dragover', e => { if (dragCat && e.target.closest('svg.plan')) e.preventDefault(); });
+  host.addEventListener('drop', e => {
+    const svg = e.target.closest('svg.plan'), cat = Store.idx.cat.get(dragCat);
+    if (!svg || !cat) return;
+    e.preventDefault();
+    run(() => {
+      if (cat.mount === 'rack') throw new Error('Ce modèle se monte en baie : déposez-le sur l\'élévation, dans la vue « Baie 3D ».');
+      const p = svgPoint(svg, e), x = +(p.x / K).toFixed(2), y = +(p.y / K).toFixed(2), room = roomAt(Carto.floorId, x, y);
+      if (!room) throw new Error('Déposez le modèle à l\'intérieur d\'une pièce.');
+      const id = installFromStock(cat.id, { roomId: room.id, x, y });
+      toast(`${labelOf(id)} installé (${room.name})`, 'ok', undoAction); select(id, { keep: true });
+    });
+  });
+})();
+/* Clic sur une U libre : choisir un modèle du stock à installer ici */
+Actions['elev-free'] = el => {
+  const u = +el.dataset.u, rackId = el.parentElement.dataset.rack;
+  const list = Store.db.catalog.filter(c => c.mount === 'rack' && stockOf(c.id).available > 0 && freeSlots(rackId, c.heightU || 1).includes(u - (c.heightU || 1) + 1));
+  if (!list.length) throw new Error('Aucun modèle en stock ne tient à cet emplacement.');
+  Modal.open({ title: `Installer en U${u} — ${esc(byId(rackId).name)}`, ok: 'Continuer',
+    body: `<label class="f"><span>Modèle du stock (la U${u} sera la plus haute occupée)</span><select name="cat" autofocus>${list.map(c => opt(c.id, `${c.brand} ${c.model} — ${c.heightU || 1} U — ${stockOf(c.id).available} en stock`, '')).join('')}</select></label>`,
+    onOk(v) { const c = Store.idx.cat.get(v.cat); setTimeout(() => run(() => openInstall({ catId: c.id, rackId, u: u - (c.heightU || 1) + 1 })), 0); return true; } });
+};
+
+/* ---------- Formulaire « Nouveau modèle » ---------- */
+const TPL_BY_CAT = { switch: ['switch'], router: ['router'], firewall: ['firewall'], ap: ['ap'], passive: ['patch', 'fiber', 'cablemgr', 'outlet'], rack: ['rack', 'wallrack'], ups: ['ups'], server: ['server'], phone: ['phone'], camera: ['camera'], consumable: ['sfp', 'cable'] };
+const TPL_LABEL = { switch: 'Switch 19"', router: 'Routeur 19"', firewall: 'Pare-feu 19"', ap: 'Borne Wi-Fi', patch: 'Panneau de brassage', fiber: 'Tiroir optique', cablemgr: 'Passe-câbles', outlet: 'Prise murale', rack: 'Baie au sol', wallrack: 'Coffret mural', ups: 'Onduleur 19"', server: 'Serveur 19"', phone: 'Téléphone', camera: 'Caméra dôme', sfp: 'Module SFP', cable: 'Cordon / câble' };
+const TPL_MOUNT = { ap: 'ceiling', camera: 'ceiling', phone: 'desk', outlet: 'wall', rack: 'floor', wallrack: 'wall', sfp: 'none', cable: 'none' };
+let ModelForm = null;
+function modelGroupsHtml() {
+  const F = ModelForm;
+  if (F.locked) return `<p class="muted" style="margin:0">Des équipements de ce modèle sont installés : les ports ne sont plus modifiables (${esc(portSummary(F) || 'aucun port')}).</p>`;
+  return F.ports.map((g2, i) => `<div class="pg-row" data-i="${i}">
+      <select data-f="kind">${Object.entries(PORT_KIND).map(([k, v]) => opt(k, v, g2.kind)).join('')}</select>
+      <input type="number" data-f="count" min="1" max="96" value="${g2.count}" data-tip="Nombre de ports">
+      <select data-f="speed">${[100, 1000, 2500, 10000, 25000].map(s => opt(s, fmtSpeed(s), g2.speed)).join('')}</select>
+      <select data-f="role">${Object.entries(PORT_ROLE).map(([k, v]) => opt(k, v, g2.role)).join('')}</select>
+      <input type="text" data-f="prefix" value="${esc(g2.prefix)}" placeholder="Préfixe (Gi1/0/)" data-tip="Préfixe du nom des ports">
+      <input type="number" data-f="start" value="${g2.start}" data-tip="Premier numéro">
+      <label class="row" style="gap:4px"><input type="checkbox" data-f="poe" ${g2.poe ? 'checked' : ''}>PoE</label>
+      <button class="btn sm icon danger" data-act="model-grp-del" data-i="${i}">${ico('trash')}</button></div>`).join('') + `<button class="btn sm" data-act="model-grp-add">${ico('plus')}Ajouter un groupe de ports</button>`;
+}
+/* Relit les groupes de ports saisis dans le formulaire */
+function modelReadGroups() {
+  if (ModelForm.locked) return;
+  ModelForm.ports = $$('#model-groups .pg-row').map(r => { const v = f => r.querySelector(`[data-f=${f}]`); return { kind: v('kind').value, count: clamp(+v('count').value || 1, 1, 96), speed: +v('speed').value, role: v('role').value, prefix: v('prefix').value, start: +v('start').value || 0, poe: v('poe').checked }; });
+}
+function openModelForm(c) {
+  const edit = !!c;
+  ModelForm = { edit, id: c?.id, locked: edit && installedCount(c.id) > 0, ports: (c?.ports || [{ kind: 'rj45', count: 24, speed: 1000, role: 'access', prefix: 'Gi1/0/', start: 1, poe: false }]).map(g2 => g2.names ? { ...g2, count: g2.names.length, prefix: g2.prefix || '', names: g2.names } : { ...g2 }) };
+  const v = c || { category: 'switch', brand: '', model: '', ref: '', template: 'switch', heightU: 1, powerW: 0, poeBudgetW: 0, poeDrawW: 0, firmware: '', description: '', visual: { color: '#2a3038', accent: '#38bdf8', frontImage: '' } };
+  const st = c ? stockOf(c.id) : { available: 1, threshold: 0 };
+  Modal.open({
+    title: edit ? `Modifier le modèle ${esc(c.model)}` : 'Nouveau modèle', wide: true, ok: edit ? 'Enregistrer' : 'Ajouter au catalogue',
+    body: `<div class="form-grid" style="grid-template-columns:repeat(4,1fr)">
+      <label class="f"><span>Catégorie</span><select name="category" data-chg="model-cat" ${ModelForm.locked ? 'disabled' : ''}>${Object.entries(CATEGORIES).map(([k, x]) => opt(k, x.one, v.category)).join('')}</select></label>
+      <label class="f"><span>Gabarit 3D</span><select name="template" id="model-tpl" ${ModelForm.locked ? 'disabled' : ''}>${TPL_BY_CAT[v.category].map(t => opt(t, TPL_LABEL[t], v.template)).join('')}</select></label>
+      <label class="f"><span>Marque</span><input type="text" name="brand" value="${esc(v.brand)}" autofocus></label>
+      <label class="f"><span>Référence</span><input type="text" name="ref" value="${esc(v.ref)}"></label>
+      <label class="f" style="grid-column:span 2"><span>Modèle</span><input type="text" name="model" value="${esc(v.model)}"></label>
+      <label class="f"><span>Hauteur (U)</span><input type="number" name="heightU" min="0" max="48" value="${v.heightU || 0}" ${ModelForm.locked ? 'disabled' : ''}></label>
+      <label class="f"><span>Puissance (W)</span><input type="number" name="powerW" min="0" value="${v.powerW || 0}"></label>
+      <label class="f"><span>Budget PoE (W)</span><input type="number" name="poeBudgetW" min="0" value="${v.poeBudgetW || 0}"></label>
+      <label class="f"><span>Consommation PoE (W)</span><input type="number" name="poeDrawW" min="0" value="${v.poeDrawW || 0}"></label>
+      <label class="f"><span>Firmware</span><input type="text" name="firmware" value="${esc(v.firmware)}"></label>
+      <label class="f"><span>Couleur de façade</span><input type="color" name="color" value="${esc(v.visual?.color || '#2a3038')}" style="height:30px;width:100%;padding:2px;background:#0c1219;border:1px solid var(--line2);border-radius:6px"></label>
+      <label class="f full"><span>Photo de façade (URL ou data URI, facultatif — remplace la façade générée)</span><input type="text" name="frontImage" value="${esc(v.visual?.frontImage || '')}" placeholder="https://… ou data:image/…"></label>
+      <label class="f full"><span>Description</span><input type="text" name="description" value="${esc(v.description)}"></label>
+      ${edit ? '' : `<label class="f"><span>Stock initial</span><input type="number" name="available" min="0" value="${st.available}"></label><label class="f"><span>Seuil d'alerte</span><input type="number" name="threshold" min="0" value="${st.threshold}"></label>`}
+      <div class="full"><div class="sec-t" style="margin:4px 0 8px">Groupes de ports</div><div id="model-groups">${modelGroupsHtml()}</div></div></div>`,
+    onOk(f) {
+      modelReadGroups();
+      if (!f.brand || !f.model) throw new Error('La marque et le modèle sont obligatoires.');
+      const tplName = ModelForm.locked ? c.template : f.template, category = ModelForm.locked ? c.category : f.category, facade = GABARITS[tplName]?.type === 'facade', encl = GABARITS[tplName]?.type === 'enclosure';
+      const heightU = ModelForm.locked ? c.heightU : (facade || encl) ? Math.max(1, f.heightU || 1) : 0;
+      if (facade && heightU > 8) throw new Error('Hauteur maximale d\'un équipement : 8 U.');
+      const ports = facade || ['ap', 'phone', 'camera'].includes(tplName) ? ModelForm.ports.map(g2 => g2.names && g2.names.length === g2.count ? g2 : (({ names, ...r }) => r)(g2)) : [];
+      const data = { category, brand: f.brand, model: f.model, ref: f.ref, template: tplName, mount: facade ? 'rack' : TPL_MOUNT[tplName] || 'none', heightU, ports, poeBudgetW: f.poeBudgetW || 0, poeDrawW: f.poeDrawW || 0, powerW: f.powerW || 0, firmware: f.firmware, description: f.description };
+      if (edit) {
+        Store.commit('catalog', `Modification du modèle ${f.brand} ${f.model}`, () => { Object.assign(c, data); c.visual = { ...c.visual, color: f.color, frontImage: f.frontImage }; }, c.id);
+      } else {
+        const id = Store.commit('catalog', `Nouveau modèle au catalogue : ${f.brand} ${f.model}`, db => {
+          let id2 = 'cat-' + norm(`${f.brand}-${f.model}`).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40); while (db.catalog.some(x => x.id === id2)) id2 += '-' + (++db.meta.seq).toString(36);
+          db.catalog.push({ id: id2, layer: null, specs: {}, visual: { color: f.color, accent: '#38bdf8', logo: f.brand, frontImage: f.frontImage, ...(encl ? { width: tplName === 'rack' ? 0.75 : 0.6, depth: tplName === 'rack' ? 1.07 : 0.45 } : {}) }, ...data });
+          db.stock.push({ catalogId: id2, available: Math.max(0, f.available || 0), threshold: Math.max(0, f.threshold || 0), location: '' });
+          return id2;
+        });
+        Mat.sel = id; Mat.cat = '';
+      }
+      toast(edit ? 'Modèle modifié' : 'Modèle ajouté au catalogue', 'ok', undoAction);
+      return true;
+    },
+  });
+}
+Actions['model-new'] = () => openModelForm(null);
+Actions['model-edit'] = el => openModelForm(Store.idx.cat.get(el.dataset.id));
+Actions['model-grp-add'] = () => { modelReadGroups(); ModelForm.ports.push({ kind: 'sfp+', count: 4, speed: 10000, role: 'uplink', prefix: 'Te1/1/', start: 1, poe: false }); $('#model-groups').innerHTML = modelGroupsHtml(); };
+Actions['model-grp-del'] = el => { modelReadGroups(); ModelForm.ports.splice(+el.dataset.i, 1); $('#model-groups').innerHTML = modelGroupsHtml(); };
+Changes['model-cat'] = el => { $('#model-tpl').innerHTML = TPL_BY_CAT[el.value].map(t => opt(t, TPL_LABEL[t], '')).join(''); };
+Actions['model-del'] = el => {
+  const c = Store.idx.cat.get(el.dataset.id);
+  if (installedCount(c.id)) throw new Error('Ce modèle est installé : retirez d\'abord les équipements concernés.');
+  Modal.confirm('Supprimer le modèle', `Supprimer <b>${esc(c.brand)} ${esc(c.model)}</b> du catalogue, ainsi que son stock ?`, () => {
+    Store.commit('catalog', `Suppression du modèle ${c.brand} ${c.model}`, db => { db.catalog.splice(db.catalog.indexOf(c), 1); db.stock = db.stock.filter(s => s.catalogId !== c.id); const gone = new Set(db.devices.filter(x => x.catalogId === c.id).map(x => x.id)); db.devices = db.devices.filter(x => !gone.has(x.id)); db.ports = db.ports.filter(x => !gone.has(x.deviceId)); });
+    toast('Modèle supprimé', 'ok', undoAction); return true;
+  }, 'Supprimer', 'danger');
+};
 /*@@MAT*/
-Views.mat = { render() { $('#tab-mat').innerHTML = placeholder('Matériel disponible'); } };
 
 /* ============================================================
    === SECTION 13 — UI : TABLEAU DE BORD
@@ -2879,7 +3365,7 @@ function placeholder(name) {
    ============================================================ */
 Store.init();
 showTab(UI.tab);
-window.NetCarto = { Store, UI, Views, Views3D, Carto, trace, topology, connect, disconnect, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic
+window.NetCarto = { Store, UI, Views, Views3D, Carto, trace, topology, connect, disconnect, installFromStock, removeDevice, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic
 </script>
 </body>
 </html>
