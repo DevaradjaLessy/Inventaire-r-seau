@@ -140,7 +140,7 @@ new MutationObserver(muts => { for (const m of muts) for (const n of m.addedNode
 /* --- Gestionnaires délégués --- */
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
-  if (el && !el.disabled) { const fn = Actions[el.dataset.act]; if (fn) run(() => fn(el, e)); }
+  if (el && !el.disabled) { const fn = Actions[el.dataset.act]; if (fn) { Tip.hide(); run(() => fn(el, e)); } }
   if (!e.target.closest('.gsearch')) $('#gsearch-res').classList.add('hidden');
 });
 document.addEventListener('change', e => { const el = e.target.closest('[data-chg]'); if (el) { const fn = Changes[el.dataset.chg]; if (fn) run(() => fn(el, e)); } });
