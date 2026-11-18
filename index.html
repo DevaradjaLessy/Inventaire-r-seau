@@ -51,7 +51,7 @@ a{color:var(--accent)}
 .badge{min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--crit);color:#fff;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
 .gsearch{position:relative;flex:1;max-width:420px;margin-left:auto}
 .gsearch .ico{position:absolute;left:9px;top:8px;color:var(--txt3)}
-.gsearch input{width:100%;padding-left:30px}
+#gsearch{width:100%;padding-left:30px}
 .gsearch kbd{position:absolute;right:8px;top:6px;font:11px var(--mono);color:var(--txt3);border:1px solid var(--line2);border-radius:4px;padding:0 5px}
 #gsearch-res{position:absolute;top:36px;left:0;right:0;background:var(--panel2);border:1px solid var(--line2);border-radius:var(--r);box-shadow:0 12px 32px rgba(0,0,0,.5);max-height:70vh;overflow:auto;z-index:60}
 #gsearch-res .grp{padding:6px 10px 2px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--txt3)}
@@ -125,6 +125,97 @@ main{flex:1;min-height:0;position:relative}
 .toast{background:var(--panel3);border:1px solid var(--line2);border-left:3px solid var(--accent);border-radius:6px;padding:9px 12px;min-width:240px;max-width:420px;box-shadow:0 8px 24px rgba(0,0,0,.5);display:flex;gap:10px;align-items:center}
 .toast.ok{border-left-color:var(--up)} .toast.err{border-left-color:var(--crit)} .toast.warn{border-left-color:var(--warn)}
 .toast button{margin-left:auto}
+
+/* --- Cartographie --- */
+.carto{display:grid;grid-template-columns:270px minmax(0,1fr) 360px;width:100%;height:100%}
+.c-tree,.c-detail{background:var(--panel);display:flex;flex-direction:column;min-height:0}
+.c-tree{border-right:1px solid var(--line)} .c-detail{border-left:1px solid var(--line);overflow:auto}
+.c-tree-h{padding:8px;border-bottom:1px solid var(--line)} .c-tree-h input{width:100%}
+#tree{overflow:auto;flex:1;padding:4px 0}
+.tn{display:flex;align-items:center;height:26px;white-space:nowrap;cursor:pointer;padding-right:8px}
+.tn:hover{background:rgba(255,255,255,.04)}
+.tn.sel{background:var(--accent-bg);color:var(--accent);box-shadow:inset 2px 0 var(--accent)}
+.tn .car{width:18px;height:26px;display:flex;align-items:center;justify-content:center;color:var(--txt3);flex:none}
+.tn .car .ico{width:12px;height:12px}
+.tn .lb{display:flex;align-items:center;gap:6px;flex:1;min-width:0;height:100%}
+.tn .lb span{overflow:hidden;text-overflow:ellipsis}
+.tn .lb .ico{width:14px;height:14px;color:var(--txt2)}
+.tn.sel .lb .ico{color:var(--accent)}
+.tn small{color:var(--txt3);font-size:11px;margin-left:auto;padding-left:6px}
+.tn .dotst{width:7px;height:7px;border-radius:50%;flex:none}
+.c-main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.c-bar{display:flex;align-items:center;gap:10px;padding:7px 10px;border-bottom:1px solid var(--line);background:var(--panel)}
+#crumb{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow:hidden;white-space:nowrap}
+#crumb a{color:var(--txt2);cursor:pointer;padding:3px 6px;border-radius:4px;display:flex;align-items:center;gap:5px;text-decoration:none}
+#crumb a:hover{background:rgba(255,255,255,.05);color:var(--txt)}
+#crumb a:last-child{color:var(--txt);font-weight:600}
+#crumb .sep{color:var(--txt3)}
+#crumb .ico{width:13px;height:13px}
+#c-view{flex:1;position:relative;min-height:0}
+.cv{position:absolute;inset:0;display:none}
+.cv.on{display:block}
+.overlay{position:absolute;display:flex;gap:6px;align-items:center;z-index:5}
+.overlay .btn.on{background:#0d2a3a}
+.overlay.tl{top:10px;left:10px} .overlay.tr{top:10px;right:10px} .overlay.bl{bottom:10px;left:10px} .overlay.br{bottom:10px;right:10px}
+.legend{background:rgba(9,13,18,.88);border:1px solid var(--line);border-radius:6px;padding:7px 10px;display:flex;gap:6px 12px;flex-wrap:wrap;font-size:11.5px;color:var(--txt2);max-width:520px}
+.legend span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.legend i{width:10px;height:10px;border-radius:2px;flex:none;display:inline-block}
+.legend b{color:var(--txt);font-weight:600}
+/* Plan 2D */
+svg.plan{width:100%;height:100%;display:block;background:#070a0e;cursor:grab;user-select:none}
+svg.plan.panning{cursor:grabbing}
+svg.plan .room{stroke:#3a4d66;stroke-width:3;cursor:pointer}
+svg.plan .room:hover{stroke:#5b7696}
+svg.plan .room.sel{stroke:var(--accent);stroke-width:4}
+svg.plan .rname{fill:#7f90a6;font-weight:600;text-anchor:middle;pointer-events:none}
+svg.plan .rtype{fill:#4d5c70;text-anchor:middle;pointer-events:none}
+svg.plan .pobj{cursor:pointer}
+svg.plan .pobj .hit{fill:transparent}
+svg.plan .pobj.sel .ring{stroke:var(--accent);stroke-width:2.2;fill:rgba(56,189,248,.18)}
+svg.plan .ring{fill:none;stroke:none}
+svg.plan .lbl{fill:#9aa9bb;font-size:5px;pointer-events:none;display:none}
+svg.plan.zoomed .lbl{display:block}
+svg.plan .rlabel{fill:#c9d4e0;font-size:7px;font-weight:600;text-anchor:middle;pointer-events:none}
+svg.plan.editing .pobj{cursor:move}
+svg.plan .trace-line{fill:none;stroke:var(--accent);stroke-width:2.4;stroke-dasharray:8 6;animation:dash 1s linear infinite;pointer-events:none;stroke-linejoin:round}
+svg.plan .trace-halo{fill:rgba(56,189,248,.18);stroke:var(--accent);stroke-width:1.6;pointer-events:none}
+@keyframes dash{to{stroke-dashoffset:-28}}
+.floor-cards{position:absolute;inset:0;overflow:auto;padding:18px;display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;align-content:start}
+.fcard{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;cursor:pointer}
+.fcard:hover{border-color:var(--accent)}
+.fcard h4{font-size:13px;margin-bottom:2px}
+.fcard svg{width:100%;height:170px;margin-top:8px;background:#070a0e;border-radius:6px}
+/* Fiche de détails */
+.d-head{padding:14px;border-bottom:1px solid var(--line);display:flex;gap:11px;align-items:flex-start}
+.d-head .dico{width:38px;height:38px;border-radius:8px;background:var(--panel3);display:flex;align-items:center;justify-content:center;flex:none;color:var(--accent)}
+.d-head .dico .ico{width:20px;height:20px}
+.d-head h2{font-size:15px;overflow-wrap:anywhere}
+.d-head .sub{color:var(--txt2);font-size:12px}
+.d-sec{padding:12px 14px;border-bottom:1px solid var(--line)}
+.d-sec>.sec-t{margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.d-sec .btns{display:flex;gap:6px;flex-wrap:wrap}
+.li{display:flex;align-items:center;gap:8px;padding:5px 7px;border-radius:5px;cursor:pointer;min-width:0}
+.li:hover{background:rgba(255,255,255,.05)}
+.li .ico{color:var(--txt2);width:14px;height:14px}
+.li>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.li small{margin-left:auto;color:var(--txt2);white-space:nowrap;padding-left:8px}
+.fld{display:grid;grid-template-columns:112px 1fr;gap:6px 8px;align-items:center;font-size:12.5px}
+.fld>label{color:var(--txt2)}
+.fld input,.fld select{height:26px;width:100%;font-size:12.5px}
+.fld .ro{min-height:26px;display:flex;align-items:center;overflow-wrap:anywhere}
+.pgrid{display:flex;flex-direction:column;gap:8px}
+.pgrp{display:grid;gap:2px;grid-auto-flow:column;justify-content:start}
+.pc{width:11px;height:11px;border-radius:2px;cursor:pointer;border:1px solid rgba(0,0,0,.4)}
+.pc:hover{outline:2px solid #fff;outline-offset:0}
+.pc.sel{outline:2px solid var(--accent);outline-offset:1px}
+.pc.hollow{background:transparent!important;border:1px solid #44556a}
+.pc.dis{background:transparent!important;border:1px dotted #6b7a8c}
+.pc.hl{box-shadow:0 0 0 2px var(--accent)}
+.hop{display:flex;gap:9px;align-items:flex-start;padding:5px 6px;border-radius:5px;cursor:pointer;position:relative}
+.hop:hover{background:rgba(255,255,255,.05)}
+.hop .n{width:20px;height:20px;border-radius:50%;background:var(--accent-bg);border:1px solid var(--accent);color:var(--accent);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
+.hop .cabl{color:var(--txt3);font-size:11px}
+.hop b{font-weight:600}
 /*@@CSS*/
 </style>
 </head>
@@ -890,8 +981,9 @@ const Store = {
     this.db.history.unshift({ id: nextId(this.db, 'h'), ts: Date.now(), type: 'import', text, ref: null });
     this.reindex(); this.save(); this.emit();
   },
+  rev: 0,   // numéro de version, augmenté à chaque modification
   on(fn) { this.subs.add(fn); },
-  emit() { for (const fn of this.subs) fn(); },
+  emit() { this.rev++; for (const fn of this.subs) fn(); },
 };
 /* Cache des calculs coûteux, vidé à chaque modification de la base */
 const Cache = {
@@ -986,6 +1078,85 @@ function computeAlerts() {
     return out.sort((a, b) => order[a.level] - order[b.level]);
   });
 }
+/* --- Câblage : parcours des segments --- */
+const NET_CATS = ['switch', 'router', 'firewall'];
+const isNetDev = dev => NET_CATS.includes(catOf(dev)?.category);
+/* Un nœud passif (prise murale, port de panneau ou de tiroir) laisse passer le signal : au plus 2 câbles */
+const isPassiveNode = id => typeOf(id) === 'outlet' || byId(id)?.role === 'pp';
+const otherEnd = (cab, id) => cab.a === id ? cab.b : cab.a;
+/* Avance depuis un nœud en suivant un câble, en traversant les éléments passifs */
+function walk(fromId, cab) {
+  const nodes = [], cables = [], seen = new Set([fromId]);
+  let cur = fromId, c = cab;
+  while (c) {
+    const nx = otherEnd(c, cur);
+    cables.push(c); nodes.push(nx);
+    if (seen.has(nx) || !isPassiveNode(nx)) break;
+    seen.add(nx);
+    const prev = c;
+    c = cablesOf(nx).find(k => k !== prev);
+    cur = nx;
+  }
+  return { nodes, cables };
+}
+/* Segment complet qui passe par un nœud : d'une extrémité active à l'autre */
+function segment(id) {
+  return Cache.get('seg:' + id, () => {
+    const cs = cablesOf(id), none = { nodes: [], cables: [] };
+    if (isPassiveNode(id)) {
+      const l = cs[0] ? walk(id, cs[0]) : none, r = cs[1] ? walk(id, cs[1]) : none;
+      return { nodes: [...[...l.nodes].reverse(), id, ...r.nodes], cables: [...[...l.cables].reverse(), ...r.cables] };
+    }
+    const r = cs[0] ? walk(id, cs[0]) : none;
+    return { nodes: [id, ...r.nodes], cables: r.cables };
+  });
+}
+/* Port actif situé à l'autre bout du segment (ou null) */
+function farEnd(portId) {
+  const n = segment(portId).nodes, last = n[n.length - 1] === portId ? n[0] : n[n.length - 1];
+  return last && last !== portId && typeOf(last) === 'port' && !isPassiveNode(last) ? byId(last) : null;
+}
+/* Libellé de ce qui est connecté à un port */
+function connectedLabel(p) {
+  const far = p.role === 'pp' ? null : farEnd(p.id);
+  if (far) { const d = byId(far.deviceId); return `${d.hostname} · ${far.name}${far.connected ? ` (+ ${far.connected})` : ''}`; }
+  return p.connected || '';
+}
+/* Chaîne d'une prise murale : port réseau, port du terminal, port du panneau, état */
+function outletInfo(id) {
+  return Cache.get('oi:' + id, () => {
+    let net = null, term = null, pp = null;
+    for (const n of segment(id).nodes) {
+      if (typeOf(n) !== 'port') continue;
+      const p = byId(n);
+      if (p.role === 'pp') { pp = pp || p; continue; }
+      if (isNetDev(byId(p.deviceId))) net = p; else term = p;
+    }
+    return { net, term, pp, status: net ? net.status : pp ? 'idle' : 'free' };
+  });
+}
+/* État effectif d'un port : pour un port passif, c'est l'état du port réseau relié */
+function effStatus(p) {
+  if (p.role !== 'pp') return p.status;
+  let net = null;
+  for (const n of segment(p.id).nodes) { if (typeOf(n) !== 'port') continue; const q = byId(n); if (q.role !== 'pp' && isNetDev(byId(q.deviceId))) net = q; }
+  return net ? net.status : cablesOf(p.id).length ? 'idle' : 'free';
+}
+const STATE_COL = { up: COL.up, down: COL.down, disabled: COL.dis, error: COL.crit, idle: '#44556a', free: '#2a3646' };
+const STATE_LABEL = { up: 'Actif', down: 'Inactif', disabled: 'Désactivé', error: 'Erreur', idle: 'Non brassé', free: 'Libre' };
+/* Pièce qui contient un point du plan */
+function roomAt(floorId, x, y) {
+  return (Store.idx.roomsByFloor.get(floorId) || []).find(r => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) || null;
+}
+/* Tous les objets situés sous un niveau de la hiérarchie */
+function scopeOf(id) {
+  return Cache.get('scope:' + id, () => {
+    const t = typeOf(id), d = Store.db, inScope = x => locOf(x.id)[t]?.id === id;
+    return { racks: d.racks.filter(inScope), devices: d.devices.filter(x => x.status !== 'retired' && inScope(x)), outlets: d.outlets.filter(inScope) };
+  });
+}
+/* Dimensions au sol d'une baie, en mètres */
+const rackSize = rack => { const v = catOf(rack)?.visual || {}; return { w: v.width || 0.75, d: v.depth || 1.07 }; };
 /*@@SERVICES*/
 
 /* ============================================================
@@ -1156,8 +1327,479 @@ Actions.reset = () => Modal.confirm('Réinitialiser la démo', 'Recharger le jeu
 /* ============================================================
    === SECTION 10 — UI : CARTOGRAPHIE
    ============================================================ */
+const Carto = {
+  sel: null,            // identifiant de l'objet sélectionné
+  view: 'plan',         // plan | rack | topo
+  floorId: null, rackId: null,
+  open: new Set(),      // nœuds ouverts de l'arbre
+  filter: '',
+  vbs: {},              // cadrage du plan, par étage
+  edit: false, wifi: false, palette: false,
+  trace: null,          // chemin de câblage affiché
+  built: false,
+};
+const K = 20;           // unités SVG par mètre sur le plan
+const TYPE_ICON = { site: 'site', building: 'building', floor: 'floor', room: 'room', rack: 'rack', outlet: 'outlet', port: 'switch' };
+const iconOf = id => { const t = typeOf(id); return t === 'device' ? deviceIcon(byId(id)) : t === 'port' ? 'passive' : TYPE_ICON[t] || 'box'; };
+
+/* Sélectionne un objet et met à jour l'arbre, la vue centrale et la fiche.
+   o.view force une sous-vue ; o.keep garde la sous-vue actuelle. */
+function select(id, o = {}) {
+  if (!byId(id)) return;
+  const l = locOf(id);
+  Carto.sel = id;
+  if (l.floor) Carto.floorId = l.floor.id;
+  if (l.rack) Carto.rackId = l.rack.id;
+  for (const k of ['site', 'building', 'floor', 'room', 'rack']) if (l[k] && l[k].id !== id) Carto.open.add(l[k].id);
+  if (o.view) Carto.view = o.view;
+  else if (!o.keep) Carto.view = l.rack ? 'rack' : 'plan';
+  if (UI.tab !== 'carto') showTab('carto'); else renderCarto();
+  if (o.reveal !== false) revealInTree();
+}
+/* Ouvre la Cartographie sur un objet (utilisé par les autres onglets) */
+const goto = (id, o) => select(id, o);
+
+Actions.sel = el => select(el.dataset.id);
+Actions.psel = el => select(el.dataset.id, { keep: true });
+Actions['tree-toggle'] = (el, e) => { e.stopPropagation(); const id = el.dataset.id; Carto.open.has(id) ? Carto.open.delete(id) : Carto.open.add(id); renderTree(); };
+Actions['c-view'] = el => { Carto.view = el.dataset.v; renderCarto(); };
+Inputs['tree-filter'] = el => { Carto.filter = norm(el.value.trim()); renderTree(); };
+
+Views.carto = {
+  render() {
+    const host = $('#tab-carto');
+    if (!Carto.built) {
+      host.innerHTML = `<div class="carto">
+        <aside class="c-tree"><div class="c-tree-h"><input type="search" data-inp="tree-filter" placeholder="Filtrer l'arborescence…"></div><div id="tree"></div></aside>
+        <div class="c-main">
+          <div class="c-bar"><div id="crumb"></div><div class="seg" id="c-views"></div></div>
+          <div id="c-view"><div class="cv" id="v-plan"></div><div class="cv" id="v-rack"></div><div class="cv" id="v-topo"></div></div>
+        </div>
+        <aside class="c-detail" id="detail"></aside></div>`;
+      Carto.built = true;
+      initPlanEvents($('#v-plan'));
+      const d = Store.db;
+      if (!Carto.sel || !byId(Carto.sel)) { Carto.sel = d.sites[0]?.id || null; }
+      for (const s of d.sites) Carto.open.add(s.id);
+      for (const b of d.buildings) Carto.open.add(b.id);
+    }
+    if (Carto.sel && !byId(Carto.sel)) { Carto.sel = Store.db.sites[0]?.id || null; Carto.view = 'plan'; }
+    if (Carto.floorId && !byId(Carto.floorId)) Carto.floorId = null;
+    if (Carto.rackId && !byId(Carto.rackId)) Carto.rackId = null;
+    renderCarto();
+  },
+  show() { Views3D.resume?.(); },
+};
+const Views3D = {};   // complété par la vue 3D
+
+function renderCarto() {
+  if (!Carto.built) return;
+  renderTree(); renderCrumb();
+  $('#c-views').innerHTML = [['plan', 'plan', 'Plan 2D'], ['rack', 'cube', 'Baie 3D'], ['topo', 'topo', 'Topologie']].map(([v, i, l]) => `<button data-act="c-view" data-v="${v}" class="${Carto.view === v ? 'on' : ''}">${ico(i)}${l}</button>`).join('');
+  for (const v of ['plan', 'rack', 'topo']) $('#v-' + v).classList.toggle('on', Carto.view === v);
+  if (Carto.view === 'plan') renderPlan();
+  else if (Carto.view === 'rack') renderRackView();
+  else renderTopo();
+  renderDetail();
+}
+
+/* ---------- Arbre hiérarchique ---------- */
+function treeChildren(id) {
+  const I = Store.idx, t = typeOf(id), ids = a => (a || []).map(x => x.id);
+  if (t === 'site') return ids(I.bldBySite.get(id));
+  if (t === 'building') return ids(I.floorsByBld.get(id));
+  if (t === 'floor') return ids(I.roomsByFloor.get(id));
+  if (t === 'room') return [...ids(I.racksByRoom.get(id)), ...ids([...(I.devByRoom.get(id) || [])].sort((a, b) => a.hostname.localeCompare(b.hostname))), ...ids([...(I.outByRoom.get(id) || [])].sort((a, b) => a.label.localeCompare(b.label)))];
+  if (t === 'rack') return ids(I.devByRack.get(id));
+  return [];
+}
+function treeText(id) {
+  const e = byId(id), t = typeOf(id);
+  if (t === 'device') return `${e.hostname} ${e.ip} ${catOf(e)?.model || ''}`;
+  if (t === 'outlet') return `prise ${e.label}`;
+  return labelOf(id);
+}
+function renderTree() {
+  const host = $('#tree');
+  if (!host) return;
+  const f = Carto.filter, memo = new Map();
+  const match = id => { if (memo.has(id)) return memo.get(id); const m = norm(treeText(id)).includes(f) || treeChildren(id).some(match); memo.set(id, m); return m; };
+  const html = [];
+  const node = (id, depth) => {
+    if (f && !match(id)) return;
+    const e = byId(id), t = typeOf(id), kids = treeChildren(id), open = f ? true : Carto.open.has(id);
+    let label = labelOf(id), meta = '', dot = '';
+    if (t === 'floor') label = e.name;
+    if (t === 'rack') meta = `${rackUsage(id).pct} %`;
+    if (t === 'device') { meta = e.rackId ? `U${e.u}` : ''; if (e.status !== 'active') dot = `<i class="dotst" style="background:${DEVICE_STATUS[e.status].color}"></i>`; }
+    if (t === 'room' && kids.length) meta = kids.length;
+    html.push(`<div class="tn ${Carto.sel === id ? 'sel' : ''}" style="padding-left:${4 + depth * 14}px" data-act="sel" data-id="${id}">
+      <span class="car" ${kids.length ? `data-act="tree-toggle" data-id="${id}"` : ''}>${kids.length ? ico(open ? 'chevd' : 'chevr') : ''}</span>
+      <span class="lb">${ico(iconOf(id))}<span>${esc(label)}</span>${dot}</span>${meta !== '' ? `<small>${meta}</small>` : ''}</div>`);
+    if (open) for (const k of kids) node(k, depth + 1);
+  };
+  for (const s of Store.db.sites) node(s.id, 0);
+  const top = host.scrollTop;
+  host.innerHTML = html.join('') || '<div class="empty">Aucun résultat</div>';
+  host.scrollTop = top;
+}
+function revealInTree() { $('#tree .tn.sel')?.scrollIntoView({ block: 'nearest' }); }
+
+/* ---------- Fil d'Ariane ---------- */
+function renderCrumb() {
+  const l = locOf(Carto.sel || ''), parts = [];
+  for (const k of ['site', 'building', 'floor', 'room', 'rack', 'device', 'outlet', 'port']) if (l[k]) parts.push(l[k].id);
+  $('#crumb').innerHTML = parts.map(id => { const t = typeOf(id), e = byId(id); return `<a data-act="sel" data-id="${id}">${ico(iconOf(id))}${esc(t === 'port' ? e.name : t === 'floor' ? e.name : t === 'building' ? `Bât. ${e.code}` : labelOf(id))}</a>`; }).join('<span class="sep">›</span>');
+}
+
+/* ---------- Plan 2D ---------- */
+const planDrag = { moved: false };
+/* Contenu SVG d'un étage. mini = vignette (pièces et baies seulement) */
+function planSvg(floor, mini) {
+  const I = Store.idx, rooms = I.roomsByFloor.get(floor.id) || [], sel = Carto.sel, o = [];
+  const W = floor.width * K, H = floor.height * K;
+  if (!mini) o.push(`<defs><pattern id="grid" width="${K}" height="${K}" patternUnits="userSpaceOnUse"><path d="M${K} 0H0V${K}" fill="none" stroke="#0f1620" stroke-width="1"/></pattern>
+    <radialGradient id="wifi"><stop offset="0" stop-color="#199e70" stop-opacity=".34"/><stop offset=".6" stop-color="#199e70" stop-opacity=".12"/><stop offset="1" stop-color="#199e70" stop-opacity="0"/></radialGradient>
+    <clipPath id="fclip"><rect width="${W}" height="${H}"/></clipPath></defs>
+    <rect x="-2000" y="-2000" width="${W + 4000}" height="${H + 4000}" fill="url(#grid)"/>`);
+  o.push(`<rect width="${W}" height="${H}" fill="#0b1118" stroke="#4b6180" stroke-width="5"/>`);
+  if (floor.planImage && !mini) o.push(`<image href="${esc(floor.planImage)}" width="${W}" height="${H}" preserveAspectRatio="none" opacity=".85"/>`);
+  for (const r of rooms) {
+    const x = r.x * K, y = r.y * K, w = r.w * K, h = r.h * K, rt = ROOM_TYPES[r.type] || ROOM_TYPES.office;
+    o.push(`<rect class="room ${sel === r.id ? 'sel' : ''}" x="${x}" y="${y}" width="${w}" height="${h}" fill="${rt.fill}" ${floor.planImage && !mini ? 'fill-opacity=".35"' : ''} ${mini ? '' : `data-act="psel" data-id="${r.id}" data-tip="${esc(r.name)}|${rt.label} · ${Math.round(r.w * r.h)} m²"`}/>`);
+    if (!mini) {
+      const fs = clamp(Math.min(w / (r.name.length * 0.56), h / 3.2), 4.5, 11);
+      o.push(`<text class="rname" x="${x + w / 2}" y="${y + h * 0.3}" font-size="${fs.toFixed(1)}">${esc(r.name)}</text>`);
+      if (h > 70) o.push(`<text class="rtype" x="${x + w / 2}" y="${y + h * 0.3 + fs * 1.25}" font-size="${(fs * 0.72).toFixed(1)}">${rt.label}</text>`);
+    }
+  }
+  const devs = rooms.flatMap(r => I.devByRoom.get(r.id) || []);
+  if (!mini && Carto.wifi) {
+    o.push('<g clip-path="url(#fclip)" pointer-events="none">');
+    for (const d of devs) if (catOf(d)?.category === 'ap' && d.status === 'active') o.push(`<circle cx="${d.x * K}" cy="${d.y * K}" r="${9 * K}" fill="url(#wifi)"/>`);
+    o.push('</g>');
+  }
+  // Baies
+  for (const r of rooms) for (const rk of I.racksByRoom.get(r.id) || []) {
+    const s = rackSize(rk), u = rackUsage(rk.id), w = s.w * K, d = s.d * K;
+    const col = u.pct >= RACK_FULL_PCT ? COL.serious : '#8b9bb0';
+    o.push(`<g class="pobj ${sel === rk.id || Carto.rackId === rk.id && locOf(sel).rack?.id === rk.id ? 'sel' : ''}" transform="translate(${rk.x * K},${rk.y * K})" ${mini ? '' : `data-act="psel" data-id="${rk.id}" data-drag="${rk.id}" data-tip="${esc(rk.name)}|${esc(catOf(rk)?.model || '')}|Occupation : ${u.used}/${u.total} U (${u.pct} %)|Double-clic : ouvrir la vue 3D"`}>
+      <rect class="ring" x="${-w / 2 - 4}" y="${-d / 2 - 4}" width="${w + 8}" height="${d + 8}" rx="3"/>
+      <rect x="${-w / 2}" y="${-d / 2}" width="${w}" height="${d}" fill="#0a0e13" stroke="${col}" stroke-width="1.6" rx="1.5"/>
+      <rect x="${-w / 2 + 2}" y="${d / 2 - 4}" width="${(w - 4) * u.pct / 100}" height="2" fill="${col}"/>
+      <path d="M${-w / 2 + 3} ${-d / 2 + 4}h${w - 6}M${-w / 2 + 3} ${-d / 2 + 8}h${w - 6}M${-w / 2 + 3} ${-d / 2 + 12}h${w - 6}" stroke="#3a4d66" stroke-width="1.2"/>
+      ${mini ? '' : `<text class="rlabel" y="${d / 2 + 9}">${esc(rk.name)}</text>`}</g>`);
+  }
+  if (mini) return o.join('');
+  // Prises murales
+  for (const r of rooms) for (const ot of I.outByRoom.get(r.id) || []) {
+    const inf = outletInfo(ot.id), hollow = inf.status === 'idle' || inf.status === 'free';
+    const off = ot.usage === 'ap' || ot.usage === 'camera' ? 0.55 : 0;
+    const tip = [`Prise ${ot.label}`, `Usage : ${OUTLET_USAGE[ot.usage]}`, inf.pp ? `Panneau : ${labelOf(inf.pp.id)}` : 'Non reliée à un panneau', inf.net ? `Switch : ${labelOf(inf.net.id)}` : 'Non brassée', `État : ${STATE_LABEL[inf.status]}${inf.net && inf.net.vlan != null ? ` · VLAN ${inf.net.vlan} ${vlanOf(inf.net.vlan).name}` : ''}`].join('|');
+    o.push(`<g class="pobj ${sel === ot.id ? 'sel' : ''}" transform="translate(${(ot.x + off) * K},${(ot.y + off) * K})" data-act="psel" data-id="${ot.id}" data-drag="${ot.id}" data-tip="${esc(tip)}">
+      <rect class="hit" x="-6" y="-6" width="12" height="12"/><rect class="ring" x="-6.5" y="-6.5" width="13" height="13" rx="2"/>
+      <rect x="-3.5" y="-3.5" width="7" height="7" rx="1" fill="${hollow ? '#0b1118' : STATE_COL[inf.status]}" stroke="${hollow ? '#5d6c80' : '#05080c'}" stroke-width="${hollow ? 1.2 : 0.8}" ${inf.status === 'disabled' ? 'stroke-dasharray="1.5 1.2" stroke="#8b9bb0"' : ''}/>
+      <text class="lbl" x="5.5" y="1.8">${esc(ot.label)}</text></g>`);
+  }
+  // Équipements hors baie
+  for (const d of devs) {
+    const c = catOf(d), cc = CATEGORIES[c?.category] || CATEGORIES.passive, bad = d.status === 'fault' ? COL.crit : d.status === 'maintenance' ? COL.warn : null;
+    const p0 = portsOf(d.id)[0], far = p0 ? farEnd(p0.id) : null;
+    const tip = [d.hostname, `${c.brand} ${c.model}`, d.ip ? `IP : ${d.ip}` : '', far ? `Relié à : ${labelOf(far.id)}` : 'Non relié', `État : ${DEVICE_STATUS[d.status].label}`].filter(Boolean).join('|');
+    const r = c.category === 'phone' ? 5 : 8;
+    o.push(`<g class="pobj ${sel === d.id || locOf(sel).device?.id === d.id ? 'sel' : ''}" transform="translate(${d.x * K},${d.y * K})" data-act="psel" data-id="${d.id}" data-drag="${d.id}" data-tip="${esc(tip)}">
+      <circle class="ring" r="${r + 3.5}"/>
+      ${c.category === 'camera' ? `<path d="M0 0 L-26 14 A30 30 0 0 0 -14 26 Z" fill="${cc.color}" opacity=".22"/>` : ''}
+      <circle r="${r}" fill="${cc.color}" stroke="${bad || '#05080c'}" stroke-width="${bad ? 2 : 1}"/>
+      <path d="${ICONS[cc.icon]}" transform="translate(${-r * 0.62},${-r * 0.62}) scale(${r * 0.052})" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+      <text class="lbl" x="${r + 2}" y="1.8">${esc(d.hostname)}</text></g>`);
+  }
+  o.push('<g id="plan-trace"></g>');
+  // Échelle : 5 m
+  o.push(`<g transform="translate(0,${H + 14})" pointer-events="none"><path d="M0 0v5h${5 * K}v-5" fill="none" stroke="#5d6c80" stroke-width="1.2"/><text x="${5 * K + 5}" y="6" fill="#5d6c80" font-size="8">5 m</text></g>`);
+  return o.join('');
+}
+function fitVb(floor) { const m = 2 * K; return { x: -m, y: -m, w: floor.width * K + 2 * m, h: floor.height * K + 2 * m + 10 }; }
+function applyVb(svg) {
+  const vb = Carto.vbs[Carto.floorId]; if (!vb || !svg) return;
+  svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+  svg.classList.toggle('zoomed', svg.clientWidth / vb.w > 1.25);
+}
+function renderPlan() {
+  const host = $('#v-plan'), t = typeOf(Carto.sel || '');
+  // Site ou bâtiment sélectionné : vignettes des étages
+  if (t === 'site' || t === 'building' || !Carto.floorId) {
+    const floors = Store.db.floors.filter(f => t !== 'building' || f.buildingId === Carto.sel);
+    host.innerHTML = `<div class="floor-cards">${floors.map(f => { const s = scopeOf(f.id), b = byId(f.buildingId); return `<div class="fcard" data-act="sel" data-id="${f.id}">
+      <h4>${esc(b.name)} — ${esc(f.name)}</h4><div class="muted">${plural((Store.idx.roomsByFloor.get(f.id) || []).length, 'pièce')} · ${plural(s.racks.length, 'baie')} · ${plural(s.devices.length, 'équipement')} · ${plural(s.outlets.length, 'prise')}</div>
+      <svg viewBox="-10 -10 ${f.width * K + 20} ${f.height * K + 20}">${planSvg(f, true)}</svg></div>`; }).join('') || '<div class="empty">Aucun étage</div>'}</div>`;
+    return;
+  }
+  const floor = byId(Carto.floorId);
+  if (!Carto.vbs[floor.id]) Carto.vbs[floor.id] = fitVb(floor);
+  const floorsOpt = Store.db.buildings.map(b => `<optgroup label="${esc(b.name)}">${(Store.idx.floorsByBld.get(b.id) || []).map(f => `<option value="${f.id}" ${f.id === floor.id ? 'selected' : ''}>${esc(b.code)} — ${esc(f.name)}</option>`).join('')}</optgroup>`).join('');
+  host.innerHTML = `<svg class="plan ${Carto.edit ? 'editing' : ''}" xmlns="http://www.w3.org/2000/svg">${planSvg(floor, false)}</svg>
+    <div class="overlay tl"><select data-chg="plan-floor" data-tip="Changer d'étage">${floorsOpt}</select>
+      <button class="btn icon" data-act="plan-fit" data-tip="Ajuster|Recadrer le plan sur l'étage">${ico('fit')}</button>
+      <button class="btn ${Carto.wifi ? 'on' : ''}" data-act="plan-wifi" data-tip="Couverture Wi-Fi|Portée indicative des bornes (9 m)">${ico('ap')}Wi-Fi</button>
+      <button class="btn ${Carto.edit ? 'on' : ''}" data-act="plan-edit" data-tip="Mode Édition|Déplacer les prises, bornes, caméras, téléphones et baies à la souris">${ico('move')}Édition</button>
+      <button class="btn ${Carto.palette ? 'on' : ''}" data-act="palette" data-tip="Stock|Glisser un modèle du stock sur le plan pour l'installer">${ico('box')}Stock</button>
+      ${Carto.trace ? `<button class="btn on" data-act="trace-clear">${ico('x')}Effacer le tracé</button>` : ''}</div>
+    <div class="overlay bl legend"><b>Prises</b>${['up', 'down', 'disabled', 'error'].map(s => `<span><i style="background:${STATE_COL[s]}"></i>${STATE_LABEL[s]}</span>`).join('')}<span><i style="border:1px solid #5d6c80"></i>Non brassée</span>
+      <b>Équipements</b>${['ap', 'camera', 'phone'].map(c => `<span><i style="background:${CATEGORIES[c].color};border-radius:50%"></i>${CATEGORIES[c].one}</span>`).join('')}<span><i style="border:1.5px solid #8b9bb0;height:13px;width:9px"></i>Baie</span></div>
+    <div id="palette-host"></div>`;
+  applyVb($('svg.plan', host));
+  renderPalette?.('plan');
+  drawPlanTrace?.();
+}
+Changes['plan-floor'] = el => select(el.value, { view: 'plan' });
+Actions['plan-fit'] = () => { const f = byId(Carto.floorId); Carto.vbs[f.id] = fitVb(f); applyVb($('svg.plan')); };
+Actions['plan-wifi'] = () => { Carto.wifi = !Carto.wifi; renderPlan(); };
+Actions['plan-edit'] = () => { Carto.edit = !Carto.edit; renderPlan(); if (Carto.edit) toast('Mode Édition : faites glisser un objet pour le déplacer', 'ok'); };
+let renderPalette = null, drawPlanTrace = null;   // définis plus bas (stock, traçage)
+
+/* Convertit une position de la souris en coordonnées du plan (unités SVG) */
+function svgPoint(svg, e) { return new DOMPoint(e.clientX, e.clientY).matrixTransform(svg.getScreenCTM().inverse()); }
+function initPlanEvents(host) {
+  host.addEventListener('wheel', e => {
+    const svg = $('svg.plan', host); if (!svg) return;
+    e.preventDefault();
+    const vb = Carto.vbs[Carto.floorId], pt = svgPoint(svg, e);
+    const nw = clamp(vb.w * (e.deltaY > 0 ? 1.18 : 1 / 1.18), 80, 6000), k = nw / vb.w;
+    vb.x = pt.x - (pt.x - vb.x) * k; vb.y = pt.y - (pt.y - vb.y) * k; vb.w = nw; vb.h *= k;
+    applyVb(svg);
+  }, { passive: false });
+  host.addEventListener('pointerdown', e => {
+    const svg = $('svg.plan', host);
+    if (!svg || e.button !== 0 || !e.target.closest('svg.plan')) return;
+    const vb = Carto.vbs[Carto.floorId], sx = e.clientX, sy = e.clientY, inv = svg.getScreenCTM().inverse().a;
+    const dragEl = Carto.edit ? e.target.closest('[data-drag]') : null;
+    const start = { x: vb.x, y: vb.y }, p0 = svgPoint(svg, e);
+    let last = null;
+    planDrag.moved = false;
+    const move = ev => {
+      if (!planDrag.moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return;
+      planDrag.moved = true; Tip.hide();
+      if (dragEl) {
+        const p = svgPoint(svg, ev), e0 = byId(dragEl.dataset.drag), f = byId(Carto.floorId);
+        last = { x: clamp(e0.x + (p.x - p0.x) / K, 0.1, f.width - 0.1), y: clamp(e0.y + (p.y - p0.y) / K, 0.1, f.height - 0.1) };
+        const off = e0.usage === 'ap' || e0.usage === 'camera' ? 0.55 : 0;
+        dragEl.setAttribute('transform', `translate(${(last.x + off) * K},${(last.y + off) * K})`);
+      } else {
+        svg.classList.add('panning');
+        vb.x = start.x - (ev.clientX - sx) * inv; vb.y = start.y - (ev.clientY - sy) * inv;
+        applyVb(svg);
+      }
+    };
+    const up = () => {
+      removeEventListener('pointermove', move); removeEventListener('pointerup', up);
+      svg.classList.remove('panning');
+      if (dragEl && last) run(() => moveOnPlan(dragEl.dataset.drag, +last.x.toFixed(2), +last.y.toFixed(2)));
+    };
+    addEventListener('pointermove', move); addEventListener('pointerup', up);
+  });
+  // Un glisser ne doit pas déclencher le clic de sélection
+  host.addEventListener('click', e => { if (planDrag.moved) { e.stopPropagation(); e.preventDefault(); planDrag.moved = false; } }, true);
+  host.addEventListener('dblclick', e => { const el = e.target.closest('[data-id]'); if (el && typeOf(el.dataset.id) === 'rack') select(el.dataset.id, { view: 'rack' }); });
+}
+/* Déplace une prise, un équipement ou une baie sur le plan */
+function moveOnPlan(id, x, y) {
+  const e = byId(id), room = roomAt(Carto.floorId, x, y);
+  if (!room) throw new Error('Position hors des pièces : déplacement annulé.');
+  Store.commit('move', `Déplacement de ${labelOf(id)} (${room.name})`, () => { e.x = x; e.y = y; e.roomId = room.id; }, id);
+}
+
+/* ---------- Fiche de détails ---------- */
+const kv = rows => `<dl class="kv">${rows.filter(r => r && r[1] !== '' && r[1] != null).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+const li = (id, text, small = '', icon = null) => `<div class="li" data-act="sel" data-id="${id}">${ico(icon || iconOf(id))}<span>${esc(text)}</span>${small ? `<small>${small}</small>` : ''}</div>`;
+const dHead = (icon, title, sub) => `<div class="d-head"><div class="dico">${ico(icon)}</div><div style="min-width:0"><h2>${esc(title)}</h2><div class="sub">${sub}</div></div></div>`;
+const sec = (title, body) => body ? `<div class="d-sec">${title ? `<div class="sec-t">${title}</div>` : ''}${body}</div>` : '';
+const opt = (v, l, cur) => `<option value="${esc(v)}" ${String(v) === String(cur) ? 'selected' : ''}>${esc(l)}</option>`;
+const mono = s => s ? `<span class="mono">${esc(s)}</span>` : '—';
+
+/* Grille des ports d'un équipement, disposée comme sur la façade */
+function portGrid(dev) {
+  const c = catOf(dev), ports = portsOf(dev.id), hl = Carto.trace?.nodeSet;
+  let i = 0;
+  const groups = (c.ports || []).map(grp => {
+    const n = grp.names ? grp.names.length : grp.count, list = ports.slice(i, i + n); i += n;
+    const two = n >= 16, rows = two ? 2 : 1;
+    const cells = list.map(p => {
+      const st = effStatus(p), cls = st === 'idle' || st === 'free' ? 'hollow' : st === 'disabled' ? 'dis' : '';
+      const far = connectedLabel(p);
+      const tip = [`${p.name}`, `${PORT_KIND[p.kind]} · ${PORT_ROLE[p.role]}`, `État : ${STATE_LABEL[st]}`, p.role !== 'pp' ? `VLAN : ${p.vlan == null ? 'Trunk' : p.vlan + ' ' + vlanOf(p.vlan).name}` : '', p.poe.watts ? `PoE : ${p.poe.watts} W` : '', far ? `Connecté : ${far}` : '', p.description].filter(Boolean).join('|');
+      return `<i class="pc ${cls} ${Carto.sel === p.id ? 'sel' : ''} ${hl?.has(p.id) ? 'hl' : ''}" style="background:${STATE_COL[st]};${p.kind !== 'rj45' ? 'border-radius:50%;' : ''}" data-act="sel" data-id="${p.id}" data-tip="${esc(tip)}"></i>`;
+    });
+    return `<div class="pgrp" style="grid-template-rows:repeat(${rows},11px)">${cells.join('')}</div>`;
+  });
+  return `<div class="pgrid">${groups.join('')}</div>`;
+}
+function renderDetail() {
+  const host = $('#detail'), id = Carto.sel, e = byId(id);
+  if (!e) { host.innerHTML = '<div class="empty">Sélectionnez un élément dans l\'arbre ou sur le plan.</div>'; return; }
+  const top = host.dataset.id === id ? host.scrollTop : 0;
+  host.dataset.id = id;
+  host.innerHTML = Detail[typeOf(id)](e) + traceSection();
+  host.scrollTop = top;
+}
+let traceSection = () => '';   // défini avec le traçage
+const Detail = {
+  site(e) {
+    const s = scopeOf(e.id), blds = Store.idx.bldBySite.get(e.id) || [];
+    return dHead('site', e.name, esc(e.address)) + sec('Résumé', kv([['Code', esc(e.code)], ['Bâtiments', blds.length], ['Baies', s.racks.length], ['Équipements', s.devices.length], ['Prises murales', s.outlets.length]])) +
+      sec('Bâtiments', blds.map(b => li(b.id, b.name, plural(scopeOf(b.id).devices.length, 'équip.', 'équip.'))).join(''));
+  },
+  building(e) {
+    const s = scopeOf(e.id), floors = Store.idx.floorsByBld.get(e.id) || [];
+    return dHead('building', e.name, `Code ${esc(e.code)} · ${esc(byId(e.siteId).name)}`) + sec('Résumé', kv([['Étages', floors.length], ['Baies', s.racks.length], ['Équipements', s.devices.length], ['Prises murales', s.outlets.length]])) +
+      sec('Étages', floors.map(f => li(f.id, f.name, `${scopeOf(f.id).devices.length} équip. · ${scopeOf(f.id).outlets.length} prises`)).join(''));
+  },
+  floor(e) {
+    const s = scopeOf(e.id), rooms = Store.idx.roomsByFloor.get(e.id) || [];
+    return dHead('floor', `${byId(e.buildingId).name.split(' — ')[0]} — ${e.name}`, `${e.width} × ${e.height} m`) + sec('Résumé', kv([['Pièces', rooms.length], ['Baies', s.racks.length], ['Équipements', s.devices.length], ['Prises murales', s.outlets.length]])) +
+      sec('Fond de plan', `<p class="muted" style="margin:0 0 8px">${e.planImage ? 'Un plan importé est affiché en fond.' : 'Aucune image : le plan est généré à partir des pièces.'}</p><div class="btns"><button class="btn sm" data-act="plan-img">${ico('image')}Importer un plan</button>${e.planImage ? `<button class="btn sm danger" data-act="plan-img-del">${ico('trash')}Retirer</button>` : ''}</div>`) +
+      sec('Pièces', rooms.map(r => li(r.id, r.name, ROOM_TYPES[r.type]?.label || '')).join(''));
+  },
+  room(e) {
+    const I = Store.idx, racks = I.racksByRoom.get(e.id) || [], devs = I.devByRoom.get(e.id) || [], outs = I.outByRoom.get(e.id) || [];
+    const st = groupBy(outs, o => outletInfo(o.id).status);
+    return dHead('room', e.name, `${ROOM_TYPES[e.type]?.label || ''} · ${locLabel(e.floorId)}`) +
+      sec('Résumé', kv([['Surface', `${Math.round(e.w * e.h)} m²`], ['Dimensions', `${e.w} × ${e.h} m`], ['Baies', racks.length], ['Équipements', devs.length], ['Prises murales', outs.length], outs.length ? ['Prises actives', `${(st.get('up') || []).length} / ${outs.length}`] : null])) +
+      sec('Baies', racks.map(r => li(r.id, r.name, `${rackUsage(r.id).pct} %`)).join('')) +
+      sec('Équipements', devs.map(d => li(d.id, d.hostname, esc(catOf(d).model))).join('')) +
+      sec('Prises murales', outs.map(o => { const inf = outletInfo(o.id); return `<div class="li" data-act="sel" data-id="${o.id}"><i class="pc ${inf.status === 'idle' || inf.status === 'free' ? 'hollow' : ''}" style="background:${STATE_COL[inf.status]}"></i><span>${esc(o.label)}</span><small>${OUTLET_USAGE[o.usage]} · ${STATE_LABEL[inf.status]}</small></div>`; }).join(''));
+  },
+  rack(e) {
+    const u = rackUsage(e.id), c = catOf(e);
+    return dHead('rack', e.name, locLabel(e.roomId)) +
+      sec('Occupation', `<div class="row"><div class="bar grow"><i style="width:${u.pct}%;background:${u.pct >= RACK_FULL_PCT ? COL.serious : COL.accent}"></i></div><b>${u.used}/${u.total} U</b></div>`) +
+      sec('', `<div class="btns"><button class="btn sm pri" data-act="c-view" data-v="rack">${ico('cube')}Vue 3D</button><button class="btn sm" data-act="rack-edit" data-id="${e.id}">${ico('edit')}Modifier</button><button class="btn sm danger" data-act="rack-del" data-id="${e.id}">${ico('trash')}Retirer</button></div>`) +
+      sec('Caractéristiques', kv([['Modèle', esc(`${c.brand} ${c.model}`)], ['Hauteur', `${e.heightU} U`], ['N° de série', mono(e.serial)], ['Installée le', fmtDate(e.installDate)], ['Statut', stDev(e.status)]])) +
+      sec(`Équipements (${u.devices.length})`, u.devices.map(d => li(d.id, d.hostname, `U${d.u}${catOf(d).heightU > 1 ? '–' + (d.u + catOf(d).heightU - 1) : ''}`)).join('') || '<span class="dim">Baie vide</span>');
+  },
+  device(e) {
+    const c = catOf(e), ports = portsOf(e.id), cat = CATEGORIES[c.category], poe = c.poeBudgetW ? poeUsage(e) : null;
+    const used = ports.filter(p => cablesOf(p.id).length || (p.role !== 'pp' && p.status === 'up')).length;
+    const retired = e.status === 'retired';
+    return dHead(cat.icon, e.hostname, `${cat.one} · ${esc(c.brand)} ${esc(c.model)}`) +
+      sec('', `<div class="btns"><button class="btn sm" data-act="dev-edit" data-id="${e.id}">${ico('edit')}Modifier</button>${retired ? '' : `<button class="btn sm" data-act="dev-move" data-id="${e.id}">${ico('move')}Déplacer</button><button class="btn sm danger" data-act="dev-remove" data-id="${e.id}">${ico('out')}Retirer</button>`}${e.rackId ? '' : `<button class="btn sm" data-act="c-view" data-v="rack">${ico('cube')}Vue 3D</button>`}</div>`) +
+      sec('Identification', kv([['Statut', stDev(e.status)], ['Emplacement', esc(locLabel(e.id))], ['Adresse IP', mono(e.ip)], ['Adresse MAC', mono(e.mac)], ['N° de série', mono(e.serial)], ['Firmware', esc(e.firmware) || '—'], ['Installé le', fmtDate(e.installDate)], c.heightU ? ['Hauteur', `${c.heightU} U`] : null, c.powerW ? ['Consommation', `${c.powerW} W`] : null, e.notes ? ['Notes', esc(e.notes)] : null])) +
+      (poe ? sec('Budget PoE', `<div class="row"><div class="bar grow"><i style="width:${Math.min(100, poe.pct)}%;background:${poe.pct >= POE_WARN_PCT ? COL.serious : '#f0b93a'}"></i></div><b>${poe.used} / ${poe.budget} W</b></div>`) : '') +
+      (ports.length ? sec(`Ports (${used} utilisés sur ${ports.length})`, portGrid(e)) : '');
+  },
+  port(p) {
+    const dev = byId(p.deviceId), passive = p.role === 'pp', st = effStatus(p), cabs = cablesOf(p.id);
+    const far = passive ? null : farEnd(p.id);
+    const f = (label, html) => `<label>${label}</label>${html}`;
+    const inp = (field, val, extra = '') => `<input type="text" data-chg="port-f" data-id="${p.id}" data-f="${field}" value="${esc(val)}" ${extra}>`;
+    const speeds = [10, 100, 1000, 2500, 10000, 25000];
+    const form = passive ? `<div class="fld">${f('État', `<div class="ro"><span class="st"><i style="background:${STATE_COL[st]}"></i>${STATE_LABEL[st]}</span></div>`)}${f('Description', inp('description', p.description))}</div>` :
+      `<div class="fld">
+        ${f('État', `<select data-chg="port-f" data-id="${p.id}" data-f="status">${Object.entries(PORT_STATUS).map(([k, v]) => opt(k, v.label, p.status)).join('')}</select>`)}
+        ${f('VLAN', `<select data-chg="port-f" data-id="${p.id}" data-f="vlan">${opt('', 'Trunk (tous les VLAN)', p.vlan ?? '')}${[...(Store.idx.vlan.has(p.vlan) || p.vlan == null ? [] : [{ id: p.vlan, name: '' }]), ...Store.db.vlans].map(v => opt(v.id, `${v.id} ${v.name}`, p.vlan ?? '')).join('')}</select>`)}
+        ${f('Débit', `<select data-chg="port-f" data-id="${p.id}" data-f="speed">${speeds.map(s => opt(s, fmtSpeed(s), p.speed)).join('')}</select>`)}
+        ${p.poe.capable ? f('PoE (W)', `<input type="number" min="0" max="90" step="0.5" data-chg="port-f" data-id="${p.id}" data-f="watts" value="${p.poe.watts}">`) : f('PoE', '<div class="ro dim">Non disponible</div>')}
+        ${f('Adresse MAC', inp('mac', p.mac, 'class="mono" placeholder="02:00:00:00:00:00"'))}
+        ${f('Appareil connecté', far ? `<div class="ro"><a data-act="sel" data-id="${far.id}" style="cursor:pointer">${esc(connectedLabel(p))}</a></div>` : inp('connected', p.connected, 'placeholder="Nom de l\'appareil"'))}
+        ${f('Description', inp('description', p.description))}</div>`;
+    const cabList = cabs.map(c => { const o = otherEnd(c, p.id), side = passive ? (isPassiveNode(o) ? 'Arrière' : 'Avant') : ''; return `<div class="li" data-act="sel" data-id="${o}">${ico('cable')}<span>${side ? side + ' : ' : ''}${esc(labelOf(o))}</span><small>${esc(c.type.toUpperCase())} · ${c.length} m</small></div>`; }).join('') || '<span class="dim">Aucun câble sur ce port</span>';
+    return dHead(passive ? 'passive' : 'switch', `${p.name}`, `Port de <a data-act="sel" data-id="${dev.id}" style="cursor:pointer">${esc(dev.hostname)}</a> · ${esc(locLabel(dev.id, { short: true }))}`) +
+      sec('', `<div class="btns"><button class="btn sm pri" data-act="trace" data-id="${p.id}" ${cabs.length ? '' : 'disabled'}>${ico('trace')}Tracer</button><button class="btn sm" data-act="connect" data-id="${p.id}">${ico('link')}Connecter à…</button><button class="btn sm danger" data-act="disconnect" data-id="${p.id}" ${cabs.length ? '' : 'disabled'}>${ico('unlink')}Débrancher</button></div>`) +
+      sec('Port', kv([['Identifiant', mono(p.id)], ['Type', `${PORT_KIND[p.kind]} · ${PORT_ROLE[p.role]}`], passive ? null : ['PoE', p.poe.capable ? (p.poe.watts ? `<span class="st"><i style="background:${poeColor(p.poe.watts)}"></i>${p.poe.watts} W</span>` : 'Oui (aucune charge)') : 'Non']])) +
+      sec('Configuration', form) + sec('Câblage', cabList);
+  },
+  outlet(o) {
+    const inf = outletInfo(o.id), cabs = cablesOf(o.id);
+    return dHead('outlet', `Prise ${o.label}`, esc(locLabel(o.roomId))) +
+      sec('', `<div class="btns"><button class="btn sm pri" data-act="trace" data-id="${o.id}" ${cabs.length ? '' : 'disabled'}>${ico('trace')}Tracer</button><button class="btn sm" data-act="connect" data-id="${o.id}">${ico('link')}Connecter à…</button><button class="btn sm danger" data-act="disconnect" data-id="${o.id}" ${cabs.length ? '' : 'disabled'}>${ico('unlink')}Débrancher</button><button class="btn sm danger" data-act="outlet-del" data-id="${o.id}">${ico('trash')}Supprimer</button></div>`) +
+      sec('Prise', `<div class="fld"><label>Repère</label><input type="text" data-chg="outlet-f" data-id="${o.id}" data-f="label" value="${esc(o.label)}">
+        <label>Usage</label><select data-chg="outlet-f" data-id="${o.id}" data-f="usage">${Object.entries(OUTLET_USAGE).map(([k, v]) => opt(k, v, o.usage)).join('')}</select>
+        <label>Identifiant</label><div class="ro mono">${o.id}</div><label>Position</label><div class="ro">x ${o.x} m · y ${o.y} m</div></div>`) +
+      sec('Chaîne de liaison', kv([['État', `<span class="st"><i style="background:${STATE_COL[inf.status]}"></i>${STATE_LABEL[inf.status]}</span>`],
+        ['Panneau', inf.pp ? `<a data-act="sel" data-id="${inf.pp.id}" style="cursor:pointer">${esc(labelOf(inf.pp.id))}</a>` : '—'],
+        ['Switch', inf.net ? `<a data-act="sel" data-id="${inf.net.id}" style="cursor:pointer">${esc(labelOf(inf.net.id))}</a>` : '—'],
+        inf.net ? ['VLAN', vlanChip(inf.net.vlan)] : null, inf.net ? ['Débit', fmtSpeed(inf.net.speed)] : null,
+        inf.net && inf.net.poe.watts ? ['PoE', `${inf.net.poe.watts} W`] : null,
+        ['Terminal', inf.term ? `<a data-act="sel" data-id="${inf.term.deviceId}" style="cursor:pointer">${esc(byId(inf.term.deviceId).hostname)}</a>` : esc(inf.net?.connected) || '—']]));
+  },
+};
+
+/* --- Modification d'un port ou d'une prise depuis la fiche --- */
+const PORT_FIELD = { status: 'état', vlan: 'VLAN', speed: 'débit', watts: 'PoE', mac: 'MAC', connected: 'appareil connecté', description: 'description' };
+Changes['port-f'] = el => {
+  const p = byId(el.dataset.id), f = el.dataset.f;
+  let v = el.value.trim(), shown = v;
+  if (f === 'vlan') { v = v === '' ? null : +v; shown = v == null ? 'Trunk' : `${v} (${vlanOf(v).name})`; }
+  if (f === 'speed') { v = +v; shown = fmtSpeed(v); }
+  if (f === 'status') shown = PORT_STATUS[v].label;
+  if (f === 'watts') { v = clamp(+v || 0, 0, 90); shown = `${v} W`; }
+  if (f === 'mac' && v && !/^([0-9a-f]{2}[:-]){5}[0-9a-f]{2}$/i.test(v)) { renderDetail(); throw new Error('Adresse MAC invalide (format attendu : 02:00:00:00:00:00).'); }
+  Store.commit('edit', `Port ${labelOf(p.id)} : ${PORT_FIELD[f]} → ${shown || '(vide)'}`, () => {
+    if (f === 'watts') p.poe.watts = v; else p[f] = v;
+    if (f === 'status' && v !== 'up') p.poe.watts = 0;
+  }, p.id);
+};
+Changes['outlet-f'] = el => {
+  const o = byId(el.dataset.id), f = el.dataset.f, v = el.value.trim();
+  if (f === 'label') {
+    if (!v) { renderDetail(); throw new Error('Le repère de la prise ne peut pas être vide.'); }
+    if (Store.db.outlets.some(x => x.id !== o.id && x.label === v)) { renderDetail(); throw new Error(`Le repère ${v} est déjà utilisé.`); }
+  }
+  Store.commit('edit', `Prise ${o.label} : ${f === 'label' ? 'repère' : 'usage'} → ${f === 'label' ? v : OUTLET_USAGE[v]}`, () => { o[f] = v; }, o.id);
+};
+/* --- Modification d'un équipement ou d'une baie --- */
+Actions['dev-edit'] = el => {
+  const d = byId(el.dataset.id);
+  Modal.open({
+    title: `Modifier ${esc(d.hostname)}`,
+    body: `<div class="form-grid">
+      <label class="f"><span>Nom d'hôte</span><input type="text" name="hostname" value="${esc(d.hostname)}" autofocus></label>
+      <label class="f"><span>Statut</span><select name="status">${Object.entries(DEVICE_STATUS).filter(([k]) => k !== 'retired' || d.status === 'retired').map(([k, v]) => opt(k, v.label, d.status)).join('')}</select></label>
+      <label class="f"><span>Adresse IP</span><input type="text" name="ip" class="mono" value="${esc(d.ip)}"></label>
+      <label class="f"><span>Adresse MAC</span><input type="text" name="mac" class="mono" value="${esc(d.mac)}"></label>
+      <label class="f"><span>N° de série</span><input type="text" name="serial" class="mono" value="${esc(d.serial)}"></label>
+      <label class="f"><span>Firmware</span><input type="text" name="firmware" value="${esc(d.firmware)}"></label>
+      <label class="f"><span>Date d'installation</span><input type="date" name="installDate" value="${esc(d.installDate)}"></label>
+      <label class="f full"><span>Notes</span><textarea name="notes" rows="2">${esc(d.notes)}</textarea></label></div>`,
+    ok: 'Enregistrer',
+    onOk(v) {
+      if (!v.hostname) throw new Error('Le nom d\'hôte est obligatoire.');
+      if (v.ip && !/^(\d{1,3}\.){3}\d{1,3}$/.test(v.ip)) throw new Error('Adresse IP invalide.');
+      Store.commit('edit', `Modification de ${v.hostname}`, () => Object.assign(d, v), d.id);
+      toast('Équipement modifié', 'ok', undoAction);
+      return true;
+    },
+  });
+};
+Actions['rack-edit'] = el => {
+  const r = byId(el.dataset.id);
+  Modal.open({
+    title: `Modifier ${esc(r.name)}`,
+    body: `<div class="form-grid"><label class="f"><span>Nom</span><input type="text" name="name" value="${esc(r.name)}" autofocus></label>
+      <label class="f"><span>N° de série</span><input type="text" name="serial" class="mono" value="${esc(r.serial)}"></label>
+      <label class="f"><span>Date d'installation</span><input type="date" name="installDate" value="${esc(r.installDate)}"></label></div>`,
+    ok: 'Enregistrer',
+    onOk(v) { if (!v.name) throw new Error('Le nom est obligatoire.'); Store.commit('edit', `Modification de la baie ${v.name}`, () => Object.assign(r, v), r.id); return true; },
+  });
+};
+/* --- Fond de plan importé --- */
+Actions['plan-img'] = () => { const f = $('#file-image'); f.value = ''; f.click(); };
+$('#file-image').addEventListener('change', e => {
+  const file = e.target.files[0], floor = byId(Carto.floorId);
+  if (!file || !floor) return;
+  const rd = new FileReader();
+  rd.onload = () => run(() => {
+    if (rd.result.length > 3e6) toast('Image volumineuse : la sauvegarde locale peut échouer. Préférez une image de moins de 2 Mo.', 'warn');
+    Store.commit('edit', `Fond de plan importé pour ${labelOf(floor.id)}`, () => { floor.planImage = rd.result; }, floor.id);
+  });
+  rd.readAsDataURL(file);
+});
+Actions['plan-img-del'] = () => { const floor = byId(Carto.floorId); Store.commit('edit', `Fond de plan retiré pour ${labelOf(floor.id)}`, () => { floor.planImage = ''; }, floor.id); };
+
+/* Vues provisoires, remplacées par les lots suivants */
+function renderRackView() { $('#v-rack').innerHTML = '<div class="empty">Vue 3D en cours de construction.</div>'; }
+function renderTopo() { $('#v-topo').innerHTML = '<div class="empty">Topologie en cours de construction.</div>'; }
 /*@@CARTO*/
-Views.carto = { render() { $('#tab-carto').innerHTML = placeholder('Cartographie'); } };
 
 /* ============================================================
    === SECTION 11 — UI : INVENTAIRE
@@ -1189,7 +1831,7 @@ function placeholder(name) {
    ============================================================ */
 Store.init();
 showTab(UI.tab);
-window.NetCarto = { Store, UI, Views };   // accès depuis la console du navigateur, pour le diagnostic
+window.NetCarto = { Store, UI, Views, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic
 </script>
 </body>
 </html>
