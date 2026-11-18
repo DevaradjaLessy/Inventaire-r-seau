@@ -9,6 +9,7 @@ import { Actions, Changes, run, Tip, toast } from '../socle.js';
 import { Carto, K, select } from './carto.js';
 import { drawPlanTrace } from './tracage.js';
 import { renderPalette } from '../materiel/palette.js';
+import { emptyState, roomDrawn } from './structure.js';
 
 /* ---------- Plan 2D ---------- */
 const planDrag = { moved: false };
@@ -85,23 +86,25 @@ function applyVb(svg) {
 }
 function renderPlan() {
   const host = $('#v-plan'), t = typeOf(Carto.sel || '');
+  if (!Store.db.sites.length) { host.innerHTML = emptyState(); return; }
   // Site ou bâtiment sélectionné : vignettes des étages
   if (t === 'site' || t === 'building' || !Carto.floorId) {
     const floors = Store.db.floors.filter(f => t !== 'building' || f.buildingId === Carto.sel);
     host.innerHTML = `<div class="floor-cards">${floors.map(f => { const s = scopeOf(f.id), b = byId(f.buildingId); return `<div class="fcard" data-act="sel" data-id="${f.id}">
       <h4>${esc(b.name)} — ${esc(f.name)}</h4><div class="muted">${plural((Store.idx.roomsByFloor.get(f.id) || []).length, 'pièce')} · ${plural(s.racks.length, 'baie')} · ${plural(s.devices.length, 'équipement')} · ${plural(s.outlets.length, 'prise')}</div>
-      <svg viewBox="-10 -10 ${f.width * K + 20} ${f.height * K + 20}">${planSvg(f, true)}</svg></div>`; }).join('') || '<div class="empty">Aucun étage</div>'}</div>`;
+      <svg viewBox="-10 -10 ${f.width * K + 20} ${f.height * K + 20}">${planSvg(f, true)}</svg></div>`; }).join('') || '<div class="empty">Aucun étage pour l\'instant. Sélectionnez un bâtiment dans l\'arbre, puis « Ajouter un étage ».</div>'}</div>`;
     return;
   }
   const floor = byId(Carto.floorId);
   if (!Carto.vbs[floor.id]) Carto.vbs[floor.id] = fitVb(floor);
   const floorsOpt = Store.db.buildings.map(b => `<optgroup label="${esc(b.name)}">${(Store.idx.floorsByBld.get(b.id) || []).map(f => `<option value="${f.id}" ${f.id === floor.id ? 'selected' : ''}>${esc(b.code)} — ${esc(f.name)}</option>`).join('')}</optgroup>`).join('');
-  host.innerHTML = `<svg class="plan ${Carto.edit ? 'editing' : ''}" xmlns="http://www.w3.org/2000/svg">${planSvg(floor, false)}</svg>
+  host.innerHTML = `<svg class="plan ${Carto.edit ? 'editing' : ''} ${Carto.draw ? 'drawing' : ''}" xmlns="http://www.w3.org/2000/svg">${planSvg(floor, false)}</svg>
     <div class="overlay tl"><select data-chg="plan-floor" data-tip="Changer d'étage">${floorsOpt}</select>
       <button class="btn icon" data-act="plan-fit" data-tip="Ajuster|Recadrer le plan sur l'étage">${ico('fit')}</button>
       <button class="btn icon" data-act="plan-zoom" data-k="0.7" data-tip="Zoom avant">${ico('plus')}</button><button class="btn icon" data-act="plan-zoom" data-k="1.43" data-tip="Zoom arrière">${ico('minus')}</button>
       <button class="btn ${Carto.wifi ? 'on' : ''}" data-act="plan-wifi" data-tip="Couverture Wi-Fi|Portée indicative des bornes (9 m)">${ico('ap')}Wi-Fi</button>
       <button class="btn ${Carto.edit ? 'on' : ''}" data-act="plan-edit" data-tip="Mode Édition|Déplacer les prises, bornes, caméras, téléphones et baies à la souris">${ico('move')}Édition</button>
+      <button class="btn ${Carto.draw ? 'on' : ''}" data-act="plan-draw" data-tip="Dessiner une pièce|Tracez un rectangle à la souris ; il s'aligne tous les 50 cm">${ico('room')}Pièce</button>
       <button class="btn ${Carto.palette ? 'on' : ''}" data-act="palette" data-tip="Stock|Glisser un modèle du stock sur le plan pour l'installer">${ico('box')}Stock</button>
       ${Carto.trace ? `<button class="btn on" data-act="trace-clear">${ico('x')}Effacer le tracé</button>` : ''}</div>
     <div class="overlay bl legend"><b>Prises</b>${['up', 'down', 'disabled', 'error'].map(s => `<span><i style="background:${STATE_COL[s]}"></i>${STATE_LABEL[s]}</span>`).join('')}<span><i style="border:1px solid var(--txt3)"></i>Non brassée</span>
@@ -132,6 +135,7 @@ function initPlanEvents(host) {
     const svg = $('svg.plan', host);
     if (!svg || e.button !== 0 || !e.target.closest('svg.plan')) return;
     const vb = Carto.vbs[Carto.floorId], sx = e.clientX, sy = e.clientY, inv = svg.getScreenCTM().inverse().a;
+    if (Carto.draw) return drawRoom(svg, e);
     const dragEl = Carto.edit ? e.target.closest('[data-drag]') : null;
     const start = { x: vb.x, y: vb.y }, p0 = svgPoint(svg, e);
     let last = null;
@@ -160,6 +164,24 @@ function initPlanEvents(host) {
   // Un glisser ne doit pas déclencher le clic de sélection
   host.addEventListener('click', e => { if (planDrag.moved) { e.stopPropagation(); e.preventDefault(); planDrag.moved = false; } }, true);
   host.addEventListener('dblclick', e => { const el = e.target.closest('[data-id]'); if (el && typeOf(el.dataset.id) === 'rack') select(el.dataset.id, { view: 'rack' }); });
+}
+/* Tracé d'une nouvelle pièce : rectangle aligné sur une grille de 50 cm, limité à l'étage */
+function drawRoom(svg, e) {
+  const f = byId(Carto.floorId), snap = v => Math.round(v * 2) / 2, pt = ev => { const p = svgPoint(svg, ev); return { x: clamp(snap(p.x / K), 0, f.width), y: clamp(snap(p.y / K), 0, f.height) }; };
+  const a = pt(e), g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  g.innerHTML = '<rect class="draw-rect"/><text class="draw-txt"/>'; svg.appendChild(g);
+  let r = null;
+  const move = ev => {
+    const b = pt(ev); r = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) };
+    const rect = g.firstChild; rect.setAttribute('x', r.x * K); rect.setAttribute('y', r.y * K); rect.setAttribute('width', r.w * K); rect.setAttribute('height', r.h * K);
+    const tx = g.lastChild; tx.setAttribute('x', r.x * K + 4); tx.setAttribute('y', r.y * K - 4); tx.textContent = `${r.w} × ${r.h} m`;
+    planDrag.moved = true;
+  };
+  const up = () => {
+    removeEventListener('pointermove', move); removeEventListener('pointerup', up); g.remove();
+    if (r && r.w >= 1 && r.h >= 1) roomDrawn(r); else if (r) toast('Pièce trop petite : 1 m au minimum de chaque côté', 'warn');
+  };
+  addEventListener('pointermove', move); addEventListener('pointerup', up);
 }
 /* Déplace une prise, un équipement ou une baie sur le plan */
 function moveOnPlan(id, x, y) {

@@ -63,7 +63,7 @@ Views.dash = {
     const pill = l => nLevel(l) ? `<span class="pill" style="--c:${levelColor(l)}"><i></i>${nLevel(l)} ${LEVEL_LABEL[l].toLowerCase()}${nLevel(l) > 1 ? 's' : ''}</span>` : '';
     const site = d.sites[0];
     $('#tab-dash').innerHTML = `<div class="dash">
-      <div class="dhead c12"><div><h2>Tableau de bord</h2><div class="muted">${esc(site ? site.name : 'Aucun site')} · ${plural(d.buildings.length, 'bâtiment')} · ${plural(d.floors.length, 'étage')} · mis à jour le ${fmtDateTime(d.meta.updatedAt)}</div></div></div>
+      <div class="dhead c12"><div><h2>Tableau de bord</h2><div class="muted">${esc(site ? site.name : 'Aucun site')} · ${plural(d.buildings.length, 'bâtiment')} · ${plural(d.floors.length, 'étage')} · mis à jour le ${fmtDateTime(d.meta.updatedAt)}</div></div><span class="grow"></span><button class="btn" data-act="vlans" data-tip="VLAN|Ajouter, renommer, recolorer ou supprimer un VLAN">${ico('floor')}VLAN (${d.vlans.length})</button></div>
       ${kpi('box', 'Équipements', s.devices, `dont ${s.active} actifs · ${plural(d.racks.length, 'baie')}`)}
       ${kpi('switch', 'Ports occupés', `${pct(s.portsUsed, s.ports)}<small> %</small>`, `${s.portsUsed} sur ${s.ports} ports`, pct(s.portsUsed, s.ports))}
       ${kpi('rack', 'Baies', `${pct(s.uUsed, s.uTotal)}<small> %</small>`, `${s.uUsed} U sur ${s.uTotal}`, pct(s.uUsed, s.uTotal))}

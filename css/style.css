@@ -139,7 +139,7 @@ main{flex:1;min-height:0;position:relative}
 .carto{display:grid;grid-template-columns:270px minmax(0,1fr) 360px;width:100%;height:100%}
 .c-tree,.c-detail{background:var(--panel);display:flex;flex-direction:column;min-height:0}
 .c-tree{border-right:1px solid var(--line)} .c-detail{border-left:1px solid var(--line);overflow:auto}
-.c-tree-h{padding:8px;border-bottom:1px solid var(--line)} .c-tree-h input{width:100%}
+.c-tree-h{padding:8px;border-bottom:1px solid var(--line);display:flex;gap:6px} .c-tree-h input{flex:1;min-width:0}
 #tree{overflow:auto;flex:1;padding:4px 0}
 .tn{display:flex;align-items:center;height:26px;white-space:nowrap;cursor:pointer;padding-right:8px}
 .tn:hover{background:var(--hover)}
@@ -323,6 +323,7 @@ table.it tr:hover .acts{opacity:1}
 
 /* --- Tableau de bord --- */
 .dash{width:100%;height:100%;overflow:auto;padding:20px 22px 26px;display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-content:start}
+.dhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .dhead h2{font-size:20px;font-weight:700;letter-spacing:-.2px;margin-bottom:2px}
 .dcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;min-width:0;display:flex;flex-direction:column;box-shadow:0 1px 2px var(--shadow)}
 .c3{grid-column:span 3} .c4{grid-column:span 4} .c5{grid-column:span 5} .c7{grid-column:span 7} .c12{grid-column:span 12}
@@ -407,6 +408,18 @@ svg.plan .rt-office,.fcard .rt-office{fill:var(--rt-office)} svg.plan .rt-open,.
 svg.plan .rt-tech,.fcard .rt-tech{fill:var(--rt-tech)} svg.plan .rt-server,.fcard .rt-server{fill:var(--rt-server)} svg.plan .rt-storage,.fcard .rt-storage{fill:var(--rt-storage)} svg.plan .rt-workshop,.fcard .rt-workshop{fill:var(--rt-workshop)}
 .fcard .room{stroke:var(--line3);stroke-width:3}
 
+/* --- Structure : base vide, tracé d'une pièce, VLAN --- */
+.empty-state{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;text-align:center}
+.empty-state .dico{width:64px;height:64px;border-radius:18px;background:var(--accent-bg);color:var(--accent);display:flex;align-items:center;justify-content:center}
+.empty-state .dico .ico{width:30px;height:30px}
+.empty-state p{max-width:520px;margin:0 0 6px}
+svg.plan.drawing{cursor:crosshair}
+svg.plan.drawing .pobj,svg.plan.drawing .room{pointer-events:none}
+svg.plan .draw-rect{fill:var(--accent-bg);stroke:var(--accent);stroke-width:2;stroke-dasharray:6 4;pointer-events:none}
+svg.plan .draw-txt{fill:var(--accent);font-size:8px;font-weight:700;pointer-events:none}
+.vl-row{display:grid;grid-template-columns:80px minmax(0,1fr) 46px minmax(0,1fr) 70px auto;gap:8px;align-items:center;margin-bottom:6px}
+.vl-row input{width:100%} .vl-row input[type=color]{padding:2px;height:30px;background:var(--input);border:1px solid var(--line2);border-radius:var(--r)}
+
 /* --- Supervision : pastille d'état de la source, dans l'en-tête --- */
 .live-dot{position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:50%;background:var(--txt3);border:1.5px solid var(--panel2)}
 .live-dot.ok{background:var(--up);animation:pulse 2s ease-in-out infinite}
@@ -450,6 +463,7 @@ svg.plan,svg.topo{touch-action:none}
   .form-grid,.form-grid[style]{grid-template-columns:1fr!important}
   .form-grid .full,.form-grid label[style]{grid-column:auto!important}
   .pg-row{grid-template-columns:1fr 1fr 1fr;padding:8px;border:1px solid var(--line);border-radius:8px}
+  .vl-row{grid-template-columns:70px 1fr 46px;padding:8px;border:1px solid var(--line);border-radius:8px}
   /* Cartographie : la vue occupe l'écran, l'arbre et la fiche s'ouvrent en volets */
   .carto{display:block;position:relative}
   .c-main{height:100%}

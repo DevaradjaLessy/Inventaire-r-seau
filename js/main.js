@@ -24,6 +24,7 @@ import './ui/carto/baie.js';
 import './ui/carto/tracage.js';
 import './ui/carto/connexion.js';
 import './ui/carto/topologie.js';
+import './ui/carto/structure.js';
 import './ui/inventaire.js';
 import './ui/recherche.js';
 import './ui/materiel/catalogue.js';
@@ -33,9 +34,10 @@ import './ui/materiel/modele.js';
 import './ui/tableau-de-bord.js';
 import './ui/sources.js';
 import { Live } from './services/mesures.js';
+import { addRoom, deleteStructure, deleteVlan } from './services/structure.js';
 
 Store.init();
 showTab(UI.tab);
 Live.load();
 Live.start();   // relevés de supervision, si une source est configurée
-window.NetCarto = { Live, Store, UI, Views, Views3D, Carto, trace, topology, connect, disconnect, installFromStock, removeDevice, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic
+window.NetCarto = { addRoom, deleteStructure, deleteVlan, Live, Store, UI, Views, Views3D, Carto, trace, topology, connect, disconnect, installFromStock, removeDevice, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic

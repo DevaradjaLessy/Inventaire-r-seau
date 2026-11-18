@@ -9,6 +9,7 @@ import { connectedLabel, effStatus, farEnd, isPassiveNode, otherEnd, outletInfo,
 import { Actions, Changes, Modal, run, stDev, stPort, toast, undoAction, vlanChip } from '../socle.js';
 import { Carto, iconOf } from './carto.js';
 import { traceSection } from './tracage.js';
+import { structButtons } from './structure.js';
 
 /* ---------- Fiche de détails ---------- */
 const kv = rows => `<dl class="kv">${rows.filter(r => r && r[1] !== '' && r[1] != null).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
@@ -48,17 +49,17 @@ function renderDetail() {
 const Detail = {
   site(e) {
     const s = scopeOf(e.id), blds = Store.idx.bldBySite.get(e.id) || [];
-    return dHead('site', e.name, esc(e.address)) + sec('Résumé', kv([['Code', esc(e.code)], ['Bâtiments', blds.length], ['Baies', s.racks.length], ['Équipements', s.devices.length], ['Prises murales', s.outlets.length]])) +
+    return dHead('site', e.name, esc(e.address)) + sec('', structButtons(e)) + sec('Résumé', kv([['Code', esc(e.code)], ['Bâtiments', blds.length], ['Baies', s.racks.length], ['Équipements', s.devices.length], ['Prises murales', s.outlets.length]])) +
       sec('Bâtiments', blds.map(b => li(b.id, b.name, plural(scopeOf(b.id).devices.length, 'équip.', 'équip.'))).join(''));
   },
   building(e) {
     const s = scopeOf(e.id), floors = Store.idx.floorsByBld.get(e.id) || [];
-    return dHead('building', e.name, `Code ${esc(e.code)} · ${esc(byId(e.siteId).name)}`) + sec('Résumé', kv([['Étages', floors.length], ['Baies', s.racks.length], ['Équipements', s.devices.length], ['Prises murales', s.outlets.length]])) +
+    return dHead('building', e.name, `Code ${esc(e.code)} · ${esc(byId(e.siteId).name)}`) + sec('', structButtons(e)) + sec('Résumé', kv([['Étages', floors.length], ['Baies', s.racks.length], ['Équipements', s.devices.length], ['Prises murales', s.outlets.length]])) +
       sec('Étages', floors.map(f => li(f.id, f.name, `${scopeOf(f.id).devices.length} équip. · ${scopeOf(f.id).outlets.length} prises`)).join(''));
   },
   floor(e) {
     const s = scopeOf(e.id), rooms = Store.idx.roomsByFloor.get(e.id) || [];
-    return dHead('floor', `${byId(e.buildingId).name.split(' — ')[0]} — ${e.name}`, `${e.width} × ${e.height} m`) + sec('Résumé', kv([['Pièces', rooms.length], ['Baies', s.racks.length], ['Équipements', s.devices.length], ['Prises murales', s.outlets.length]])) +
+    return dHead('floor', `${byId(e.buildingId).name.split(' — ')[0]} — ${e.name}`, `${e.width} × ${e.height} m`) + sec('', structButtons(e)) + sec('Résumé', kv([['Pièces', rooms.length], ['Baies', s.racks.length], ['Équipements', s.devices.length], ['Prises murales', s.outlets.length]])) +
       sec('Fond de plan', `<p class="muted" style="margin:0 0 8px">${e.planImage ? 'Un plan importé est affiché en fond.' : 'Aucune image : le plan est généré à partir des pièces.'}</p><div class="btns"><button class="btn sm" data-act="plan-img">${ico('image')}Importer un plan</button>${e.planImage ? `<button class="btn sm danger" data-act="plan-img-del">${ico('trash')}Retirer</button>` : ''}</div>`) +
       sec('Pièces', rooms.map(r => li(r.id, r.name, ROOM_TYPES[r.type]?.label || '')).join(''));
   },
@@ -66,6 +67,7 @@ const Detail = {
     const I = Store.idx, racks = I.racksByRoom.get(e.id) || [], devs = I.devByRoom.get(e.id) || [], outs = I.outByRoom.get(e.id) || [];
     const st = groupBy(outs, o => outletInfo(o.id).status);
     return dHead('room', e.name, `${ROOM_TYPES[e.type]?.label || ''} · ${locLabel(e.floorId)}`) +
+      sec('', structButtons(e)) +
       sec('Résumé', kv([['Surface', `${Math.round(e.w * e.h)} m²`], ['Dimensions', `${e.w} × ${e.h} m`], ['Baies', racks.length], ['Équipements', devs.length], ['Prises murales', outs.length], outs.length ? ['Prises actives', `${(st.get('up') || []).length} / ${outs.length}`] : null])) +
       sec('Baies', racks.map(r => li(r.id, r.name, `${rackUsage(r.id).pct} %`)).join('')) +
       sec('Équipements', devs.map(d => li(d.id, d.hostname, esc(catOf(d).model))).join('')) +
@@ -99,7 +101,7 @@ const Detail = {
     const form = passive ? `<div class="fld">${f('État', `<div class="ro"><span class="st"><i style="background:${STATE_COL[st]}"></i>${STATE_LABEL[st]}</span></div>`)}${f('Description', inp('description', p.description))}</div>` :
       `<div class="fld">
         ${f('État', `<select data-chg="port-f" data-id="${p.id}" data-f="status">${Object.entries(PORT_STATUS).map(([k, v]) => opt(k, v.label, p.status)).join('')}</select>`)}
-        ${f('VLAN', `<select data-chg="port-f" data-id="${p.id}" data-f="vlan">${opt('', 'Trunk (tous les VLAN)', p.vlan ?? '')}${[...(Store.idx.vlan.has(p.vlan) || p.vlan == null ? [] : [{ id: p.vlan, name: '' }]), ...Store.db.vlans].map(v => opt(v.id, `${v.id} ${v.name}`, p.vlan ?? '')).join('')}</select>`)}
+        ${f(`VLAN <a data-act="vlans" style="cursor:pointer;font-size:11px" data-tip="Gérer les VLAN">gérer</a>`, `<select data-chg="port-f" data-id="${p.id}" data-f="vlan">${opt('', 'Trunk (tous les VLAN)', p.vlan ?? '')}${[...(Store.idx.vlan.has(p.vlan) || p.vlan == null ? [] : [{ id: p.vlan, name: '' }]), ...Store.db.vlans].map(v => opt(v.id, `${v.id} ${v.name}`, p.vlan ?? '')).join('')}</select>`)}
         ${f('Débit', `<select data-chg="port-f" data-id="${p.id}" data-f="speed">${speeds.map(s => opt(s, fmtSpeed(s), p.speed)).join('')}</select>`)}
         ${p.poe.capable ? f('PoE (W)', `<input type="number" min="0" max="90" step="0.5" data-chg="port-f" data-id="${p.id}" data-f="watts" value="${p.poe.watts}">`) : f('PoE', '<div class="ro dim">Non disponible</div>')}
         ${f('Adresse MAC', inp('mac', p.mac, 'class="mono" placeholder="02:00:00:00:00:00"'))}

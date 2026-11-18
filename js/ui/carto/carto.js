@@ -19,6 +19,7 @@ const Carto = {
   filter: '',
   vbs: {},              // cadrage du plan, par étage
   edit: false, wifi: false, palette: false,
+  draw: false,          // tracé d'une nouvelle pièce à la souris
   trace: null,          // chemin de câblage affiché
   built: false,
 };
@@ -58,7 +59,7 @@ Views.carto = {
     const host = $('#tab-carto');
     if (!Carto.built) {
       host.innerHTML = `<div class="carto">
-        <aside class="c-tree"><div class="c-tree-h"><input type="search" data-inp="tree-filter" placeholder="Filtrer l'arborescence…"><button class="btn icon m-only" data-act="m-panel" data-p="" aria-label="Fermer">${ico('x')}</button></div><div id="tree"></div></aside>
+        <aside class="c-tree"><div class="c-tree-h"><input type="search" data-inp="tree-filter" placeholder="Filtrer l'arborescence…"><button class="btn icon" data-act="st-add" data-kind="site" data-tip="Nouveau site">${ico('plus')}</button><button class="btn icon m-only" data-act="m-panel" data-p="" aria-label="Fermer">${ico('x')}</button></div><div id="tree"></div></aside>
         <div class="c-main">
           <div class="c-bar"><button class="btn m-only" data-act="m-panel" data-p="tree">${ico('list')}Arbre</button><div id="crumb"></div><div class="seg" id="c-views"></div><button class="btn m-only" data-act="m-panel" data-p="detail">${ico('info')}Fiche</button></div>
           <div id="c-view"><div class="cv" id="v-plan"></div><div class="cv" id="v-rack"></div><div class="cv" id="v-topo"></div></div>
@@ -130,7 +131,7 @@ function renderTree() {
   };
   for (const s of Store.db.sites) node(s.id, 0);
   const top = host.scrollTop;
-  host.innerHTML = html.join('') || '<div class="empty">Aucun résultat</div>';
+  host.innerHTML = html.join('') || `<div class="empty">${Store.db.sites.length ? 'Aucun résultat' : 'Aucun site pour l\'instant'}</div>`;
   host.scrollTop = top;
 }
 function revealInTree() { $('#tree .tn.sel')?.scrollIntoView({ block: 'nearest' }); }

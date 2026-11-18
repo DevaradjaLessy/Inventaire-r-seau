@@ -2,7 +2,6 @@
 import { COL, DEVICE_STATUS, PORT_STATUS } from '../config.js';
 import { $, $$, clamp, download, esc, plural, today } from '../utils.js';
 import { ico } from '../icones.js';
-import { buildDemo } from '../demo.js';
 import { Store } from '../store.js';
 import { computeAlerts, vlanOf } from '../services/requetes.js';
 import { Live } from '../services/mesures.js';
@@ -38,6 +37,7 @@ const Theme = {
   },
 };
 function renderShell() {
+  $('.demo-tag').classList.toggle('hidden', !Store.db.meta.demo);
   const nAlerts = computeAlerts().filter(a => a.level !== 'warn' || a.kind === 'stock').length;
   $('#tabs').innerHTML = TABS.map(t => `<button data-act="tab" data-tab="${t.id}" class="${UI.tab === t.id ? 'on' : ''}">${ico(t.icon)}<span class="lg">${t.label}</span><span class="sh">${t.short || t.label}</span>${t.id === 'dash' && nAlerts ? `<span class="badge" data-tip="${plural(nAlerts, 'alerte')} à traiter">${nAlerts}</span>` : ''}</button>`).join('');
   $('#tools').innerHTML = `
@@ -46,7 +46,7 @@ function renderShell() {
     <button class="btn icon" data-act="import" data-tip="Importer|Charger un fichier JSON exporté depuis NetCarto">${ico('upload')}</button>
     <button class="btn icon" data-act="export" data-tip="Exporter|Télécharger toute la base au format JSON">${ico('download')}</button>
     <button class="btn icon" data-act="undo" ${Store.undoStack.length ? '' : 'disabled'} data-tip="Annuler (Ctrl+Z)|${esc(Store.undoStack.at(-1)?.text || 'Rien à annuler')}">${ico('undo')}</button>
-    <button class="btn icon" data-act="reset" data-tip="Réinitialiser la démo|Recharger le jeu de données fictif d'origine">${ico('reset')}</button>`;
+    <button class="btn icon" data-act="reset" data-tip="Réinitialiser|Recharger la démonstration ou repartir d'une base vide">${ico('reset')}</button>`;
 }
 function showTab(id) {
   UI.tab = id;
@@ -178,10 +178,4 @@ $('#file-import').addEventListener('change', async e => {
     }, 'Importer');
   } catch (err) { toast(`Import impossible : ${err.message}`, 'err'); }
 });
-Actions.reset = () => Modal.confirm('Réinitialiser la démo', 'Recharger le jeu de données fictif d\'origine ? Les modifications faites dans ce navigateur seront remplacées (annulable avec Ctrl+Z).', () => {
-  Store.replace(buildDemo(), 'Réinitialisation du jeu de données de démonstration');
-  toast('Jeu de démonstration rechargé', 'ok', undoAction);
-  return true;
-}, 'Réinitialiser', 'danger');
-
 export { Actions, Changes, Inputs, isMobile, levelColor, Modal, renderActive, renderShell, run, showTab, stDev, stPort, TABS, Tip, toast, UI, undoAction, Views, vlanChip };

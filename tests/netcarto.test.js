@@ -133,6 +133,40 @@ test('Tableau de bord et alertes cliquables', async page => {
   await page.click('.al'); await page.waitForTimeout(200);
   assert.strictEqual(await page.$eval('.tab.on', e => e.id), 'tab-carto');
 });
+test('Base vide : site, bâtiment, étage, pièces (formulaire et tracé), baie, VLAN', async page => {
+  await page.click('[data-act=reset]'); await page.check('input[value=vide]'); await page.click('[data-act=modal-ok]');
+  assert.deepStrictEqual(await page.evaluate(() => { const d = NetCarto.Store.db; return [d.sites.length, d.devices.length, d.catalog.length, d.meta.demo, d.stock.every(s => s.available === 0)]; }), [0, 0, 34, false, true]);
+  assert.ok(await page.isVisible('.empty-state')); assert.ok(await page.isHidden('.demo-tag'));
+  // Les quatre onglets s'affichent sans erreur sur une base vide
+  for (const t of ['inv', 'mat', 'dash', 'carto']) await page.click(`[data-tab=${t}]`);
+  const creer = async (bouton, champs) => { await page.click(bouton); await page.waitForSelector('.modal'); for (const [k, v] of Object.entries(champs)) await page.fill(`.modal [name=${k}]`, String(v)); await page.click('[data-act=modal-ok]'); await page.waitForTimeout(120); };
+  await creer('.empty-state [data-kind=site]', { name: 'Siège', code: 'sge', address: '1 rue du Test' });
+  await creer('#detail [data-kind=building]', { name: 'Bâtiment Principal', code: 'p' });
+  await creer('#detail [data-kind=floor]', { name: 'RDC', level: 0, width: 30, height: 20 });
+  await creer('#detail [data-kind=room]', { name: 'Local technique', x: 0, y: 0, w: 6, h: 5 });
+  assert.deepStrictEqual(await page.evaluate(() => { const d = NetCarto.Store.db; return [d.sites[0].code, d.buildings[0].code, d.floors[0].width, d.rooms[0].name, d.history[0].type]; }), ['SGE', 'P', 30, 'Local technique', 'add']);
+  // Refus : pièce qui chevauche, pièce hors de l'étage
+  const refus = v => page.evaluate(x => { try { NetCarto.addRoom(NetCarto.Store.db.floors[0].id, x); return ''; } catch (e) { return e.message; } }, v);
+  assert.match(await refus({ name: 'X', x: 3, y: 2, w: 6, h: 5 }), /chevauche/); assert.match(await refus({ name: 'X', x: 28, y: 0, w: 6, h: 5 }), /dépasse/);
+  // Tracé d'une pièce à la souris
+  await page.evaluate(() => NetCarto.select(NetCarto.Store.db.floors[0].id)); await page.click('.overlay [data-act=plan-draw]');
+  const pos = await page.evaluate(() => { const svg = document.querySelector('svg.plan'), m = svg.getScreenCTM(), pt = (x, y) => { const p = new DOMPoint(x * 20, y * 20).matrixTransform(m); return [p.x, p.y]; }; return [pt(10, 8), pt(18, 14)]; });
+  await page.mouse.move(...pos[0]); await page.mouse.down(); await page.mouse.move(...pos[1], { steps: 6 }); await page.mouse.up();
+  await page.waitForSelector('.modal'); await page.fill('.modal [name=name]', 'Open space'); await page.click('[data-act=modal-ok]');
+  assert.deepStrictEqual(await page.evaluate(() => { const r = NetCarto.Store.db.rooms.at(-1); return [r.name, r.x, r.y, r.w, r.h]; }), ['Open space', 10, 8, 8, 6]);
+  // Une baie puis un switch s'installent dans la nouvelle structure
+  const r = await page.evaluate(() => { const S = NetCarto.Store, d = S.db; S.commit('stock', '', db => { for (const s of db.stock) s.available = 2; });
+    const room = d.rooms[0], rk = NetCarto.installFromStock('cat-rack42', { roomId: room.id, x: 2, y: 2 }), sw = NetCarto.installFromStock('cat-c9200l-24p-4g', { rackId: rk, u: 40 });
+    return [S.idx.id.get(rk).name, S.idx.id.get(sw).hostname]; });
+  assert.deepStrictEqual(r, ['BAIE-P0-01', 'SW-P0-01']);
+  // Suppression refusée tant que l'élément n'est pas vide
+  assert.match(await page.evaluate(() => { try { NetCarto.deleteStructure(NetCarto.Store.db.rooms[0].id); return ''; } catch (e) { return e.message; } }), /contient encore/);
+  // VLAN : ajout, puis suppression refusée s'il est utilisé
+  await page.click('[data-tab=dash]'); await page.click('[data-act=vlans]'); await page.fill('#vlan-new [data-f=id]', '300'); await page.fill('#vlan-new [data-f=name]', 'labo'); await page.click('[data-act=vlan-add]');
+  assert.deepStrictEqual(await page.evaluate(() => { const v = NetCarto.Store.db.vlans.find(x => x.id === 300); return [v.name, NetCarto.Store.db.vlans.length]; }), ['LABO', 9]);
+  assert.strictEqual(await page.evaluate(() => { NetCarto.Store.db.ports[0].vlan = 300; try { NetCarto.deleteVlan(300); return ''; } catch (e) { return e.message.includes('encore affecté'); } }), true);
+  assert.strictEqual(await page.evaluate(() => NetCarto.Store.validate(JSON.parse(JSON.stringify(NetCarto.Store.db)))), null);
+});
 test('Thème clair et sombre, mémorisé', async page => {
   await page.click('[data-act=theme]');
   assert.strictEqual(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), 'rgb(243, 246, 244)');
