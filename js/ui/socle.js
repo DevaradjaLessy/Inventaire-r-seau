@@ -24,10 +24,21 @@ const stDev = s => `<span class="st"><i style="background:${DEVICE_STATUS[s].col
 const vlanChip = v => { const x = vlanOf(v); return `<span class="vl"><i style="background:${x.color}"></i>${v == null ? 'Trunk' : `${x.id} ${esc(x.name)}`}</span>`; };
 const levelColor = l => ({ crit: COL.crit, serious: COL.serious, warn: COL.warn }[l]);
 
+/* Thème clair ou sombre, mémorisé dans le navigateur */
+const Theme = {
+  KEY: 'netcarto:theme',
+  get() { return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'; },
+  set(t) {
+    document.documentElement.dataset.theme = t;
+    try { localStorage.setItem(this.KEY, t); } catch { /* stockage indisponible : le choix vaut pour cette visite */ }
+    document.dispatchEvent(new Event('netcarto:theme'));
+  },
+};
 function renderShell() {
   const nAlerts = computeAlerts().filter(a => a.level !== 'warn' || a.kind === 'stock').length;
   $('#tabs').innerHTML = TABS.map(t => `<button data-act="tab" data-tab="${t.id}" class="${UI.tab === t.id ? 'on' : ''}">${ico(t.icon)}${t.label}${t.id === 'dash' && nAlerts ? `<span class="badge" data-tip="${plural(nAlerts, 'alerte')} à traiter">${nAlerts}</span>` : ''}</button>`).join('');
   $('#tools').innerHTML = `
+    <button class="btn icon" data-act="theme" data-tip="${Theme.get() === 'dark' ? 'Passer au thème clair' : 'Passer au thème sombre'}|Le choix est mémorisé dans ce navigateur">${ico(Theme.get() === 'dark' ? 'sun' : 'moon')}</button>
     <button class="btn icon" data-act="import" data-tip="Importer|Charger un fichier JSON exporté depuis NetCarto">${ico('upload')}</button>
     <button class="btn icon" data-act="export" data-tip="Exporter|Télécharger toute la base au format JSON">${ico('download')}</button>
     <button class="btn icon" data-act="undo" ${Store.undoStack.length ? '' : 'disabled'} data-tip="Annuler (Ctrl+Z)|${esc(Store.undoStack.at(-1)?.text || 'Rien à annuler')}">${ico('undo')}</button>
@@ -136,6 +147,7 @@ document.addEventListener('keydown', e => {
 
 /* --- Actions de l'en-tête --- */
 Actions.tab = el => showTab(el.dataset.tab);
+Actions.theme = () => { Theme.set(Theme.get() === 'dark' ? 'light' : 'dark'); renderShell(); };
 Actions.undo = () => { const t = Store.undo(); if (t) toast(`Annulé : ${t}`, 'ok'); };
 Actions.export = () => {
   download(`netcarto-export-${today()}.json`, JSON.stringify(Store.db, null, 1));

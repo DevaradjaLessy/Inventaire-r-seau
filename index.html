@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NetCarto — Cartographie et inventaire réseau</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%23111821'/%3E%3Cpath d='M5 17V7l7 10V7m4 0h3m-3 5h3m-3 5h3' stroke='%2338bdf8' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%23111a18'/%3E%3Cpath d='M5 17V7l7 10V7m4 0h3m-3 5h3m-3 5h3' stroke='%2334d399' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <!-- Three.js 0.160.0 par CDN (seule bibliothèque externe) -->
 <script type="importmap">
 { "imports": {
@@ -12,12 +12,14 @@
   "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
 } }
 </script>
+<!-- Thème mémorisé, appliqué avant l'affichage pour éviter un flash -->
+<script>try { document.documentElement.dataset.theme = localStorage.getItem('netcarto:theme') === 'light' ? 'light' : 'dark'; } catch (e) { document.documentElement.dataset.theme = 'dark'; }</script>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <header id="topbar">
   <div class="brand">
-    <svg viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="22" height="22" rx="5" fill="#0c1219" stroke="#1f2b39" stroke-width="1"/><path d="M5 17V7l7 10V7m4 0h3m-3 5h3m-3 5h3"/></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="22" height="22" rx="5" fill="var(--input)" stroke="var(--line)" stroke-width="1"/><path d="M5 17V7l7 10V7m4 0h3m-3 5h3m-3 5h3"/></svg>
     <span>Net<b>Carto</b></span>
     <span class="demo-tag" data-tip="Données fictives|Cette page est publique : toutes les données affichées sont inventées.">Données fictives</span>
   </div>

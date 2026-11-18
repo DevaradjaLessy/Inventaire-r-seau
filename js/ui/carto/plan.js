@@ -16,15 +16,15 @@ const planDrag = { moved: false };
 function planSvg(floor, mini) {
   const I = Store.idx, rooms = I.roomsByFloor.get(floor.id) || [], sel = Carto.sel, o = [];
   const W = floor.width * K, H = floor.height * K;
-  if (!mini) o.push(`<defs><pattern id="grid" width="${K}" height="${K}" patternUnits="userSpaceOnUse"><path d="M${K} 0H0V${K}" fill="none" stroke="#0f1620" stroke-width="1"/></pattern>
+  if (!mini) o.push(`<defs><pattern id="grid" width="${K}" height="${K}" patternUnits="userSpaceOnUse"><path d="M${K} 0H0V${K}" fill="none" stroke="var(--grid)" stroke-width="1"/></pattern>
     <radialGradient id="wifi"><stop offset="0" stop-color="#199e70" stop-opacity=".34"/><stop offset=".6" stop-color="#199e70" stop-opacity=".12"/><stop offset="1" stop-color="#199e70" stop-opacity="0"/></radialGradient>
     <clipPath id="fclip"><rect width="${W}" height="${H}"/></clipPath></defs>
     <rect x="-2000" y="-2000" width="${W + 4000}" height="${H + 4000}" fill="url(#grid)"/>`);
-  o.push(`<rect width="${W}" height="${H}" fill="#0b1118" stroke="#4b6180" stroke-width="5"/>`);
+  o.push(`<rect width="${W}" height="${H}" fill="var(--floor)" stroke="var(--line4)" stroke-width="5"/>`);
   if (floor.planImage && !mini) o.push(`<image href="${esc(floor.planImage)}" width="${W}" height="${H}" preserveAspectRatio="none" opacity=".85"/>`);
   for (const r of rooms) {
     const x = r.x * K, y = r.y * K, w = r.w * K, h = r.h * K, rt = ROOM_TYPES[r.type] || ROOM_TYPES.office;
-    o.push(`<rect class="room ${sel === r.id ? 'sel' : ''}" x="${x}" y="${y}" width="${w}" height="${h}" fill="${rt.fill}" ${floor.planImage && !mini ? 'fill-opacity=".35"' : ''} ${mini ? '' : `data-act="psel" data-id="${r.id}" data-tip="${esc(r.name)}|${rt.label} · ${Math.round(r.w * r.h)} m²"`}/>`);
+    o.push(`<rect class="room rt-${ROOM_TYPES[r.type] ? r.type : 'office'} ${sel === r.id ? 'sel' : ''}" x="${x}" y="${y}" width="${w}" height="${h}" ${floor.planImage && !mini ? 'fill-opacity=".35"' : ''} ${mini ? '' : `data-act="psel" data-id="${r.id}" data-tip="${esc(r.name)}|${rt.label} · ${Math.round(r.w * r.h)} m²"`}/>`);
     if (!mini) {
       const fs = clamp(Math.min(w / (r.name.length * 0.56), h / 3.2), 4.5, 11);
       o.push(`<text class="rname" x="${x + w / 2}" y="${y + h * 0.3}" font-size="${fs.toFixed(1)}">${esc(r.name)}</text>`);
@@ -40,12 +40,12 @@ function planSvg(floor, mini) {
   // Baies
   for (const r of rooms) for (const rk of I.racksByRoom.get(r.id) || []) {
     const s = rackSize(rk), u = rackUsage(rk.id), w = s.w * K, d = s.d * K;
-    const col = u.pct >= RACK_FULL_PCT ? COL.serious : '#8b9bb0';
+    const col = u.pct >= RACK_FULL_PCT ? COL.serious : 'var(--txt2)';
     o.push(`<g class="pobj ${sel === rk.id || Carto.rackId === rk.id && locOf(sel).rack?.id === rk.id ? 'sel' : ''}" transform="translate(${rk.x * K},${rk.y * K})" ${mini ? '' : `data-act="psel" data-id="${rk.id}" data-drag="${rk.id}" data-tip="${esc(rk.name)}|${esc(catOf(rk)?.model || '')}|Occupation : ${u.used}/${u.total} U (${u.pct} %)|Double-clic : ouvrir la vue 3D"`}>
       <rect class="ring" x="${-w / 2 - 4}" y="${-d / 2 - 4}" width="${w + 8}" height="${d + 8}" rx="3"/>
       <rect x="${-w / 2}" y="${-d / 2}" width="${w}" height="${d}" fill="#0a0e13" stroke="${col}" stroke-width="1.6" rx="1.5"/>
       <rect x="${-w / 2 + 2}" y="${d / 2 - 4}" width="${(w - 4) * u.pct / 100}" height="2" fill="${col}"/>
-      <path d="M${-w / 2 + 3} ${-d / 2 + 4}h${w - 6}M${-w / 2 + 3} ${-d / 2 + 8}h${w - 6}M${-w / 2 + 3} ${-d / 2 + 12}h${w - 6}" stroke="#3a4d66" stroke-width="1.2"/>
+      <path d="M${-w / 2 + 3} ${-d / 2 + 4}h${w - 6}M${-w / 2 + 3} ${-d / 2 + 8}h${w - 6}M${-w / 2 + 3} ${-d / 2 + 12}h${w - 6}" stroke="var(--line3)" stroke-width="1.2"/>
       ${mini ? '' : `<text class="rlabel" y="${d / 2 + 9}">${esc(rk.name)}</text>`}</g>`);
   }
   if (mini) return o.join('');
@@ -56,7 +56,7 @@ function planSvg(floor, mini) {
     const tip = [`Prise ${ot.label}`, `Usage : ${OUTLET_USAGE[ot.usage]}`, inf.pp ? `Panneau : ${labelOf(inf.pp.id)}` : 'Non reliée à un panneau', inf.net ? `Switch : ${labelOf(inf.net.id)}` : 'Non brassée', `État : ${STATE_LABEL[inf.status]}${inf.net && inf.net.vlan != null ? ` · VLAN ${inf.net.vlan} ${vlanOf(inf.net.vlan).name}` : ''}`].join('|');
     o.push(`<g class="pobj ${sel === ot.id ? 'sel' : ''}" transform="translate(${(ot.x + off) * K},${(ot.y + off) * K})" data-act="psel" data-id="${ot.id}" data-drag="${ot.id}" data-tip="${esc(tip)}">
       <rect class="hit" x="-6" y="-6" width="12" height="12"/><rect class="ring" x="-6.5" y="-6.5" width="13" height="13" rx="2"/>
-      <rect x="-3.5" y="-3.5" width="7" height="7" rx="1" fill="${hollow ? '#0b1118' : STATE_COL[inf.status]}" stroke="${hollow ? '#5d6c80' : '#05080c'}" stroke-width="${hollow ? 1.2 : 0.8}" ${inf.status === 'disabled' ? 'stroke-dasharray="1.5 1.2" stroke="#8b9bb0"' : ''}/>
+      <rect x="-3.5" y="-3.5" width="7" height="7" rx="1" fill="${hollow ? 'var(--floor)' : STATE_COL[inf.status]}" stroke="${hollow ? 'var(--txt3)' : 'var(--ink)'}" stroke-width="${hollow ? 1.2 : 0.8}" ${inf.status === 'disabled' ? 'stroke-dasharray="1.5 1.2" stroke="var(--txt2)"' : ''}/>
       <text class="lbl" x="5.5" y="1.8">${esc(ot.label)}</text></g>`);
   }
   // Équipements hors baie
@@ -68,13 +68,13 @@ function planSvg(floor, mini) {
     o.push(`<g class="pobj ${sel === d.id || locOf(sel).device?.id === d.id ? 'sel' : ''}" transform="translate(${d.x * K},${d.y * K})" data-act="psel" data-id="${d.id}" data-drag="${d.id}" data-tip="${esc(tip)}">
       <circle class="ring" r="${r + 3.5}"/>
       ${c.category === 'camera' ? `<path d="M0 0 L-26 14 A30 30 0 0 0 -14 26 Z" fill="${cc.color}" opacity=".22"/>` : ''}
-      <circle r="${r}" fill="${cc.color}" stroke="${bad || '#05080c'}" stroke-width="${bad ? 2 : 1}"/>
+      <circle r="${r}" fill="${cc.color}" stroke="${bad || 'var(--ink)'}" stroke-width="${bad ? 2 : 1}"/>
       <path d="${ICONS[cc.icon]}" transform="translate(${-r * 0.62},${-r * 0.62}) scale(${r * 0.052})" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
       <text class="lbl" x="${r + 2}" y="1.8">${esc(d.hostname)}</text></g>`);
   }
   o.push('<g id="plan-trace"></g>');
   // Échelle : 5 m
-  o.push(`<g transform="translate(0,${H + 14})" pointer-events="none"><path d="M0 0v5h${5 * K}v-5" fill="none" stroke="#5d6c80" stroke-width="1.2"/><text x="${5 * K + 5}" y="6" fill="#5d6c80" font-size="8">5 m</text></g>`);
+  o.push(`<g transform="translate(0,${H + 14})" pointer-events="none"><path d="M0 0v5h${5 * K}v-5" fill="none" stroke="var(--txt3)" stroke-width="1.2"/><text x="${5 * K + 5}" y="6" fill="var(--txt3)" font-size="8">5 m</text></g>`);
   return o.join('');
 }
 function fitVb(floor) { const m = 2 * K; return { x: -m, y: -m, w: floor.width * K + 2 * m, h: floor.height * K + 2 * m + 10 }; }
@@ -103,8 +103,8 @@ function renderPlan() {
       <button class="btn ${Carto.edit ? 'on' : ''}" data-act="plan-edit" data-tip="Mode Édition|Déplacer les prises, bornes, caméras, téléphones et baies à la souris">${ico('move')}Édition</button>
       <button class="btn ${Carto.palette ? 'on' : ''}" data-act="palette" data-tip="Stock|Glisser un modèle du stock sur le plan pour l'installer">${ico('box')}Stock</button>
       ${Carto.trace ? `<button class="btn on" data-act="trace-clear">${ico('x')}Effacer le tracé</button>` : ''}</div>
-    <div class="overlay bl legend"><b>Prises</b>${['up', 'down', 'disabled', 'error'].map(s => `<span><i style="background:${STATE_COL[s]}"></i>${STATE_LABEL[s]}</span>`).join('')}<span><i style="border:1px solid #5d6c80"></i>Non brassée</span>
-      <b>Équipements</b>${['ap', 'camera', 'phone'].map(c => `<span><i style="background:${CATEGORIES[c].color};border-radius:50%"></i>${CATEGORIES[c].one}</span>`).join('')}<span><i style="border:1.5px solid #8b9bb0;height:13px;width:9px"></i>Baie</span></div>
+    <div class="overlay bl legend"><b>Prises</b>${['up', 'down', 'disabled', 'error'].map(s => `<span><i style="background:${STATE_COL[s]}"></i>${STATE_LABEL[s]}</span>`).join('')}<span><i style="border:1px solid var(--txt3)"></i>Non brassée</span>
+      <b>Équipements</b>${['ap', 'camera', 'phone'].map(c => `<span><i style="background:${CATEGORIES[c].color};border-radius:50%"></i>${CATEGORIES[c].one}</span>`).join('')}<span><i style="border:1.5px solid var(--txt2);height:13px;width:9px"></i>Baie</span></div>
     <div id="palette-host"></div>`;
   applyVb($('svg.plan', host));
   renderPalette?.('plan');

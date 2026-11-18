@@ -16,4 +16,4 @@ $('#gsearch').addEventListener('input', renderGSearch);
 $('#gsearch').addEventListener('focus', renderGSearch);
 $('#gsearch').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); Actions['gs-all'](); } });
 Actions['gs-go'] = el => { $('#gsearch-res').classList.add('hidden'); Actions.go(el); };
-Actions['gs-all'] = () => { Object.assign(Inv, { q: $('#gsearch').value, type: '', bld: '', status: '', brand: '', page: 0 }); $('#gsearch-res').classList.add('hidden'); $('#gsearch').blur(); UI.dirty.add('inv'); showTab('inv'); };
+Actions['gs-all'] = () => { Object.assign(Inv, { q: $('#gsearch').value, group: '', type: '', bld: '', status: '', brand: '', page: 0 }); $('#gsearch-res').classList.add('hidden'); $('#gsearch').blur(); UI.dirty.add('inv'); showTab('inv'); };

@@ -54,7 +54,7 @@ function drawPlanTrace() {
   for (let i = 1; i < pts.length; i++) d += ` L${pts[i].x} ${pts[i - 1].y} L${pts[i].x} ${pts[i].y}`;
   const last = pts.at(-1), others = tr.nodes.some(n => !tracePoint(n, Carto.floorId));
   g.innerHTML = `<path class="trace-line" d="${d}"/>${pts.map(p => `<circle class="trace-halo" cx="${p.x}" cy="${p.y}" r="11"/>`).join('')}
-    ${others ? `<text x="${last.x + 14}" y="${last.y - 12}" fill="#38bdf8" font-size="8" font-weight="700">↗ suite du chemin sur un autre étage</text>` : ''}`;
+    ${others ? `<text x="${last.x + 14}" y="${last.y - 12}" fill="var(--hl)" font-size="8" font-weight="700">↗ suite du chemin sur un autre étage</text>` : ''}`;
 };
 
 export { drawPlanTrace, traceSection };

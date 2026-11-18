@@ -44,7 +44,7 @@ Views.dash = {
     // Matrice type × bâtiment : teinte unique, plus dense quand la valeur monte
     const mxMax = Math.max(1, ...cats.flatMap(k => d.buildings.map(b => s.byCat.get(k).filter(x => locOf(x.id).building?.id === b.id).length)));
     const matrix = `<table class="mx"><thead><tr><th></th>${d.buildings.map(b => `<th style="text-align:center">Bât. ${esc(b.code)}</th>`).join('')}<th style="text-align:center">Total</th></tr></thead><tbody>${cats.map(k => { const row = d.buildings.map(b => s.byCat.get(k).filter(x => locOf(x.id).building?.id === b.id).length);
-      return `<tr><th>${CATEGORIES[k].label}</th>${row.map((n, i) => `<td style="background:rgba(56,189,248,${n ? (0.1 + 0.5 * n / mxMax).toFixed(2) : 0.03})" data-tip="${CATEGORIES[k].label} — Bât. ${esc(d.buildings[i].code)}|${plural(n, 'équipement')}">${n || '·'}</td>`).join('')}<td><b>${sum(row)}</b></td></tr>`; }).join('')}</tbody></table>`;
+      return `<tr><th>${CATEGORIES[k].label}</th>${row.map((n, i) => `<td style="background:color-mix(in srgb, var(--accent) ${n ? Math.round(10 + 50 * n / mxMax) : 3}%, transparent)" data-tip="${CATEGORIES[k].label} — Bât. ${esc(d.buildings[i].code)}|${plural(n, 'équipement')}">${n || '·'}</td>`).join('')}<td><b>${sum(row)}</b></td></tr>`; }).join('')}</tbody></table>`;
     const states = ['up', 'down', 'disabled', 'error'].map(k => ({ k, n: (s.portStates.get(k) || []).length }));
     const crit = alerts.filter(a => a.level === 'crit').length;
     $('#tab-dash').innerHTML = `<div class="dash">

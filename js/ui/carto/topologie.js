@@ -28,10 +28,10 @@ function renderTopo() {
     list.forEach((d, i) => pos.set(d.id, { x: 120 + (W - 140) / 2 + (i - (list.length - 1) / 2) * step, y: y + (stag(list) ? (i % 2) * 84 : 0) }));
   }
   const o = [];
-  for (const [k, y] of rows) o.push(`<rect x="0" y="${y - 50}" width="${W}" height="${stag(byLayer[k]) ? 202 : 118}" fill="${k === 'core' || k === 'access' ? '#0c1219' : '#0a0f15'}"/><text x="14" y="${y - 30}" fill="#5d6c80" font-size="11" font-weight="700" letter-spacing="1">${LAYERS[k].toUpperCase()}</text>`);
+  for (const [k, y] of rows) o.push(`<rect x="0" y="${y - 50}" width="${W}" height="${stag(byLayer[k]) ? 202 : 118}" fill="${k === 'core' || k === 'access' ? 'var(--input)' : 'var(--canvas2)'}"/><text x="14" y="${y - 30}" fill="var(--txt3)" font-size="11" font-weight="700" letter-spacing="1">${LAYERS[k].toUpperCase()}</text>`);
   // Lien WAN
   const wanRtr = tp.nodes.find(d => portsOf(d.id).some(p => /opérateur|internet|wan/i.test(p.connected)) && pos.has(d.id));
-  if (wanRtr) { const p = pos.get(wanRtr.id); o.push(`<path d="M${p.x} ${p.y - NH / 2}V58" stroke="#5d6c80" stroke-width="2" stroke-dasharray="5 4"/><g transform="translate(${p.x},40)"><ellipse rx="70" ry="20" fill="#111821" stroke="#5d6c80" stroke-width="1.5"/><text text-anchor="middle" y="4" fill="#8b9bb0" font-size="12" font-weight="600">Internet / WAN</text></g>`); }
+  if (wanRtr) { const p = pos.get(wanRtr.id); o.push(`<path d="M${p.x} ${p.y - NH / 2}V58" stroke="var(--txt3)" stroke-width="2" stroke-dasharray="5 4"/><g transform="translate(${p.x},40)"><ellipse rx="70" ry="20" fill="var(--panel)" stroke="var(--txt3)" stroke-width="1.5"/><text text-anchor="middle" y="4" fill="var(--txt2)" font-size="12" font-weight="600">Internet / WAN</text></g>`); }
   // Liens
   for (const l of tp.links) {
     const a = pos.get(l.a), b = pos.get(l.b); if (!a || !b) continue;
@@ -41,8 +41,8 @@ function renderTopo() {
     const path = u.y === d.y ? `M${u.x} ${u.y + NH / 2}C${u.x} ${u.y + NH / 2 + 34},${d.x} ${d.y + NH / 2 + 34},${d.x} ${d.y + NH / 2}` : `M${u.x} ${u.y + NH / 2}C${u.x} ${(u.y + d.y) / 2},${d.x} ${(u.y + d.y) / 2},${d.x} ${d.y - NH / 2}`;
     const sp = Math.max(...l.pairs.map(([p]) => p.speed));
     const tip = [`${byId(l.a).hostname} ↔ ${byId(l.b).hostname}`, ...l.pairs.map(([p, q]) => `${p.name} ↔ ${q.name} · ${fmtSpeed(Math.min(p.speed, q.speed))} · ${STATE_LABEL[p.status === 'up' && q.status === 'up' ? 'up' : p.status === 'error' || q.status === 'error' ? 'error' : 'down']}`)].join('|');
-    o.push(`<path d="${path}" fill="none" stroke="transparent" stroke-width="12" data-tip="${esc(tip)}"/><path class="tlink ${hl ? 'hl' : ''}" d="${path}" fill="none" stroke="${st === 'error' ? COL.crit : st === 'down' ? COL.down : sp >= 10000 ? '#6f8fb5' : '#4d6480'}" stroke-width="${l.pairs.length > 1 ? 3.2 : 1.8}" ${st === 'down' ? 'stroke-dasharray="5 4"' : ''} pointer-events="none"/>`);
-    if (l.pairs.length > 1) { const mx = (u.x + d.x) / 2, my = u.y === d.y ? u.y + NH / 2 + 26 : (u.y + d.y) / 2; o.push(`<g pointer-events="none"><rect x="${mx - 11}" y="${my - 8}" width="22" height="16" rx="8" fill="#111821" stroke="#2c3c50"/><text x="${mx}" y="${my + 4}" text-anchor="middle" fill="#8b9bb0" font-size="10" font-weight="700">×${l.pairs.length}</text></g>`); }
+    o.push(`<path d="${path}" fill="none" stroke="transparent" stroke-width="12" data-tip="${esc(tip)}"/><path class="tlink ${hl ? 'hl' : ''}" d="${path}" fill="none" stroke="${st === 'error' ? COL.crit : st === 'down' ? COL.down : sp >= 10000 ? 'var(--link2)' : 'var(--link1)'}" stroke-width="${l.pairs.length > 1 ? 3.2 : 1.8}" ${st === 'down' ? 'stroke-dasharray="5 4"' : ''} pointer-events="none"/>`);
+    if (l.pairs.length > 1) { const mx = (u.x + d.x) / 2, my = u.y === d.y ? u.y + NH / 2 + 26 : (u.y + d.y) / 2; o.push(`<g pointer-events="none"><rect x="${mx - 11}" y="${my - 8}" width="22" height="16" rx="8" fill="var(--panel)" stroke="var(--line2)"/><text x="${mx}" y="${my + 4}" text-anchor="middle" fill="var(--txt2)" font-size="10" font-weight="700">×${l.pairs.length}</text></g>`); }
   }
   // Nœuds
   const selDev = locOf(Carto.sel || '').device?.id;
@@ -53,7 +53,7 @@ function renderTopo() {
     o.push(`<g class="tnode ${selDev === d.id ? 'sel' : ''} ${tr?.devSet.has(d.id) ? 'hl' : ''}" transform="translate(${p.x - NW / 2},${p.y - NH / 2})" data-act="psel" data-id="${d.id}" data-tip="${esc([d.hostname, `${c.brand} ${c.model}`, d.ip ? `IP : ${d.ip}` : '', locLabel(d.id), `Ports actifs : ${used}/${portsOf(d.id).length}`, `Niveau : ${LAYERS[tp.layer.get(d.id)]}`].filter(Boolean).join('|'))}">
       <rect class="tb" width="${NW}" height="${NH}" rx="7"/><rect width="5" height="${NH}" rx="2" fill="${cc.color}"/>
       <path d="${ICONS[cc.icon]}" transform="translate(13,14) scale(.9)" fill="none" stroke="${cc.color}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
-      <text x="42" y="22" fill="#d7e0ea" font-size="11.5" font-weight="700">${esc(d.hostname)}</text><text x="42" y="37" fill="#8b9bb0" font-size="10">${esc(c.model.length > 19 ? c.model.slice(0, 18) + '…' : c.model)}</text>
+      <text x="42" y="22" fill="var(--txt)" font-size="11.5" font-weight="700">${esc(d.hostname)}</text><text x="42" y="37" fill="var(--txt2)" font-size="10">${esc(c.model.length > 19 ? c.model.slice(0, 18) + '…' : c.model)}</text>
       ${bad ? `<circle cx="${NW - 9}" cy="9" r="4.5" fill="${bad}"/>` : ''}</g>`);
     if (Topo.ends) {
       const e = tp.ends.get(d.id) || [], g2 = groupBy(e, x => catOf(x).category);
@@ -61,14 +61,14 @@ function renderTopo() {
       const short = { ap: 'bornes', phone: 'tél.', camera: 'cam.', server: 'serveurs', ups: 'ond.' };
       const parts = [...g2].map(([k, a]) => `${a.length} ${short[k] || CATEGORIES[k].label.toLowerCase()}`); if (pcs) parts.push(`${pcs} postes`);
       const lines = []; for (let i = 0; i < parts.length; i += 2) lines.push(parts.slice(i, i + 2).join(' · '));
-      lines.slice(0, 2).forEach((s, i) => o.push(`<text x="${p.x}" y="${p.y + NH / 2 + 14 + i * 12}" text-anchor="middle" fill="#5d6c80" font-size="9.5" pointer-events="none">${esc(s)}</text>`));
+      lines.slice(0, 2).forEach((s, i) => o.push(`<text x="${p.x}" y="${p.y + NH / 2 + 14 + i * 12}" text-anchor="middle" fill="var(--txt3)" font-size="9.5" pointer-events="none">${esc(s)}</text>`));
     }
   }
   const H = 720;
   if (!Topo.vb || Topo.w !== W) { Topo.vb = { x: 0, y: 0, w: W, h: H }; Topo.w = W; }
   host.innerHTML = `<svg class="topo" xmlns="http://www.w3.org/2000/svg" viewBox="${Topo.vb.x} ${Topo.vb.y} ${Topo.vb.w} ${Topo.vb.h}">${o.join('')}</svg>
     <div class="overlay tl"><button class="btn icon" data-act="topo-fit" data-tip="Ajuster">${ico('fit')}</button><button class="btn ${Topo.ends ? 'on' : ''}" data-act="topo-ends" data-tip="Terminaux|Afficher le nombre de terminaux reliés à chaque équipement">${ico('phone')}Terminaux</button>${tr ? `<button class="btn on" data-act="trace-clear">${ico('x')}Effacer le tracé</button>` : ''}</div>
-    <div class="overlay bl legend"><b>Liens</b><span><i style="background:#6f8fb5;height:3px"></i>10 Gb/s et plus</span><span><i style="background:#4d6480;height:2px"></i>1 Gb/s</span><span><i style="background:${COL.down};height:2px"></i>inactif</span><span><i style="background:${COL.crit};height:3px"></i>en erreur</span><span>×2 : liens redondants</span><span>Niveaux calculés à partir du câblage</span></div>`;
+    <div class="overlay bl legend"><b>Liens</b><span><i style="background:var(--link2);height:3px"></i>10 Gb/s et plus</span><span><i style="background:var(--link1);height:2px"></i>1 Gb/s</span><span><i style="background:${COL.down};height:2px"></i>inactif</span><span><i style="background:${COL.crit};height:3px"></i>en erreur</span><span>×2 : liens redondants</span><span>Niveaux calculés à partir du câblage</span></div>`;
   if (!host.dataset.pz) { host.dataset.pz = '1'; panZoom(host, 'svg.topo', () => Topo.vb); }
 }
 Actions['topo-fit'] = () => { Topo.vb = null; renderTopo(); };

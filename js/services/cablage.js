@@ -84,4 +84,4 @@ function scopeOf(id) {
 /* Dimensions au sol d'une baie, en mètres */
 const rackSize = rack => { const v = catOf(rack)?.visual || {}; return { w: v.width || 0.75, d: v.depth || 1.07 }; };
 
-export { connectedLabel, effStatus, farEnd, isNetDev, isPassiveNode, otherEnd, outletInfo, rackSize, roomAt, scopeOf, segment, STATE_COL, STATE_LABEL };
+export { NET_CATS, connectedLabel, effStatus, farEnd, isNetDev, isPassiveNode, otherEnd, outletInfo, rackSize, roomAt, scopeOf, segment, STATE_COL, STATE_LABEL };

@@ -26,7 +26,8 @@ class Viewer3D {
     r.toneMapping = T.ACESFilmicToneMapping; r.toneMappingExposure = 1.1;
     this.host.appendChild(r.domElement);
     const s = this.scene = new T.Scene();
-    s.background = new T.Color('#0a0f15'); s.fog = new T.Fog('#0a0f15', 7, 16);
+    s.background = new T.Color('#0a100f'); s.fog = new T.Fog('#0a100f', 7, 16);
+    this.applyTheme(); document.addEventListener('netcarto:theme', () => this.applyTheme());
     const pm = new T.PMREMGenerator(r); s.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture; pm.dispose();
     this.camera = new T.PerspectiveCamera(35, 1, 0.01, 60);
     const ct = this.controls = new OrbitControls(this.camera, r.domElement);
@@ -57,6 +58,11 @@ class Viewer3D {
     new ResizeObserver(() => this.resize()).observe(this.host);
     this.ok = true;
     this.tick = this.tick.bind(this); requestAnimationFrame(this.tick);
+  }
+  /* Le fond de la scène suit le thème clair ou sombre */
+  applyTheme() {
+    const c = getComputedStyle(document.documentElement).getPropertyValue('--scene').trim() || '#0a100f';
+    this.scene.background.set(c); this.scene.fog.color.set(c); this.dirty = true;
   }
   resize() {
     const w = this.host.clientWidth, h = this.host.clientHeight;

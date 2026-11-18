@@ -226,7 +226,12 @@ history    [{ id, ts, type, text, ref }]                                 // type
 
   Au-delà, gris.
 - **PoE :** dégradé ambré selon la puissance (≤ 7 W, ≤ 15 W, ≤ 30 W, > 30 W), et pastille éclair sur les ports.
-- **Thème :** fond `#090d12`, panneaux `#111821`, bordures `#1f2b39`, accent cyan `#38bdf8`.
+- **Thème (décision du 2026-11-18) : palette « Ardoise et vert », en deux thèmes au choix.** Le bouton soleil/lune de l'en-tête bascule entre les deux ; le choix est mémorisé dans le navigateur (`netcarto:theme`).
+  - Sombre (par défaut) : fond `#0b1110`, panneaux `#111a18`, bordures `#1f2e2a`, accent émeraude `#34d399`.
+  - Clair : fond `#f3f6f4`, panneaux blancs, bordures `#e1e7e4`, accent vert `#047857`.
+  - Toutes les couleurs d'interface sont des variables CSS définies en tête de `css/style.css`. Ajouter un thème = ajouter un bloc `:root[data-theme=…]`.
+  - Les tracés et sélections dans les dessins (plan, topologie, 3D) restent en bleu (`--hl`), pour ne pas se confondre avec le vert de l'état « actif ».
+  - Les couleurs d'état et de VLAN sont identiques dans les deux thèmes.
 
 ### 3.6 Jeu de données de démonstration (fictif)
 - **Site :** « Campus Démo », adresse fictive.
@@ -319,6 +324,7 @@ history    [{ id, ts, type, text, ref }]                                 // type
 - **Tests :** les scripts Playwright sont restés hors du dépôt (dossier temporaire), comme prévu en 3.9.
 
 ### 3.11 Pistes pour la suite
+- **Avant la mise en service réelle :** permettre de démarrer sur une base vide (aujourd'hui la page charge le jeu de démonstration au premier lancement), et ajouter la création de sites, bâtiments, étages et pièces depuis l'interface.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
 - Remplacer le catalogue générique par les modèles réels, avec photos de façade.
 - Importer les plans réels des étages.
@@ -362,7 +368,10 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-18 | « go » : lancer la construction en suivant le plan par lots | ✅ Fait : lots 1 à 8 réalisés et testés dans Chromium |
 | 2026-11-18 | « Veux-tu des images ou des choses qui facilitent la création ? » | ✅ Répondu : rien de nécessaire pour la V1. Utile ensuite : liste exacte des modèles, photos de façade prises de face, plans en image avec une cote. Ne rien déposer de réel dans ce dépôt public. |
 | 2026-11-18 | Ne plus tout garder dans un seul fichier `index.html` : répartir le code dans plusieurs fichiers, pour un projet plus propre et plus évolutif | ✅ Fait (« commence ») : 1 feuille de styles et 33 modules JavaScript natifs, sans outil de build. Tous les tests repassés, imports vérifiés avec ESLint. Structure décrite en 3.1. |
-| 2026-11-18 | Proposer d'autres palettes de couleurs | ✅ Répondu : 3 pistes proposées, en attente du choix |
+| 2026-11-18 | Proposer d'autres palettes de couleurs | ✅ Répondu : 3 pistes proposées |
+| 2026-11-18 | Inventaire : lignes plus aérées, à la manière de Freshservice, avec des compteurs en haut (nombre d'équipements réseau, de switchs…) | ✅ Fait : bandeau « Vue d'ensemble » de 7 compteurs cliquables (ils filtrent la liste), tableau dans une carte, lignes plus hautes, pagination en haut à droite |
+| 2026-11-18 | Palette « Ardoise et vert », avec fond blanc et mode sombre au choix | ✅ Fait : deux thèmes et bouton de bascule dans l'en-tête (voir 3.5) |
+| 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---
 

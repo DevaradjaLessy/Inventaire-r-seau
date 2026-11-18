@@ -13,5 +13,5 @@ Ce dépôt sert à construire **NetCarto** : un outil web de cartographie, d'inv
 - Données **uniquement fictives** : la page est publique.
 - Code réparti en modules JavaScript natifs (voir la section 3.1 de `SUIVI.md`), sans backend ni outil de build. Un fichier = un rôle ; les imports et exports sont explicites.
 - Three.js `0.160.0` par CDN (jsDelivr), aucune autre bibliothèque sans décision notée dans `SUIVI.md`.
-- Interface et commentaires du code en français. Thème sombre de type DCIM.
+- Interface et commentaires du code en français. Palette « Ardoise et vert », en deux thèmes au choix de l'utilisateur : sombre (par défaut) et clair. Toute couleur d'interface passe par une variable CSS de `css/style.css`, jamais par une valeur en dur.
 - Tester dans Chromium (Playwright) avant chaque commit, en servant le dossier par HTTP (les modules ne se chargent pas en `file://`). Si le CDN est bloqué, voir la note technique 3.9 de `SUIVI.md`.

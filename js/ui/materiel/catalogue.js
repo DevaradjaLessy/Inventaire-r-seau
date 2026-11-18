@@ -11,7 +11,7 @@ import { Views3D } from '../carto/carto.js';
 import { dHead, kv, li, sec } from '../carto/fiches.js';
 
 const Mat = { cat: '', sel: null, q: '', built: false, shown: '' };
-const stockChip = c => { const s = stockOf(c.id), low = s.threshold > 0 && s.available <= s.threshold; return `<span class="chip" style="${low ? `border-color:${s.available ? COL.warn : COL.serious};color:${s.available ? COL.warn : COL.serious}` : ''}" data-tip="Stock disponible|Seuil d'alerte : ${s.threshold}">${low ? ico('alert') : ''}${s.available} en stock</span>`; };
+const stockChip = c => { const s = stockOf(c.id), low = s.threshold > 0 && s.available <= s.threshold; return `<span class="chip" style="${low ? `border-color:${s.available ? COL.warn : COL.serious}` : ''}" data-tip="${low ? 'Stock bas' : 'Stock disponible'}|Seuil d'alerte : ${s.threshold}">${low ? `<span style="color:${s.available ? COL.warn : COL.serious};display:flex">${ico('alert')}</span>` : ''}${s.available} en stock</span>`; };
 Views.mat = {
   render() {
     const host = $('#tab-mat'), d = Store.db;
@@ -49,7 +49,7 @@ function renderMatInfo() {
   host.innerHTML = dHead(cc.icon, c.model, `${esc(c.brand)} · ${cc.one} · réf. ${esc(c.ref)}`) +
     sec('', `<div class="btns">${consumable ? `<button class="btn sm pri" data-act="stock-out" data-id="${c.id}" ${s.available ? '' : 'disabled'}>${ico('out')}Sortie de stock</button>` : `<button class="btn sm pri" data-act="install" data-cat="${c.id}" ${s.available ? '' : 'disabled'} data-tip="Installer|${s.available ? 'Choisir l\'emplacement dans la Cartographie' : 'Stock épuisé'}">${ico('plus')}Installer</button>`}
       <button class="btn sm" data-act="model-edit" data-id="${c.id}">${ico('edit')}Modifier</button><button class="btn sm danger" data-act="model-del" data-id="${c.id}">${ico('trash')}Supprimer</button></div>`) +
-    sec('Stock', `<div class="fld"><label>Disponible</label><div class="row"><button class="btn sm icon" data-act="stock-adj" data-id="${c.id}" data-d="-1" ${s.available ? '' : 'disabled'}>${ico('minus')}</button><b style="min-width:34px;text-align:center;font-size:15px">${s.available}</b><button class="btn sm icon" data-act="stock-adj" data-id="${c.id}" data-d="1">${ico('plus')}</button>${s.threshold > 0 && s.available <= s.threshold ? `<span class="st" style="color:${COL.warn}">${ico('alert')}Stock bas</span>` : ''}</div>
+    sec('Stock', `<div class="fld"><label>Disponible</label><div class="row"><button class="btn sm icon" data-act="stock-adj" data-id="${c.id}" data-d="-1" ${s.available ? '' : 'disabled'}>${ico('minus')}</button><b style="min-width:34px;text-align:center;font-size:15px">${s.available}</b><button class="btn sm icon" data-act="stock-adj" data-id="${c.id}" data-d="1">${ico('plus')}</button>${s.threshold > 0 && s.available <= s.threshold ? `<span class="st"><span style="color:${COL.warn};display:flex">${ico('alert')}</span>Stock bas</span>` : ''}</div>
       <label>Installé</label><div class="ro"><b>${installedCount(c.id)}</b></div>
       <label>Seuil d'alerte</label><input type="number" min="0" data-chg="stock-f" data-id="${c.id}" data-f="threshold" value="${s.threshold}">
       <label>Lieu de stockage</label><input type="text" data-chg="stock-f" data-id="${c.id}" data-f="location" value="${esc(s.location)}"></div>`) +
