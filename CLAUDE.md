@@ -1,6 +1,6 @@
 # Consignes pour Claude — projet NetCarto
 
-Ce dépôt sert à construire **NetCarto** : un outil web de cartographie, d'inventaire et de gestion du matériel réseau physique. Il tient dans un seul fichier `index.html`, publié sur GitHub Pages.
+Ce dépôt sert à construire **NetCarto** : un outil web de cartographie, d'inventaire et de gestion du matériel réseau physique. L'application est répartie en plusieurs fichiers (`index.html`, `css/`, `js/`), sans backend ni outil de build, et publiée sur GitHub Pages.
 
 ## À faire au début de chaque session
 
@@ -11,6 +11,7 @@ Ce dépôt sert à construire **NetCarto** : un outil web de cartographie, d'inv
 ## Règles permanentes
 
 - Données **uniquement fictives** : la page est publique.
-- Un seul fichier `index.html`, sans backend. Three.js `0.160.0` par CDN (jsDelivr), aucune autre bibliothèque sans décision notée dans `SUIVI.md`.
+- Code réparti en modules JavaScript natifs (voir la section 3.1 de `SUIVI.md`), sans backend ni outil de build. Un fichier = un rôle ; les imports et exports sont explicites.
+- Three.js `0.160.0` par CDN (jsDelivr), aucune autre bibliothèque sans décision notée dans `SUIVI.md`.
 - Interface et commentaires du code en français. Thème sombre de type DCIM.
-- Tester dans Chromium (Playwright) avant chaque commit. Si le CDN est bloqué, voir la note technique 3.9 de `SUIVI.md`.
+- Tester dans Chromium (Playwright) avant chaque commit, en servant le dossier par HTTP (les modules ne se chargent pas en `file://`). Si le CDN est bloqué, voir la note technique 3.9 de `SUIVI.md`.

@@ -17,13 +17,13 @@ On le met à jour à chaque étape.
 
 > **Claude : si tu lis ce fichier au début d'une session, voici ta mission.**
 
-**Mission :** construire l'application décrite dans le cahier des charges (section 2), dans un fichier unique `index.html` à la racine du dépôt, en suivant les décisions de la section 3.
+**Mission :** faire évoluer l'application décrite dans le cahier des charges (section 2), en suivant les décisions de la section 3 (structure des fichiers en 3.1).
 
 **Méthode de travail :**
 
 1. Lis entièrement ce fichier avant d'écrire du code.
 2. Regarde le tableau des lots (section 4). Prends le **premier lot dont le statut n'est pas « ✅ Fait »**.
-3. Réalise ce lot dans `index.html`, en gardant le découpage en sections commentées décrit en 3.1.
+3. Réalise ce lot dans les fichiers concernés, en respectant le découpage décrit en 3.1.
 4. **Teste** le lot dans Chromium avec Playwright : la page se charge sans erreur dans la console, les fonctions du lot marchent, et une capture d'écran confirme le rendu. Voir la note technique en 3.9.
 5. Mets à jour ce fichier : statut du lot, journal (section 5), décisions nouvelles si besoin.
 6. Fais un commit avec un message clair en français, puis pousse sur la branche de travail.
@@ -119,21 +119,26 @@ Commence par me présenter l'architecture et le modèle de données en quelques 
 ## 3. Décisions de conception
 
 ### 3.1 Architecture générale
-- **Un seul fichier `index.html`** à la racine, organisé en sections commentées (bandeaux `=== SECTION`), dans cet ordre :
-  1. Configuration et constantes (couleurs, VLAN, statuts, catégories)
-  2. Utilitaires (DOM, formatage, générateur pseudo-aléatoire, téléchargements)
-  3. Icônes SVG (dessinées à la main, en ligne)
-  4. Catalogue par défaut
-  5. Jeu de données de démonstration (générateur déterministe à graine fixe)
-  6. Store (état, index, historique, annulation, sauvegarde)
-  7. Services métier (installation, retrait, câblage, traçage, topologie, statistiques, alertes, recherche)
-  8. Moteur 3D (classe `Viewer3D` + registre de gabarits procéduraux)
-  9. UI : socle (onglets, modales, infobulles, notifications)
-  10. UI : Cartographie
-  11. UI : Inventaire
-  12. UI : Matériel disponible
-  13. UI : Tableau de bord
-  14. Démarrage
+- **Plusieurs fichiers, sans outil de build** (décision du 2026-11-18, qui remplace le fichier unique du cahier des charges). Modules JavaScript natifs, imports et exports explicites :
+
+```text
+index.html                 structure de la page
+css/style.css              thème et mise en page
+js/main.js                 point d'entrée
+js/config.js               constantes (couleurs, états, VLAN, catégories)
+js/utils.js  icones.js     utilitaires, icônes SVG
+js/catalogue.js            catalogue par défaut
+js/demo.js                 jeu de données fictif (graine fixe)
+js/store.js                état, index, annulation, sauvegarde
+js/services/               requetes, cablage, topologie, tracage, connexion, recherche, installation
+js/3d/                     three (chargement), facades, viewer, objets
+js/ui/socle.js             onglets, fenêtres, infobulles, notifications
+js/ui/carto/               carto, plan, fiches, baie, tracage, connexion, topologie
+js/ui/inventaire.js  recherche.js  tableau-de-bord.js
+js/ui/materiel/            catalogue, installation, palette, modele
+```
+- **Sens des dépendances :** config → utils → store → services → 3d → ui. Les couches basses n'importent jamais l'interface (le store prévient l'interface par `Store.onSaveError` et `Store.on`). Les fichiers de `js/ui/` peuvent s'importer entre eux, mais n'utilisent ces imports que dans des fonctions, jamais au chargement.
+- **Conséquence :** la page doit être servie par HTTP (GitHub Pages, serveur interne, ou `python3 -m http.server` en local). L'ouverture par double-clic ne fonctionne plus.
 - **Bibliothèque unique : Three.js `0.160.0`**, chargée par import map depuis jsDelivr :
   - `three` → `https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js`
   - `three/addons/` → `https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/` (OrbitControls, RoomEnvironment)
@@ -297,8 +302,9 @@ history    [{ id, ts, type, text, ref }]                                 // type
 - Dans l'environnement cloud de Claude, le CDN jsDelivr peut être bloqué (erreur 403 du proxy). Le registre npm, lui, est accessible.
 - Pour tester :
   1. installer `three@0.160.0` avec npm dans un dossier temporaire (pas dans le dépôt) ;
-  2. dans Playwright, intercepter les URL jsDelivr avec `page.route` et servir les fichiers locaux.
-- Le fichier livré garde les URL CDN, qui fonctionnent sur GitHub Pages.
+  2. dans Playwright, intercepter les URL jsDelivr avec `page.route` et servir les fichiers locaux ;
+  3. servir le dossier du dépôt par HTTP (ou avec `page.route`), car les modules ne se chargent pas en `file://`.
+- Les fichiers livrés gardent les URL CDN, qui fonctionnent sur GitHub Pages.
 
 ### 3.10 Précisions apportées pendant la construction
 - **Three.js est chargé sans bloquer la page** (import dynamique). Si le CDN est inaccessible, seule la vue 3D est indisponible ; un message l'indique.
@@ -355,7 +361,8 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-18 | Conseil sur le niveau d'effort (l'utilisateur prévoit Fable 5.2) | ✅ Répondu : élevé par défaut, très élevé pour les lots 3 et 4 (colonne ajoutée en section 4) |
 | 2026-11-18 | « go » : lancer la construction en suivant le plan par lots | ✅ Fait : lots 1 à 8 réalisés et testés dans Chromium |
 | 2026-11-18 | « Veux-tu des images ou des choses qui facilitent la création ? » | ✅ Répondu : rien de nécessaire pour la V1. Utile ensuite : liste exacte des modèles, photos de façade prises de face, plans en image avec une cote. Ne rien déposer de réel dans ce dépôt public. |
-| 2026-11-18 | Ne plus tout garder dans un seul fichier `index.html` : répartir le code dans plusieurs fichiers, pour un projet plus propre et plus évolutif | ⏳ En attente : l'utilisateur regarde l'application puis donnera son feu vert. Découpage proposé : `css/style.css`, puis `js/` (config, utilitaires, catalogue, démo, store, services, moteur 3D, un fichier par onglet), en modules JavaScript natifs, sans outil de build. Effet neutre sur les performances. À faire alors : mettre à jour la règle « un seul fichier » dans `CLAUDE.md` et la section 3.1. |
+| 2026-11-18 | Ne plus tout garder dans un seul fichier `index.html` : répartir le code dans plusieurs fichiers, pour un projet plus propre et plus évolutif | ✅ Fait (« commence ») : 1 feuille de styles et 33 modules JavaScript natifs, sans outil de build. Tous les tests repassés, imports vérifiés avec ESLint. Structure décrite en 3.1. |
+| 2026-11-18 | Proposer d'autres palettes de couleurs | ✅ Répondu : 3 pistes proposées, en attente du choix |
 
 ---
 

@@ -1,11 +1,12 @@
 # NetCarto
 
 Outil web de cartographie, d'inventaire et de gestion du matériel réseau physique : câblage, équipements, prises, stock.
-Tout tient dans un seul fichier, `index.html`, sans serveur. **Les données fournies sont fictives.**
+L'application fonctionne entièrement dans le navigateur, sans backend ni installation. **Les données fournies sont fictives.**
 
 ## Ouvrir l'application
 
-- **En local :** ouvrez `index.html` dans un navigateur récent (Chrome, Edge, Firefox). Une connexion Internet est nécessaire pour la vue 3D, car Three.js est chargé depuis le CDN jsDelivr. Sans connexion, tout le reste fonctionne.
+- **En local :** la page doit être servie par HTTP (un double-clic sur `index.html` ne suffit pas, car le navigateur bloque les modules en local). Dans le dossier du projet, lancez `python3 -m http.server 8000`, puis ouvrez `http://localhost:8000`.
+- Une connexion Internet est nécessaire pour la vue 3D, car Three.js est chargé depuis le CDN jsDelivr. Sans connexion, tout le reste fonctionne.
 - **Sur GitHub Pages :** dans le dépôt, allez dans *Settings → Pages*, choisissez *Deploy from a branch*, puis la branche qui contient `index.html` et le dossier `/ (root)`. La page est publiée à l'adresse `https://<utilisateur>.github.io/<dépôt>/`.
 
 ## Les quatre onglets
@@ -56,7 +57,7 @@ history    [{ id, ts, type, text, ref }]
 
 **Avec une photo réelle :** dans le même formulaire, renseignez *Photo de façade* (URL ou data URI). La photo remplace la façade générée dans la vue 3D.
 
-**Dans le code :** ajoutez une entrée dans `defaultCatalog()` (section 4 de `index.html`). Exemple :
+**Dans le code :** ajoutez une entrée dans `defaultCatalog()` (fichier `js/catalogue.js`). Exemple :
 
 ```js
 C('cat-mon-switch', 'switch', 'Marque', 'Modèle 24P', 'REF-24P', 'switch', 'rack', 1, {
@@ -65,7 +66,7 @@ C('cat-mon-switch', 'switch', 'Marque', 'Modèle 24P', 'REF-24P', 'switch', 'rac
 }),
 ```
 
-**Nouvelle forme 3D :** ajoutez un gabarit dans `GABARITS` (section 8). Un gabarit de type `facade` décrit un équipement 19" dessiné sur un canvas. Un gabarit de type `object` renvoie vers une fonction de `OBJECTS` qui construit la géométrie.
+**Nouvelle forme 3D :** ajoutez un gabarit dans `GABARITS` (fichier `js/3d/facades.js`). Un gabarit de type `facade` décrit un équipement 19" dessiné sur un canvas. Un gabarit de type `object` renvoie vers une fonction de `OBJECTS` (fichier `js/3d/objets.js`) qui construit la géométrie.
 
 ## Ajouter un plan réel
 
@@ -81,7 +82,7 @@ Cette page est publique. **Ne mettez pas de vraies données dans ce dépôt.** U
 
 Pour travailler avec les vraies données, plusieurs options :
 
-1. **Hébergement interne** : copier `index.html` sur un serveur web de l'intranet, accessible seulement depuis le LAN ou le VPN. C'est le plus simple et le plus sûr.
+1. **Hébergement interne** : copier `index.html` et les dossiers `css/` et `js/` sur un serveur web de l'intranet, accessible seulement depuis le LAN ou le VPN. C'est le plus simple et le plus sûr.
 2. **Dépôt privé et GitHub Pages privé** (GitHub Enterprise Cloud) : accès réservé aux membres de l'organisation.
 3. **Authentification devant la page** : reverse proxy avec SSO ou LDAP (Nginx, Authelia, Authentik), ou Cloudflare Access.
 4. **Données séparées du code** : garder la page publique avec la démo, et importer le JSON réel localement. Il reste dans le navigateur et n'est jamais commité.
@@ -89,6 +90,22 @@ Pour travailler avec les vraies données, plusieurs options :
 
 ## Développement
 
-- Un seul fichier, découpé en sections commentées (`=== SECTION n`). Aucune étape de build.
+Aucune étape de build : les fichiers sont des modules JavaScript natifs, chargés tels quels par le navigateur.
+
+```text
+index.html            structure de la page
+css/style.css         thème et mise en page
+js/main.js            point d'entrée
+js/config.js          constantes
+js/utils.js, icones.js
+js/catalogue.js       catalogue par défaut
+js/demo.js            jeu de données fictif
+js/store.js           état, annulation, sauvegarde
+js/services/          logique métier (câblage, topologie, traçage, stock…)
+js/3d/                moteur 3D (Three.js)
+js/ui/                interface : socle, cartographie, inventaire, matériel, tableau de bord
+```
+
+- Sens des dépendances : `config → utils → store → services → 3d → ui`.
 - Seule bibliothèque externe : Three.js `0.160.0`.
 - Le suivi du projet (cahier des charges, décisions, plan par lots, journal) est dans `SUIVI.md`.
