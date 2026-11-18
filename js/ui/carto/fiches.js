@@ -3,9 +3,10 @@ import { CATEGORIES, COL, DEVICE_STATUS, OUTLET_USAGE, POE_WARN_PCT, PORT_KIND, 
 import { $, clamp, esc, fmtDate, fmtSpeed, groupBy, plural, typeOf } from '../../utils.js';
 import { ico } from '../../icones.js';
 import { Store } from '../../store.js';
+import { DEV_STATE, measuredDev, measuredPort } from '../../services/mesures.js';
 import { byId, cablesOf, catOf, labelOf, locLabel, poeColor, poeUsage, portsOf, rackUsage, vlanOf } from '../../services/requetes.js';
 import { connectedLabel, effStatus, farEnd, isPassiveNode, otherEnd, outletInfo, scopeOf, STATE_COL, STATE_LABEL } from '../../services/cablage.js';
-import { Actions, Changes, Modal, run, stDev, toast, undoAction, vlanChip } from '../socle.js';
+import { Actions, Changes, Modal, run, stDev, stPort, toast, undoAction, vlanChip } from '../socle.js';
 import { Carto, iconOf } from './carto.js';
 import { traceSection } from './tracage.js';
 
@@ -15,6 +16,8 @@ const li = (id, text, small = '', icon = null) => `<div class="li" data-act="sel
 const dHead = (icon, title, sub) => `<div class="d-head"><div class="dico">${ico(icon)}</div><div style="min-width:0"><h2>${esc(title)}</h2><div class="sub">${sub}</div></div></div>`;
 const sec = (title, body) => body ? `<div class="d-sec">${title ? `<div class="sec-t">${title}</div>` : ''}${body}</div>` : '';
 const opt = (v, l, cur) => `<option value="${esc(v)}" ${String(v) === String(cur) ? 'selected' : ''}>${esc(l)}</option>`;
+const fmtRate = v => v >= 1000 ? `${(v / 1000).toFixed(2)} Gb/s` : v >= 1 ? `${v.toFixed(1)} Mb/s` : `${Math.round(v * 1000)} kb/s`;
+const fmtClock = ts => new Date(ts).toLocaleTimeString('fr-FR');
 const mono = s => s ? `<span class="mono">${esc(s)}</span>` : '—';
 
 /* Grille des ports d'un équipement, disposée comme sur la façade */
@@ -79,10 +82,11 @@ const Detail = {
   device(e) {
     const c = catOf(e), ports = portsOf(e.id), cat = CATEGORIES[c.category], poe = c.poeBudgetW ? poeUsage(e) : null;
     const used = ports.filter(p => cablesOf(p.id).length || (p.role !== 'pp' && p.status === 'up')).length;
-    const retired = e.status === 'retired';
+    const retired = e.status === 'retired', md = measuredDev(e.id);
     return dHead(cat.icon, e.hostname, `${cat.one} · ${esc(c.brand)} ${esc(c.model)}`) +
       sec('', `<div class="btns"><button class="btn sm" data-act="dev-edit" data-id="${e.id}">${ico('edit')}Modifier</button>${retired ? '' : `<button class="btn sm" data-act="dev-move" data-id="${e.id}">${ico('move')}Déplacer</button><button class="btn sm danger" data-act="dev-remove" data-id="${e.id}">${ico('out')}Retirer</button>`}${e.rackId ? '' : `<button class="btn sm" data-act="c-view" data-v="rack">${ico('cube')}Vue 3D</button>`}</div>`) +
       sec('Identification', kv([['Statut', stDev(e.status)], ['Emplacement', esc(locLabel(e.id))], ['Adresse IP', mono(e.ip)], ['Adresse MAC', mono(e.mac)], ['N° de série', mono(e.serial)], ['Firmware', esc(e.firmware) || '—'], ['Installé le', fmtDate(e.installDate)], c.heightU ? ['Hauteur', `${c.heightU} U`] : null, c.powerW ? ['Consommation', `${c.powerW} W`] : null, e.notes ? ['Notes', esc(e.notes)] : null])) +
+      (md ? sec(`${ico('gauge')}Supervision`, kv([['État mesuré', `<span class="st"><i style="background:${DEV_STATE[md.state].color}"></i>${DEV_STATE[md.state].label}</span>`], md.message ? ['Message', esc(md.message)] : null, ['Ports suivis', ports.filter(x => measuredPort(x.id)).length], ['Relevé', fmtClock(md.ts)]])) : '') +
       (poe ? sec('Budget PoE', `<div class="row"><div class="bar grow"><i style="width:${Math.min(100, poe.pct)}%;background:${poe.pct >= POE_WARN_PCT ? COL.serious : '#f0b93a'}"></i></div><b>${poe.used} / ${poe.budget} W</b></div>`) : '') +
       (ports.length ? sec(`Ports (${used} utilisés sur ${ports.length})`, portGrid(e)) : '');
   },
@@ -101,11 +105,16 @@ const Detail = {
         ${f('Adresse MAC', inp('mac', p.mac, 'class="mono" placeholder="02:00:00:00:00:00"'))}
         ${f('Appareil connecté', far ? `<div class="ro"><a data-act="sel" data-id="${far.id}" style="cursor:pointer">${esc(connectedLabel(p))}</a></div>` : inp('connected', p.connected, 'placeholder="Nom de l\'appareil"'))}
         ${f('Description', inp('description', p.description))}</div>`;
+    // Mesure en direct, si une source de supervision suit ce port
+    const m = passive ? null : measuredPort(p.id), gap = m?.status && m.status !== p.status;
+    const liveSec = m ? sec(`${ico('gauge')}Mesure en direct`, kv([['État mesuré', stPort(m.status || p.status)], gap ? ['Écart', `<span class="st"><span style="color:${COL.warn};display:flex">${ico('alert')}</span>Saisi : ${PORT_STATUS[p.status].label}</span>`] : null,
+      m.inMbps != null ? ['Trafic entrant', fmtRate(m.inMbps)] : null, m.outMbps != null ? ['Trafic sortant', fmtRate(m.outMbps)] : null, m.totalMbps != null ? ['Trafic total', fmtRate(m.totalMbps)] : null, m.speedMbps ? ['Débit négocié', fmtSpeed(m.speedMbps)] : null, m.poeW ? ['PoE mesuré', `${m.poeW} W`] : null,
+      m.macs.length ? ['MAC vues', m.macs.slice(0, 4).map(mono).join('<br>')] : null, ['Relevé', fmtClock(m.ts)]])) : '';
     const cabList = cabs.map(c => { const o = otherEnd(c, p.id), side = passive ? (isPassiveNode(o) ? 'Arrière' : 'Avant') : ''; return `<div class="li" data-act="sel" data-id="${o}">${ico('cable')}<span>${side ? side + ' : ' : ''}${esc(labelOf(o))}</span><small>${esc(c.type.toUpperCase())} · ${c.length} m</small></div>`; }).join('') || '<span class="dim">Aucun câble sur ce port</span>';
     return dHead(passive ? 'passive' : 'switch', `${p.name}`, `Port de <a data-act="sel" data-id="${dev.id}" style="cursor:pointer">${esc(dev.hostname)}</a> · ${esc(locLabel(dev.id, { short: true }))}`) +
       sec('', `<div class="btns"><button class="btn sm pri" data-act="trace" data-id="${p.id}" ${cabs.length ? '' : 'disabled'}>${ico('trace')}Tracer</button><button class="btn sm" data-act="connect" data-id="${p.id}">${ico('link')}Connecter à…</button><button class="btn sm danger" data-act="disconnect" data-id="${p.id}" ${cabs.length ? '' : 'disabled'}>${ico('unlink')}Débrancher</button></div>`) +
       sec('Port', kv([['Identifiant', mono(p.id)], ['Type', `${PORT_KIND[p.kind]} · ${PORT_ROLE[p.role]}`], passive ? null : ['PoE', p.poe.capable ? (p.poe.watts ? `<span class="st"><i style="background:${poeColor(p.poe.watts)}"></i>${p.poe.watts} W</span>` : 'Oui (aucune charge)') : 'Non']])) +
-      sec('Configuration', form) + sec('Câblage', cabList);
+      liveSec + sec('Configuration', form) + sec('Câblage', cabList);
   },
   outlet(o) {
     const inf = outletInfo(o.id), cabs = cablesOf(o.id);

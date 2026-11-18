@@ -31,7 +31,11 @@ import './ui/materiel/installation.js';
 import './ui/materiel/palette.js';
 import './ui/materiel/modele.js';
 import './ui/tableau-de-bord.js';
+import './ui/sources.js';
+import { Live } from './services/mesures.js';
 
 Store.init();
 showTab(UI.tab);
-window.NetCarto = { Store, UI, Views, Views3D, Carto, trace, topology, connect, disconnect, installFromStock, removeDevice, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic
+Live.load();
+Live.start();   // relevés de supervision, si une source est configurée
+window.NetCarto = { Live, Store, UI, Views, Views3D, Carto, trace, topology, connect, disconnect, installFromStock, removeDevice, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic

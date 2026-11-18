@@ -323,6 +323,16 @@ history    [{ id, ts, type, text, ref }]                                 // type
 - **Modèle déjà installé :** ses ports, sa hauteur et son gabarit ne sont plus modifiables.
 - **Tests :** les scripts Playwright sont restés hors du dépôt (dossier temporaire), comme prévu en 3.9.
 
+### 3.12 Supervision en direct et relais (décision du 2026-11-18)
+- **État saisi et état mesuré sont séparés.** Les mesures vivent dans `js/services/mesures.js` (objet `Live`). Elles ne sont ni enregistrées ni annulables, et remplacent l'état saisi seulement à l'affichage (`effStatus`) : LEDs de la vue 3D, ports, prises du plan, alertes. La fiche d'un port montre les deux et signale un écart.
+- **Sources côté navigateur** (table `SOURCES`) : aucune, simulation (fait vivre la démo sans équipement), relais.
+- **Relais interne** dans `connecteurs/` : service Node.js en lecture seule, avec les sources `prtg`, `snmp` (IF-MIB standard) et `simulation`. Il peut servir NetCarto lui-même (`webRoot`), ce qui règle en même temps l'hébergement interne. Documentation : `connecteurs/README.md`.
+- **Exception à la règle « sans backend » :** le relais est un composant serveur facultatif. La page publique de démonstration continue de fonctionner sans lui. Sa seule dépendance est `net-snmp`.
+- **Contrat commun** (version 1) entre relais et NetCarto : décrit dans `connecteurs/lib/contrat.js`. Correspondance par IP puis nom d'hôte ; ports par nom d'interface (formes longues et courtes rapprochées).
+- **Limite connue :** une page publique (GitHub Pages) ne peut pas joindre un relais interne, le navigateur le bloque. Il faut ouvrir NetCarto depuis le relais.
+- **Validation :** PRTG et SNMP sont testés contre des simulateurs (`npm test` dans `connecteurs/`), **pas sur du matériel réel**. À vérifier sur site.
+- **À faire ensuite :** API des constructeurs (Cisco, Aruba, UniFi, Meraki) une fois les modèles connus ; table MAC, voisins LLDP et PoE par SNMP ; comparaison automatique entre topologie saisie et topologie mesurée.
+
 ### 3.11 Pistes pour la suite
 - **Avant la mise en service réelle :** permettre de démarrer sur une base vide (aujourd'hui la page charge le jeu de démonstration au premier lancement), et ajouter la création de sites, bâtiments, étages et pièces depuis l'interface.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
@@ -384,6 +394,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-18 | Tableau de bord : les informations conviennent, mais l'esthétique est à revoir (structuré, propre, agréable à l'œil) | ✅ Fait : nouvelle mise en page en cartes homogènes, indicateurs avec jauge circulaire, alertes en lignes avec niveau, anneau des états de ports, baies en jauges verticales, historique en frise. À valider par l'utilisateur ; les autres onglets pourront suivre le même style. |
 | 2026-11-18 | Adapter l'affichage au téléphone | ✅ Fait (écran ≤ 900 px) : onglets en barre du bas, en-tête sur deux lignes, Cartographie en plein écran avec l'arbre et la fiche en volets, boutons de zoom sur le plan, Inventaire et Matériel empilés, tableau de bord sur deux colonnes. Vérifié sur un écran simulé de 390 × 800 ; à confirmer sur un vrai téléphone. |
 | 2026-11-18 | Bilan des points forts, des inconvénients et des évolutions indispensables ; « il faudra corriger tout ça », « note-le » | ✅ Noté : lots 9 à 15 ajoutés en section 4, avec les points en attente de décision. Rien n'est encore réalisé. |
+| 2026-11-18 | Peut-on brancher une supervision réelle (PRTG), ou interroger directement un switch ? Développer et préparer ces connecteurs en interne, comme un vrai outil professionnel | ✅ Fait pour la première étape (voir 3.12) : couche de mesures en direct dans NetCarto, écran « Sources de données », relais interne avec sources PRTG, SNMP et simulation. Testé contre des simulateurs ; reste à valider sur du matériel réel et à ajouter les API des constructeurs. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---

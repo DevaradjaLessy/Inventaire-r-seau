@@ -2,6 +2,7 @@
 import { CATEGORIES, POE_STEPS, POE_WARN_PCT, RACK_FULL_PCT, VLAN_GREY } from '../config.js';
 import { pct, sum, typeOf } from '../utils.js';
 import { Cache, Store } from '../store.js';
+import { Live } from './mesures.js';
 
 const byId = id => Store.idx.id.get(id);
 const catOf = e => Store.idx.cat.get(e.catalogId);
@@ -80,6 +81,8 @@ function computeAlerts() {
     for (const r of d.racks) { const u = rackUsage(r.id); if (u.pct >= RACK_FULL_PCT) out.push({ level: u.pct >= 100 ? 'crit' : 'serious', kind: 'rack', icon: 'rack', text: `Baie presque pleine : ${r.name} (${u.used}/${u.total} U, ${u.pct} %)`, sub: locLabel(r.id), ref: r.id }); }
     for (const x of d.devices) { if (x.status === 'retired') continue; const c = catOf(x); if (c?.poeBudgetW) { const u = poeUsage(x); if (u.pct >= POE_WARN_PCT) out.push({ level: 'serious', kind: 'poe', icon: 'bolt', text: `Budget PoE élevé : ${x.hostname} (${u.used}/${u.budget} W)`, sub: locLabel(x.id), ref: x.id }); } }
     for (const s of d.stock) { const c = Store.idx.cat.get(s.catalogId); if (c && s.available <= s.threshold && s.threshold > 0) out.push({ level: s.available === 0 ? 'serious' : 'warn', kind: 'stock', icon: 'box', text: `Stock bas : ${c.brand} ${c.model}`, sub: `${s.available} disponible(s), seuil ${s.threshold}`, ref: c.id }); }
+    // Supervision : équipements que la source mesure comme injoignables
+    for (const [id, m] of Live.dev) { const x = byId(id); if (x && m.state === 'down' && x.status !== 'fault') out.push({ level: 'crit', kind: 'live', icon: deviceIcon(x), text: `Équipement injoignable (supervision) : ${x.hostname}`, sub: m.message || locLabel(x.id), ref: x.id }); }
     const order = { crit: 0, serious: 1, warn: 2 };
     return out.sort((a, b) => order[a.level] - order[b.level]);
   });

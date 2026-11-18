@@ -3,6 +3,7 @@ import { COL } from '../config.js';
 import { typeOf } from '../utils.js';
 import { Cache, Store } from '../store.js';
 import { byId, cablesOf, catOf, locOf } from './requetes.js';
+import { measuredPort } from './mesures.js';
 
 /* --- Câblage : parcours des segments --- */
 const NET_CATS = ['switch', 'router', 'firewall'];
@@ -58,15 +59,16 @@ function outletInfo(id) {
       if (p.role === 'pp') { pp = pp || p; continue; }
       if (isNetDev(byId(p.deviceId))) net = p; else term = p;
     }
-    return { net, term, pp, status: net ? net.status : pp ? 'idle' : 'free' };
+    return { net, term, pp, status: net ? effStatus(net) : pp ? 'idle' : 'free' };
   });
 }
 /* État effectif d'un port : pour un port passif, c'est l'état du port réseau relié */
+/* (si une source de supervision est active, l'état mesuré remplace l'état saisi à l'affichage) */
 function effStatus(p) {
-  if (p.role !== 'pp') return p.status;
+  if (p.role !== 'pp') return measuredPort(p.id)?.status ?? p.status;
   let net = null;
   for (const n of segment(p.id).nodes) { if (typeOf(n) !== 'port') continue; const q = byId(n); if (q.role !== 'pp' && isNetDev(byId(q.deviceId))) net = q; }
-  return net ? net.status : cablesOf(p.id).length ? 'idle' : 'free';
+  return net ? effStatus(net) : cablesOf(p.id).length ? 'idle' : 'free';
 }
 const STATE_COL = { up: COL.up, down: COL.down, disabled: COL.dis, error: COL.crit, idle: '#44556a', free: '#2a3646' };
 const STATE_LABEL = { up: 'Actif', down: 'Inactif', disabled: 'Désactivé', error: 'Erreur', idle: 'Non brassé', free: 'Libre' };

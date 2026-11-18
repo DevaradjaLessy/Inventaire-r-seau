@@ -405,6 +405,14 @@ svg.plan .rt-office,.fcard .rt-office{fill:var(--rt-office)} svg.plan .rt-open,.
 svg.plan .rt-tech,.fcard .rt-tech{fill:var(--rt-tech)} svg.plan .rt-server,.fcard .rt-server{fill:var(--rt-server)} svg.plan .rt-storage,.fcard .rt-storage{fill:var(--rt-storage)} svg.plan .rt-workshop,.fcard .rt-workshop{fill:var(--rt-workshop)}
 .fcard .room{stroke:var(--line3);stroke-width:3}
 
+/* --- Supervision : pastille d'état de la source, dans l'en-tête --- */
+.live-dot{position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:50%;background:var(--txt3);border:1.5px solid var(--panel2)}
+.live-dot.ok{background:var(--up);animation:pulse 2s ease-in-out infinite}
+.live-dot.error{background:var(--crit)}
+@keyframes pulse{50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--up) 30%,transparent)}}
+.src-state{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);margin-top:14px}
+.src-state i{width:9px;height:9px;border-radius:50%;margin-top:5px;flex:none}
+
 /* --- Éléments réservés au téléphone --- */
 .m-only{display:none!important}
 #tabs .sh{display:none}

@@ -5,6 +5,7 @@ import { ico } from '../icones.js';
 import { buildDemo } from '../demo.js';
 import { Store } from '../store.js';
 import { computeAlerts, vlanOf } from '../services/requetes.js';
+import { Live } from '../services/mesures.js';
 
 const UI = { tab: 'carto', dirty: new Set(['carto', 'inv', 'mat', 'dash']) };
 const TABS = [
@@ -41,6 +42,7 @@ function renderShell() {
   $('#tabs').innerHTML = TABS.map(t => `<button data-act="tab" data-tab="${t.id}" class="${UI.tab === t.id ? 'on' : ''}">${ico(t.icon)}<span class="lg">${t.label}</span><span class="sh">${t.short || t.label}</span>${t.id === 'dash' && nAlerts ? `<span class="badge" data-tip="${plural(nAlerts, 'alerte')} à traiter">${nAlerts}</span>` : ''}</button>`).join('');
   $('#tools').innerHTML = `
     <button class="btn icon" data-act="theme" data-tip="${Theme.get() === 'dark' ? 'Passer au thème clair' : 'Passer au thème sombre'}|Le choix est mémorisé dans ce navigateur">${ico(Theme.get() === 'dark' ? 'sun' : 'moon')}</button>
+    <button class="btn icon" data-act="sources" data-tip="Sources de données|${Live.state === 'ok' ? `Supervision active (${Live.source})` : Live.state === 'error' ? 'Source en erreur : ' + esc(Live.error) : 'Aucune source de supervision : état saisi à la main'}" style="position:relative">${ico('gauge')}<i class="live-dot ${Live.state}"></i></button>
     <button class="btn icon" data-act="import" data-tip="Importer|Charger un fichier JSON exporté depuis NetCarto">${ico('upload')}</button>
     <button class="btn icon" data-act="export" data-tip="Exporter|Télécharger toute la base au format JSON">${ico('download')}</button>
     <button class="btn icon" data-act="undo" ${Store.undoStack.length ? '' : 'disabled'} data-tip="Annuler (Ctrl+Z)|${esc(Store.undoStack.at(-1)?.text || 'Rien à annuler')}">${ico('undo')}</button>
@@ -178,4 +180,4 @@ Actions.reset = () => Modal.confirm('Réinitialiser la démo', 'Recharger le jeu
   return true;
 }, 'Réinitialiser', 'danger');
 
-export { Actions, Changes, Inputs, isMobile, levelColor, Modal, run, showTab, stDev, stPort, Tip, toast, UI, undoAction, Views, vlanChip };
+export { Actions, Changes, Inputs, isMobile, levelColor, Modal, renderActive, renderShell, run, showTab, stDev, stPort, TABS, Tip, toast, UI, undoAction, Views, vlanChip };

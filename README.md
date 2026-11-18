@@ -76,6 +76,20 @@ C('cat-mon-switch', 'switch', 'Marque', 'Modèle 24P', 'REF-24P', 'switch', 'rac
 
 Préférez une image de moins de 2 Mo : elle est enregistrée dans la base locale.
 
+## Supervision en direct
+
+NetCarto peut afficher l'état **mesuré** des équipements et des ports à la place de l'état saisi : LEDs de la vue 3D, ports, plan, alertes. La base n'est pas modifiée ; la fiche d'un port montre les deux états et signale un écart.
+
+Le réglage se fait avec l'icône de jauge en haut à droite (*Sources de données*) :
+
+| Source | Usage |
+|---|---|
+| Aucune | États saisis à la main (par défaut) |
+| Simulation | Fait vivre la démonstration, sans équipement |
+| Relais NetCarto | État réel, remonté depuis PRTG ou depuis les switchs en SNMP |
+
+Le relais est un petit service à installer sur votre réseau : voir [`connecteurs/README.md`](connecteurs/README.md). Il a été testé contre des simulateurs, pas encore sur du matériel réel.
+
 ## Sécurité
 
 Cette page est publique. **Ne mettez pas de vraies données dans ce dépôt.** Un mot de passe en JavaScript dans une page publique ne protège rien.

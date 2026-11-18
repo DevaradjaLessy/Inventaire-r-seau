@@ -3,7 +3,7 @@ import { CABLE_TYPES, COL, DEVICE_STATUS, PORT_KIND, PORT_ROLE, U_M } from '../c
 import { clamp, fmtSpeed, mulberry32, shade } from '../utils.js';
 import { Store } from '../store.js';
 import { byId, cablesOf, catOf, portsOf } from '../services/requetes.js';
-import { isPassiveNode, otherEnd } from '../services/cablage.js';
+import { effStatus, isPassiveNode, otherEnd } from '../services/cablage.js';
 import { OrbitControls, RoomEnvironment, THREE, threeReady } from './three.js';
 import { drawFacade, facadeLayout, FACE_W, gabarit, labelCanvas, portModeColor, portNames, portTip } from './facades.js';
 import { OBJECTS } from './objets.js';
@@ -297,7 +297,7 @@ class Viewer3D {
     if (!this.leds) return this.controls?.autoRotate;
     const col = new THREE.Color();
     this.ledPorts.forEach((e, i) => {
-      const s = e.p.status;
+      const s = effStatus(e.p);
       let c = '#161b20';
       if (s === 'up') c = Math.random() < 0.22 ? '#0e5a1c' : '#3dff66';
       else if (s === 'error') c = Math.sin(t / 220 + e.phase) > 0 ? '#ff9a1f' : '#4a2b05';
