@@ -52,3 +52,18 @@ test('certificat fourni par l\'administrateur, et erreurs expliquées', async t 
   fs.writeFileSync(key, genererCertificat({}).cle);
   assert.throws(() => preparerHttps({ actif: true, certificat: crt, cle: key }, dossier), /ne correspond pas/);
 });
+
+test('certificat auto-signé : noms et adresses supplémentaires réglables (https.noms), certificat refait s\'ils changent', t => {
+  const dossier = dossierTemporaire(t), crt = path.join(dossier, 'certificats', 'netcarto.crt');
+  const san = () => new crypto.X509Certificate(fs.readFileSync(crt)).subjectAltName;
+  const un = preparerHttps({ noms: ['netcarto.exemple.interne', '192.0.2.10'] }, dossier);
+  assert.ok(un.autoSigne); assert.match(san(), /DNS:netcarto\.exemple\.interne/); assert.match(san(), /IP Address:192\.0\.2\.10/); assert.match(san(), /DNS:localhost/);
+  const empreinte = new crypto.X509Certificate(un.cert).fingerprint256;
+  // Mêmes noms : le certificat est gardé (les navigateurs l'ont déjà accepté)
+  assert.strictEqual(new crypto.X509Certificate(preparerHttps({ noms: ['192.0.2.10', 'netcarto.exemple.interne'] }, dossier).cert).fingerprint256, empreinte);
+  // Un nom de plus : le certificat est refait
+  const deux = preparerHttps({ noms: ['netcarto.exemple.interne', '192.0.2.10', 'carto.exemple.interne'] }, dossier);
+  assert.notStrictEqual(new crypto.X509Certificate(deux.cert).fingerprint256, empreinte); assert.match(san(), /DNS:carto\.exemple\.interne/);
+  assert.throws(() => preparerHttps({ noms: 'netcarto.exemple.interne' }, dossier), /https\.noms/);
+  assert.throws(() => preparerHttps({ noms: ['nom avec espace'] }, dossier), /https\.noms/);
+});

@@ -3,7 +3,7 @@
 Le serveur sert l'interface web, expose une API et range les données dans sa propre base SQLite.
 Il n'y a rien d'autre à installer : le moteur SQLite est intégré à Node.js.
 
-> **État actuel (lots 16, 17 et 18).** Base, API, comptes, rôles, journal d'audit, HTTPS, sauvegardes et restauration sont faits. Restent les paquets d'installation Docker et Linux (lots 19 et 20). Les connecteurs PRTG et SNMP n'ont été validés que contre des simulateurs.
+> **Pour installer NetCarto sur un serveur** (Docker), voir [`installation/README.md`](../installation/README.md). Cette page décrit le serveur lui-même et son lancement à la main, pour essayer ou développer. Les connecteurs PRTG et SNMP n'ont été validés que contre des simulateurs.
 
 ## Lancer le serveur
 
@@ -64,6 +64,8 @@ La commande crée le compte ; s'il existe déjà, elle change son mot de passe e
 
 Le HTTPS est actif par défaut. Sans réglage, NetCarto crée au premier démarrage un certificat auto-signé dans `certificats/`, à l'intérieur du dossier de données, valable pour `localhost`, le nom du poste et ses adresses.
 
+Pour que ce certificat porte aussi le nom ou l'adresse par lesquels vos collègues ouvrent NetCarto, indiquez-les dans `https.noms` (par exemple `noms = ["netcarto.exemple.interne", "192.0.2.10"]`) : le certificat est refait au démarrage suivant.
+
 Pour utiliser votre propre certificat (autorité interne de l'entreprise, par exemple) :
 
 ```toml
@@ -92,7 +94,7 @@ node --disable-warning=ExperimentalWarning netcarto.js --config netcarto.toml
 | Dossier de la base | `donnees.dossier` | `NETCARTO_DONNEES` | `--donnees` |
 | Dossier de l'interface | `web.dossier` | | |
 | Taille maximale d'une requête | `limites.corpsMaxMo` | | |
-| HTTPS | `https.actif`, `https.certificat`, `https.cle` | | `--http` |
+| HTTPS | `https.actif`, `https.noms`, `https.certificat`, `https.cle` | | `--http` |
 | Sécurité | `securite.echecsMax`, `securite.verrouillageMinutes`, `securite.sessionHeures`, `securite.inactiviteMinutes` | | |
 | Sauvegardes | `sauvegardes.actif`, `sauvegardes.heure`, `sauvegardes.conserver`, `sauvegardes.dossier` | | |
 | Supervision | `supervision.intervalle`, `[[supervision.sources]]` | | |
@@ -147,6 +149,14 @@ node --disable-warning=ExperimentalWarning netcarto.js sauvegarde
 ```
 
 Ajoutez `--config` ou `--donnees` à ces commandes si vous n'utilisez pas les réglages par défaut.
+
+## Surveiller le serveur
+
+```bash
+node --disable-warning=ExperimentalWarning netcarto.js sante
+```
+
+La commande interroge le serveur de ce poste et se termine avec le code 0 s'il répond, 1 sinon. En HTTPS, elle n'accepte que le certificat du serveur lui-même. Docker s'en sert pour son contrôle de santé.
 
 ## L'API
 

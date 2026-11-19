@@ -3,6 +3,7 @@
    Usage : node netcarto.js [--config fichier.toml] [--port 8443] [--hote 127.0.0.1] [--donnees dossier] [--demo] [--http]
            node netcarto.js compte <identifiant> [--role administrateur]     crée le compte, ou change son mot de passe et le déverrouille
            node netcarto.js sauvegarde | sauvegardes | restaurer <sauvegarde>  copie immédiate, liste, restauration complète
+           node netcarto.js sante                                             le serveur répond-il ? (code de retour 0 ou 1)
    Sans fichier de réglages, le serveur écoute sur https://127.0.0.1:8443 et range ses données à côté de lui. */
 'use strict';
 const path = require('path'), readline = require('readline');
@@ -28,7 +29,10 @@ Sauvegardes (mêmes options --config et --donnees que le serveur) :
   node netcarto.js sauvegardes              liste des sauvegardes
   node netcarto.js restaurer <sauvegarde>   remplace toute la base par une sauvegarde, comptes et journal d'audit compris.
       Le serveur doit être arrêté. <sauvegarde> : un nom de la liste, ou le chemin d'un fichier.
-      L'état d'avant est gardé dans le dossier des sauvegardes.`;
+      L'état d'avant est gardé dans le dossier des sauvegardes.
+
+Surveillance :
+  node netcarto.js sante                    code de retour 0 si le serveur répond, 1 sinon (Docker, systemd, supervision)`;
 
 /* Demande un mot de passe au clavier, sans l'afficher */
 function demanderMotDePasse(question) {
@@ -52,6 +56,27 @@ async function commandeCompte(args) {
     if (existant) { await securite.modifierUtilisateur(existant.id, { motDePasse, deverrouiller: true, actif: true }, null); console.log(`Mot de passe de « ${existant.identifiant} » changé ; compte déverrouillé.`); }
     else { const u = await securite.creerUtilisateur({ identifiant, nom: identifiant, role, motDePasse }); console.log(`Compte « ${u.identifiant} » créé, rôle ${u.role}.`); }
   } finally { depot.fermer(); }
+}
+
+/* Contrôle de santé : interroge le serveur de ce poste. En HTTPS, seul le certificat du serveur lui-même est accepté. */
+function commandeSante(args) {
+  const cfg = chargerConfig({ args: args.slice(1) }), fs = require('fs'), crypto = require('crypto');
+  const hote = ['0.0.0.0', '::', ''].includes(cfg.serveur.hote) ? '127.0.0.1' : cfg.serveur.hote, protocole = cfg.https.actif ? 'https' : 'http';
+  const adresse = `${protocole}://${hote.includes(':') ? `[${hote}]` : hote}:${cfg.serveur.port}`;
+  return new Promise((ok, ko) => {
+    let attendu = null;
+    if (cfg.https.actif) {
+      const fichier = cfg.https.certificat || path.join(cfg.donnees.dossier, 'certificats', 'netcarto.crt');
+      try { attendu = new crypto.X509Certificate(fs.readFileSync(fichier)).fingerprint256; } catch { return ko(new Error(`certificat du serveur introuvable (${fichier})`)); }
+    }
+    const req = require(protocole).get({ host: hote, port: cfg.serveur.port, path: '/api/v1/sante', timeout: 4000, rejectUnauthorized: false }, res => {
+      if (attendu && res.socket.getPeerCertificate().fingerprint256 !== attendu) { res.resume(); return ko(new Error('le certificat présenté n\'est pas celui de ce serveur')); }
+      let corps = ''; res.setEncoding('utf8'); res.on('data', c => { corps += c; });
+      res.on('end', () => { let v = null; try { v = JSON.parse(corps); } catch { /* réponse inattendue */ } if (res.statusCode === 200 && v && v.ok) ok(adresse); else ko(new Error(`réponse inattendue (${res.statusCode})`)); });
+    });
+    req.on('timeout', () => req.destroy(new Error('pas de réponse en 4 secondes')));
+    req.on('error', e => ko(new Error(e.code === 'ECONNREFUSED' ? `rien n'écoute sur ${adresse}` : e.message)));
+  });
 }
 
 /* Sauvegarde immédiate, liste, restauration complète */
@@ -82,6 +107,7 @@ function commandeSauvegardes(args) {
 (async () => {
   const args = process.argv.slice(2);
   if (args.includes('--aide') || args.includes('--help')) { console.log(AIDE); return; }
+  if (args[0] === 'sante') { try { console.log(`NetCarto est en marche (${await commandeSante(args)}).`); } catch (e) { console.error(`NetCarto ne répond pas : ${e.message}`); process.exit(1); } return; }
   if (['sauvegarde', 'sauvegardes', 'restaurer'].includes(args[0])) { try { commandeSauvegardes(args); } catch (e) { console.error(`Impossible : ${e.message}`); process.exit(1); } return; }
   if (args[0] === 'compte') { try { await commandeCompte(args); } catch (e) { console.error(`Impossible : ${e.message}`); process.exit(1); } return; }
   let app;

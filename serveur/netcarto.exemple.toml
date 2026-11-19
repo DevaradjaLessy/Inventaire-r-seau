@@ -9,6 +9,7 @@ port = 8443
 
 [https]
 actif = true            # HTTPS par défaut. Sans fichiers ci-dessous, un certificat auto-signé est créé dans le dossier de données.
+# noms = ["netcarto.exemple.interne", "192.0.2.10"]   # noms et adresses à inscrire dans le certificat auto-signé
 # certificat = "certificats/netcarto.crt"
 # cle = "certificats/netcarto.key"
 

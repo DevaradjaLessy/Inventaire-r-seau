@@ -8,7 +8,7 @@ const { parse } = require('smol-toml');
 
 const DEFAUTS = {
   serveur: { hote: '127.0.0.1', port: 8443 },
-  https: { actif: true, certificat: '', cle: '' },   // sans fichiers fournis, un certificat auto-signé est créé dans le dossier de données
+  https: { actif: true, certificat: '', cle: '', noms: [] },   // sans fichiers fournis, un certificat auto-signé est créé dans le dossier de données
   securite: { echecsMax: 5, verrouillageMinutes: 15, sessionHeures: 12, inactiviteMinutes: 120 },
   donnees: { dossier: 'donnees-locales' },
   sauvegardes: { actif: true, heure: '02:30', conserver: 14, dossier: '' },   // dossier vide : « sauvegardes » dans le dossier de données

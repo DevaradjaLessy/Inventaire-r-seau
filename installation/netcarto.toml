@@ -1,0 +1,50 @@
+# NetCarto — réglages d'une installation (Docker ou Linux).
+# Ce fichier est posé dans /etc/netcarto/netcarto.toml à la première installation, puis n'est plus jamais écrasé.
+# Après une modification, redémarrez NetCarto.
+# Ne mettez aucun mot de passe ici : une valeur "env:NOM" est lue dans la variable d'environnement NOM.
+
+[serveur]
+hote = "0.0.0.0"        # toutes les interfaces : NetCarto est joignable depuis le réseau
+port = 8443
+
+[https]
+actif = true            # sans fichiers ci-dessous, un certificat auto-signé est créé dans /var/lib/netcarto/certificats
+# noms = ["netcarto.exemple.interne", "192.0.2.10"]   # noms et adresses par lesquels vos collègues ouvrent NetCarto
+# certificat = "/etc/netcarto/netcarto.crt"           # votre propre certificat (autorité interne, par exemple)
+# cle = "/etc/netcarto/netcarto.key"
+
+[securite]
+echecsMax = 5           # échecs de connexion avant verrouillage du compte
+verrouillageMinutes = 15
+sessionHeures = 12      # durée maximale d'une session
+inactiviteMinutes = 120 # une session inactive est fermée
+
+[donnees]
+dossier = "/var/lib/netcarto"
+
+[sauvegardes]
+actif = true            # une sauvegarde automatique par jour
+heure = "02:30"         # heure locale du serveur
+conserver = 14          # nombre de sauvegardes automatiques gardées
+# dossier = "/chemin/vers/un/autre/disque"   # par défaut : /var/lib/netcarto/sauvegardes
+
+[web]
+dossier = "/opt/netcarto"
+
+[limites]
+corpsMaxMo = 25         # taille maximale d'une requête (import d'une base, plan en image)
+
+[supervision]
+intervalle = 30         # secondes entre deux relevés
+
+# Sources de supervision (facultatif). Voir connecteurs/README.md.
+# [[supervision.sources]]
+# type = "prtg"
+# url = "https://prtg.exemple.interne"
+# apiToken = "env:PRTG_TOKEN"
+#
+# [[supervision.sources]]
+# type = "snmp"
+# version = "2c"
+# community = "env:SNMP_COMMUNITY"
+# devices = [{ ip = "192.0.2.10", hostname = "SW-EXEMPLE-01" }]

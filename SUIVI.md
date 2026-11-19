@@ -509,6 +509,18 @@ Les tables `utilisateurs` et `audit` viendront avec la migration du lot 17.
 
 **Tests :** 39 scénarios de bout en bout (dont une grande base et l'annulation à l'identique), 44 pour le serveur (dont la grande base et la compression).
 
+### 3.20 Image Docker (lot 19)
+
+- **Fichiers :** `docker-compose.yml` à la racine (`docker compose up -d`), `installation/docker/Dockerfile`, `installation/docker/entree.sh`, `installation/netcarto.toml` (réglages posés à la première installation), `installation/netcarto` (commande d'exploitation), `.dockerignore`. Mode d'emploi : `installation/README.md`.
+- **Dossiers :** `/var/lib/netcarto` (base, sauvegardes, certificat) et `/etc/netcarto/netcarto.toml`, sur la machine hôte comme dans le conteneur. Docker crée ces dossiers au premier lancement.
+- **Compte du service :** le conteneur démarre en root le temps de poser les réglages par défaut et de donner le dossier de données au compte `netcarto` (numéro 10001) ; le serveur tourne ensuite sous ce compte. La commande `netcarto` quitte root de la même façon : `docker compose exec netcarto netcarto compte alice` ne crée jamais de fichier en root.
+- **Durcissement :** système de fichiers en lecture seule, toutes les capacités retirées sauf les quatre nécessaires au démarrage (CHOWN, SETUID, SETGID, DAC_OVERRIDE), `no-new-privileges`. Les réglages appartiennent à root : le service les lit mais ne peut pas les modifier.
+- **Arrêt :** le serveur est le processus principal du conteneur ; il reçoit la demande d'arrêt et ferme la base proprement (code de sortie 0). Pas de processus `init` intermédiaire : sans la capacité KILL, il ne pourrait pas transmettre le signal.
+- **Contrôle de santé :** nouvelle commande `node netcarto.js sante` (code 0 ou 1), utilisée par Docker. En HTTPS, elle n'accepte que le certificat du serveur lui-même (comparaison d'empreinte).
+- **Certificat :** nouveau réglage `https.noms` pour inscrire dans le certificat auto-signé les noms et adresses par lesquels on ouvre NetCarto (dans un conteneur, le nom du poste ne veut rien dire). Le certificat est refait si la liste n'est plus couverte.
+- **Image :** `node:22-bookworm-slim`, dépendances installées dans une étape séparée, 330 Mo. Aucun secret dans l'image ni dans `docker-compose.yml` ; les secrets de supervision passent par un fichier `.env` local.
+- **Essais réels :** `installation/tests/docker.test.js` construit l'image, démarre un conteneur durci, vérifie le compte du service, les commandes d'exploitation, le contrôle de santé, l'arrêt propre et la persistance des données. `docker compose up -d` a aussi été essayé avec les dossiers de l'hôte. Ces essais sont ignorés quand Docker n'est pas disponible.
+
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
@@ -542,7 +554,7 @@ Les tables `utilisateurs` et `audit` viendront avec la migration du lot 17.
 | 16 | **Serveur et base :** serveur Node, API, SQLite, schéma, couche d'accès aux données, bascule de l'interface vers l'API, mode démo conservé | Maximal (max) | ✅ Fait |
 | 17 | **Comptes et sécurité :** comptes, rôles, journal d'audit, modifications concurrentes, HTTPS | Très élevé (xhigh) | ✅ Fait |
 | 18 | **Sauvegardes et migrations :** sauvegardes automatiques planifiées, restauration, migrations versionnées | Élevé (high) | ✅ Fait (voir 3.18) |
-| 19 | **Docker :** image NetCarto et `docker-compose.yml` | Élevé (high) | ⏳ À faire |
+| 19 | **Docker :** image NetCarto et `docker-compose.yml` | Élevé (high) | ✅ Fait (voir 3.20) |
 | 20 | **Installation Linux :** `installer.sh`, systemd, mise à jour, désinstallation | Élevé (high) | ⏳ À faire |
 | 22 | **Three.js hébergé localement**, pour fonctionner sans Internet | Moyen | ⏳ À faire |
 
@@ -583,7 +595,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-18 | Continuer avec le lot 10 : base vide et création des bâtiments | ✅ Fait. Le bouton Réinitialiser propose « démonstration » ou « base vide » (aucun site, catalogue conservé, stock à zéro). Sites, bâtiments, étages et pièces se créent, se modifient et se suppriment depuis la fiche de droite ; une pièce peut aussi se tracer à la souris sur le plan (alignement tous les 50 cm). Contrôles : pièces sans chevauchement et dans l'étage, codes de bâtiment et niveaux uniques, suppression seulement si l'élément est vide. Gestion des VLAN depuis le tableau de bord ou la fiche d'un port. L'étiquette « Données fictives » ne s'affiche plus que pour la démonstration. Un scénario de test complet a été ajouté (14 tests au total). |
 | 2026-11-18 | Peut-on encore peaufiner le design ? | ✅ Fait (lot 12) : typographie et espacements revus, en-tête plus aéré avec onglets en pastilles, boutons et champs arrondis avec transitions, anneau de focus au clavier, fiches de détail en cartes (Cartographie et Matériel), barres d'outils flottantes translucides sur le plan et la 3D, arbre à lignes arrondies, cartes du catalogue avec effet au survol, fenêtres et notifications animées. Vérifié dans les deux thèmes et sur téléphone. |
 | 2026-11-19 | **Nouvelle orientation :** NetCarto devient un logiciel serveur installable sur Linux, avec ou sans Docker, avec sa propre base de données (décisions détaillées, lots 16 à 22, ordre de réalisation, méthode « tests avant le code ») | ✅ Décisions notées en 3.14, lots ajoutés en section 4. **Lot 16 fait** (voir 3.15) : serveur Node dans `serveur/`, base SQLite relationnelle, API `/api/v1`, interface basculée sur l'API, page GitHub Pages inchangée. Prochain lot : 17. |
-| 2026-11-19 | « Continue à tout concevoir, je vais tester à la maison » | 🔄 Lots 17 (voir 3.16), 11 (voir 3.17), 18 (voir 3.18) et 14 (voir 3.19) faits. Suite dans l'ordre prévu : 19, 20, 22. |
+| 2026-11-19 | « Continue à tout concevoir, je vais tester à la maison » | 🔄 Lots 17 (voir 3.16), 11 (voir 3.17), 18 (voir 3.18), 14 (voir 3.19) et 19 (voir 3.20) faits. Suite dans l'ordre prévu : 20, 22. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---

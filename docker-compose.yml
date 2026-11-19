@@ -1,0 +1,42 @@
+# NetCarto avec Docker.
+#   docker compose up -d                 construit l'image au premier lancement, puis démarre NetCarto
+#   docker compose logs netcarto         affiche le code d'initialisation à la première mise en route
+# Ouvrez ensuite https://<adresse-du-serveur>:8443
+#
+# Données de la machine hôte :
+#   /var/lib/netcarto               base, sauvegardes, certificat HTTPS
+#   /etc/netcarto/netcarto.toml     réglages (créé au premier démarrage, jamais écrasé ensuite)
+name: netcarto
+
+services:
+  netcarto:
+    image: netcarto:latest
+    build:
+      context: .
+      dockerfile: installation/docker/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8443:8443"
+    environment:
+      TZ: Europe/Paris          # fuseau horaire : sert à l'heure de la sauvegarde automatique
+      # Secrets des sources de supervision, lus par les valeurs "env:NOM" du fichier de réglages.
+      # Ne les écrivez pas ici : mettez-les dans un fichier .env à côté de ce fichier (jamais dans le dépôt).
+      # PRTG_TOKEN: ${PRTG_TOKEN}
+      # SNMP_COMMUNITY: ${SNMP_COMMUNITY}
+    volumes:
+      - /var/lib/netcarto:/var/lib/netcarto
+      - /etc/netcarto:/etc/netcarto
+    # Durcissement : système de fichiers en lecture seule, privilèges réduits au strict nécessaire.
+    # Le conteneur démarre en root pour préparer les deux dossiers, puis le serveur tourne sous le compte « netcarto ».
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    security_opt:
+      - no-new-privileges:true

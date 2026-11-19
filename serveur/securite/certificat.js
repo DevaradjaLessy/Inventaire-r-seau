@@ -45,7 +45,10 @@ function genererCertificat({ noms = ['localhost'], adresses = ['127.0.0.1', '::1
 function adressesLocales(hote) {
   const a = new Set(['127.0.0.1', '::1']);
   if (net.isIP(hote) && !['0.0.0.0', '::'].includes(hote)) a.add(hote);
-  for (const liste of Object.values(os.networkInterfaces())) for (const i of liste || []) if (!i.internal) a.add(i.address.split('%')[0]);
+  // Sur un système très cloisonné, la liste des interfaces peut être refusée : le certificat vaut alors pour ce poste et les noms réglés
+  let interfaces = {};
+  try { interfaces = os.networkInterfaces(); } catch { /* liste indisponible */ }
+  for (const liste of Object.values(interfaces)) for (const i of liste || []) if (!i.internal) a.add(i.address.split('%')[0]);
   return [...a];
 }
 /* Prépare le HTTPS. Renvoie null s'il est désactivé, sinon { cert, key, autoSigne, fichier }. */
@@ -57,8 +60,17 @@ function preparerHttps(cfg = {}, dossierDonnees, { hote = '127.0.0.1' } = {}) {
   else {
     const dossier = path.join(dossierDonnees, 'certificats');
     crt = path.join(dossier, 'netcarto.crt'); cle = path.join(dossier, 'netcarto.key'); autoSigne = true;
-    if (!fs.existsSync(crt) || !fs.existsSync(cle)) {
-      const g = genererCertificat({ noms: ['localhost', os.hostname()], adresses: adressesLocales(hote) });
+    // Noms et adresses supplémentaires demandés dans les réglages (ceux par lesquels on ouvre NetCarto depuis le réseau)
+    const demandes = cfg.noms === undefined ? [] : cfg.noms;
+    if (!Array.isArray(demandes) || demandes.some(n => typeof n !== 'string' || !/^[A-Za-z0-9.:_-]+$/.test(n))) throw new Error('Réglage « https.noms » invalide : liste de noms ou d\'adresses attendue, par exemple ["netcarto.exemple.interne", "192.0.2.10"].');
+    const nomsEnPlus = demandes.filter(n => !net.isIP(n)), adressesEnPlus = demandes.filter(n => net.isIP(n));
+    // Un certificat existant est gardé tant qu'il couvre tout ce qui est demandé (les navigateurs l'ont déjà accepté)
+    let aRefaire = !fs.existsSync(crt) || !fs.existsSync(cle);
+    if (!aRefaire && demandes.length) {
+      try { const x = new crypto.X509Certificate(fs.readFileSync(crt)); aRefaire = !nomsEnPlus.every(n => x.checkHost(n)) || !adressesEnPlus.every(a => x.checkIP(a)); } catch { aRefaire = true; }
+    }
+    if (aRefaire) {
+      const g = genererCertificat({ noms: [...new Set(['localhost', os.hostname(), ...nomsEnPlus])], adresses: [...new Set([...adressesLocales(hote), ...adressesEnPlus])] });
       fs.mkdirSync(dossier, { recursive: true });
       fs.writeFileSync(cle, g.cle, { mode: 0o600 }); fs.writeFileSync(crt, g.certificat);
     }

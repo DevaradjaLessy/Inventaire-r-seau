@@ -1,0 +1,10 @@
+# Ce qui n'entre jamais dans l'image : dépôt git, dépendances locales, tests, données et réglages locaux
+.git
+**/node_modules
+**/tests
+tests
+**/donnees-locales
+**/netcarto.toml
+!installation/netcarto.toml
+**/.env
+*.md
