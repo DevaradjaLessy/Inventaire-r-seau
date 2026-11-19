@@ -521,6 +521,20 @@ Les tables `utilisateurs` et `audit` viendront avec la migration du lot 17.
 - **Image :** `node:22-bookworm-slim`, dépendances installées dans une étape séparée, 330 Mo. Aucun secret dans l'image ni dans `docker-compose.yml` ; les secrets de supervision passent par un fichier `.env` local.
 - **Essais réels :** `installation/tests/docker.test.js` construit l'image, démarre un conteneur durci, vérifie le compte du service, les commandes d'exploitation, le contrôle de santé, l'arrêt propre et la persistance des données. `docker compose up -d` a aussi été essayé avec les dossiers de l'hôte. Ces essais sont ignorés quand Docker n'est pas disponible.
 
+### 3.21 Installation Linux sans Docker (lot 20)
+
+- **Fichiers :** `installation/linux/installer.sh`, `mettre-a-jour.sh`, `desinstaller.sh`, `commun.sh` (fonctions partagées), `netcarto.service`. Mode d'emploi : `installation/README.md`. Debian et Ubuntu seulement ; le script refuse les autres systèmes.
+- **Node.js :** Debian et Ubuntu livrent une version trop ancienne. Le script installe donc un Node.js 22 propre à NetCarto dans `/opt/netcarto/noeud`, téléchargé sur nodejs.org avec vérification de la somme de contrôle. Le Node.js du système n'est pas touché.
+- **Dossiers :** programme dans `/opt/netcarto` (à root, non modifiable par le service), données dans `/var/lib/netcarto` (au compte `netcarto`, 750), réglages dans `/etc/netcarto/netcarto.toml` (root:netcarto, 640, jamais écrasés), secrets de supervision dans `/etc/netcarto/netcarto.env` (root, 600).
+- **Service systemd :** compte `netcarto` sans privilège ; écriture limitée à `/var/lib/netcarto` (`ProtectSystem=strict`), aucune capacité, `NoNewPrivileges`, noyau et périphériques protégés. Niveau d'exposition mesuré par `systemd-analyze security` : inférieur à 3,5 sur 10.
+- **Mise à jour sûre :** la nouvelle version est préparée à côté (`/opt/netcarto.nouveau`), une sauvegarde est faite, puis les dossiers sont échangés. Si le serveur ne répond pas après le redémarrage, l'ancienne version est remise en service automatiquement.
+- **Désinstallation :** par défaut, les données et les réglages sont gardés. `--tout` les supprime aussi, après avoir fait taper `SUPPRIMER`.
+- **Garde-fou de suppression :** `supprimer_dossier` n'accepte que les chemins de NetCarto écrits en dur, refuse un lien symbolique, un chemin vide ou modifié, et tout dossier qui ne contient pas son fichier témoin (`.installation-netcarto`, `netcarto.sqlite` ou `netcarto.toml`). L'installation refuse aussi d'écrire dans un `/opt/netcarto` qu'elle n'a pas créé.
+- **Sans accès à Internet :** options `--node <archive>` et `--hors-ligne` (dépendances préparées sur un autre poste).
+- **Défaut trouvé par l'essai réel :** sous le cloisonnement systemd, le serveur ne pouvait pas lire la liste des adresses du poste et refusait de démarrer. Corrigé des deux côtés (famille `AF_NETLINK` autorisée dans le service ; le serveur continue sans cette liste si elle lui est refusée).
+- **Essais réels :** `installation/tests/linux.test.js` déroule tout dans un conteneur Debian 12 où tourne un vrai systemd : installation, droits, cloisonnement, exploitation, mise à jour, retour arrière sur une version cassée, désinstallation, garde-fou (dossier étranger, lien symbolique), désinstallation complète.
+- **Non essayé :** Ubuntu (même famille, mêmes outils, mais non déroulé) ; le téléchargement de Node.js depuis l'intérieur du script sur une machine réelle (la fonction de téléchargement et de vérification est essayée à part) ; processeurs ARM.
+
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
@@ -555,7 +569,7 @@ Les tables `utilisateurs` et `audit` viendront avec la migration du lot 17.
 | 17 | **Comptes et sécurité :** comptes, rôles, journal d'audit, modifications concurrentes, HTTPS | Très élevé (xhigh) | ✅ Fait |
 | 18 | **Sauvegardes et migrations :** sauvegardes automatiques planifiées, restauration, migrations versionnées | Élevé (high) | ✅ Fait (voir 3.18) |
 | 19 | **Docker :** image NetCarto et `docker-compose.yml` | Élevé (high) | ✅ Fait (voir 3.20) |
-| 20 | **Installation Linux :** `installer.sh`, systemd, mise à jour, désinstallation | Élevé (high) | ⏳ À faire |
+| 20 | **Installation Linux :** `installer.sh`, systemd, mise à jour, désinstallation | Élevé (high) | ✅ Fait (voir 3.21) |
 | 22 | **Three.js hébergé localement**, pour fonctionner sans Internet | Moyen | ⏳ À faire |
 
 **Ordre de réalisation (décision du 2026-11-19) :** 16, 17, 11, 18, 14, 19, 20, 22. Les lots 9 (reste), 13 et 15 viennent ensuite. Il n'y a pas de lot 21.
@@ -595,7 +609,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-18 | Continuer avec le lot 10 : base vide et création des bâtiments | ✅ Fait. Le bouton Réinitialiser propose « démonstration » ou « base vide » (aucun site, catalogue conservé, stock à zéro). Sites, bâtiments, étages et pièces se créent, se modifient et se suppriment depuis la fiche de droite ; une pièce peut aussi se tracer à la souris sur le plan (alignement tous les 50 cm). Contrôles : pièces sans chevauchement et dans l'étage, codes de bâtiment et niveaux uniques, suppression seulement si l'élément est vide. Gestion des VLAN depuis le tableau de bord ou la fiche d'un port. L'étiquette « Données fictives » ne s'affiche plus que pour la démonstration. Un scénario de test complet a été ajouté (14 tests au total). |
 | 2026-11-18 | Peut-on encore peaufiner le design ? | ✅ Fait (lot 12) : typographie et espacements revus, en-tête plus aéré avec onglets en pastilles, boutons et champs arrondis avec transitions, anneau de focus au clavier, fiches de détail en cartes (Cartographie et Matériel), barres d'outils flottantes translucides sur le plan et la 3D, arbre à lignes arrondies, cartes du catalogue avec effet au survol, fenêtres et notifications animées. Vérifié dans les deux thèmes et sur téléphone. |
 | 2026-11-19 | **Nouvelle orientation :** NetCarto devient un logiciel serveur installable sur Linux, avec ou sans Docker, avec sa propre base de données (décisions détaillées, lots 16 à 22, ordre de réalisation, méthode « tests avant le code ») | ✅ Décisions notées en 3.14, lots ajoutés en section 4. **Lot 16 fait** (voir 3.15) : serveur Node dans `serveur/`, base SQLite relationnelle, API `/api/v1`, interface basculée sur l'API, page GitHub Pages inchangée. Prochain lot : 17. |
-| 2026-11-19 | « Continue à tout concevoir, je vais tester à la maison » | 🔄 Lots 17 (voir 3.16), 11 (voir 3.17), 18 (voir 3.18), 14 (voir 3.19) et 19 (voir 3.20) faits. Suite dans l'ordre prévu : 20, 22. |
+| 2026-11-19 | « Continue à tout concevoir, je vais tester à la maison » | 🔄 Lots 17 (voir 3.16), 11 (voir 3.17), 18 (voir 3.18), 14 (voir 3.19), 19 (voir 3.20) et 20 (voir 3.21) faits. Reste le lot 22. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---

@@ -1,0 +1,47 @@
+# Service systemd de NetCarto. Installé par installer.sh dans /etc/systemd/system/netcarto.service.
+[Unit]
+Description=NetCarto — cartographie et inventaire du réseau
+Documentation=file:///opt/netcarto/installation/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=netcarto
+Group=netcarto
+WorkingDirectory=/opt/netcarto/serveur
+Environment=NODE_ENV=production
+Environment=NETCARTO_CONFIG=/etc/netcarto/netcarto.toml
+# Secrets des sources de supervision (jetons PRTG, communautés SNMP) : fichier facultatif, lisible par root seulement
+EnvironmentFile=-/etc/netcarto/netcarto.env
+ExecStart=/opt/netcarto/noeud/bin/node --disable-warning=ExperimentalWarning /opt/netcarto/serveur/netcarto.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+# Durcissement : le service n'écrit que dans son dossier de données
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/netcarto
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+# AF_NETLINK : lecture des adresses du poste, inscrites dans le certificat auto-signé
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

@@ -3,7 +3,7 @@
 Le serveur sert l'interface web, expose une API et range les données dans sa propre base SQLite.
 Il n'y a rien d'autre à installer : le moteur SQLite est intégré à Node.js.
 
-> **Pour installer NetCarto sur un serveur** (Docker), voir [`installation/README.md`](../installation/README.md). Cette page décrit le serveur lui-même et son lancement à la main, pour essayer ou développer. Les connecteurs PRTG et SNMP n'ont été validés que contre des simulateurs.
+> **Pour installer NetCarto sur un serveur** (Docker, ou Debian et Ubuntu avec systemd), voir [`installation/README.md`](../installation/README.md). Cette page décrit le serveur lui-même et son lancement à la main, pour essayer ou développer. Les connecteurs PRTG et SNMP n'ont été validés que contre des simulateurs.
 
 ## Lancer le serveur
 
