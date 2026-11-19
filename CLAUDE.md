@@ -1,6 +1,6 @@
 # Consignes pour Claude — projet NetCarto
 
-Ce dépôt sert à construire **NetCarto** : un outil web de cartographie, d'inventaire et de gestion du matériel réseau physique. L'application est répartie en plusieurs fichiers (`index.html`, `css/`, `js/`), sans backend ni outil de build, et publiée sur GitHub Pages.
+Ce dépôt sert à construire **NetCarto** : un outil web de cartographie, d'inventaire et de gestion du matériel réseau physique. NetCarto est un logiciel serveur (dossier `serveur/` : serveur Node.js, API, base SQLite) dont l'interface (`index.html`, `css/`, `js/`) fonctionne aussi seule, en démonstration hors ligne publiée sur GitHub Pages.
 
 ## À faire au début de chaque session
 
@@ -10,11 +10,13 @@ Ce dépôt sert à construire **NetCarto** : un outil web de cartographie, d'inv
 
 ## Règles permanentes
 
-- Données **uniquement fictives** : la page est publique.
-- Code réparti en modules JavaScript natifs (voir la section 3.1 de `SUIVI.md`), sans backend ni outil de build. Un fichier = un rôle ; les imports et exports sont explicites.
+- Données **uniquement fictives** dans le dépôt : il est public. Aucun mot de passe ni secret, seulement des fichiers d'exemple.
+- Suivre l'ordre des lots de la section 4 de `SUIVI.md` et les décisions de la section 3.14. Écrire les tests avant le code.
+- Interface : modules JavaScript natifs (section 3.1 de `SUIVI.md`), sans outil de build. Un fichier = un rôle ; les imports et exports sont explicites. Elle doit continuer de fonctionner sans serveur (mode démonstration).
+- Serveur : tout accès à la base passe par `serveur/donnees/` ; pas de SQL ailleurs. Le code reste portable (Linux, Windows, macOS) : aucun chemin ni commande propre à un système, les dossiers viennent de la configuration. Toute opération en plusieurs étapes est une transaction.
 - Three.js `0.160.0` par CDN (jsDelivr), aucune autre bibliothèque sans décision notée dans `SUIVI.md`.
-- Le dossier `connecteurs/` est un service Node.js facultatif (relais de supervision, voir la section 3.12 de `SUIVI.md`). Il reste en lecture seule, ne contient aucun secret, et se teste avec `npm test` contre des simulateurs. L'application doit continuer de fonctionner sans lui.
+- Le dossier `connecteurs/` contient le module de supervision (PRTG, SNMP, simulation), utilisé par le serveur. Il reste en lecture seule et se teste contre des simulateurs.
 - Interface et commentaires du code en français. Palette « Ardoise et vert », en deux thèmes au choix de l'utilisateur : sombre (par défaut) et clair. Toute couleur d'interface passe par une variable CSS de `css/style.css`, jamais par une valeur en dur.
 - L'interface doit rester utilisable sur téléphone (règles regroupées à la fin de `css/style.css`, seuil 900 px). Vérifier aussi en largeur 390 px.
-- Lancer les tests avant chaque commit : `npm test` dans `tests/` (application, Chromium via Playwright) et dans `connecteurs/` (relais). Ajouter un scénario pour chaque nouvelle fonction. Si le CDN est bloqué, voir la note technique 3.9 de `SUIVI.md`.
+- Lancer les trois suites avant chaque commit : `npm test` dans `tests/` (interface, Chromium via Playwright), dans `serveur/` et dans `connecteurs/`. Ajouter un scénario pour chaque nouvelle fonction. Si le CDN est bloqué, voir la note technique 3.9 de `SUIVI.md`.
 - Tout fichier importé est contrôlé par `Store.validate` : une nouvelle donnée insérée dans la page doit y avoir sa règle.

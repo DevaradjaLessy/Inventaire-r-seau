@@ -1,5 +1,6 @@
 /* Point d'entrée : charge tous les modules puis démarre l'application. */
 import { Store } from './store.js';
+import { Sync } from './sync.js';
 import { topology } from './services/topologie.js';
 import { trace } from './services/tracage.js';
 import { connect, disconnect } from './services/connexion.js';
@@ -36,8 +37,14 @@ import './ui/sources.js';
 import { Live } from './services/mesures.js';
 import { addRoom, deleteStructure, deleteVlan } from './services/structure.js';
 
-Store.init();
+// Mode serveur si la page est servie par le serveur NetCarto (il y inscrit l'adresse de son API) ; sinon démonstration locale
+const api = document.querySelector('meta[name="netcarto-api"]')?.content;
+try { if (api) await Store.initServeur(api); else Store.init(); }
+catch (e) {
+  document.querySelector('main').innerHTML = `<div class="boot-error"><h2>Base inaccessible</h2><p class="muted">${String(e.message).replace(/[<>&]/g, '')}</p><p><button class="btn pri" onclick="location.reload()">Réessayer</button></p></div>`;
+  throw e;
+}
 showTab(UI.tab);
 Live.load();
 Live.start();   // relevés de supervision, si une source est configurée
-window.NetCarto = { addRoom, deleteStructure, deleteVlan, Live, Store, UI, Views, Views3D, Carto, trace, topology, connect, disconnect, installFromStock, removeDevice, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic
+window.NetCarto = { Sync, addRoom, deleteStructure, deleteVlan, Live, Store, UI, Views, Views3D, Carto, trace, topology, connect, disconnect, installFromStock, removeDevice, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic

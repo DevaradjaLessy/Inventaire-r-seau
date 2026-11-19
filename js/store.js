@@ -1,12 +1,53 @@
 /* Store : état, index, historique, annulation, sauvegarde locale. Toute modification passe par Store.commit(type, texte, mutation). */
 import { APP, CATEGORIES, DEVICE_STATUS, OUTLET_USAGE, PORT_KIND, PORT_ROLE, PORT_STATUS } from './config.js';
-import { nextId } from './utils.js';
+import { nextId, setRandomIds } from './utils.js';
 import { buildDemo, emptyDb } from './demo.js';
+import { diff, Sync } from './sync.js';
 
 const Store = {
   db: null, idx: null, undoStack: [], subs: new Set(), saveTimer: 0, saveError: false,
   onSaveError: null,   // appelé une fois si la sauvegarde locale échoue (branché par l'interface)
   MAX_UNDO: 25, MAX_HISTORY: 400,
+
+  mode: 'local',        // local : démonstration dans le navigateur ; serveur : base sur le serveur NetCarto
+  onSyncError: null,    // appelé quand le serveur refuse une modification (branché par l'interface)
+  onExternalChange: null,
+
+  /* Mode serveur : la base vient de l'API, et chaque modification y est envoyée */
+  async initServeur(api) {
+    this.mode = 'serveur'; Sync.api = api; setRandomIds(true);
+    await this.recharger(false);
+    Sync.surChangementExterne = async () => { try { await this.recharger(); this.onExternalChange?.(); } catch { /* serveur momentanément injoignable : nouvel essai au prochain passage */ } };
+    Sync.surveiller();
+  },
+  /* Relit toute la base sur le serveur. L'historique d'annulation, devenu périmé, est vidé. */
+  async recharger(prevenir = true) {
+    const d = await Sync.charger(), err = this.validate(d);
+    if (err) throw new Error('Base reçue du serveur invalide : ' + err);
+    this.db = d; this.undoStack = [];
+    this.reindex();
+    if (prevenir) this.emit();
+  },
+  /* Envoie au serveur l'écart entre deux états. En cas de refus, l'écran revient en arrière. */
+  pousser(avant, type, text, jeton) {
+    const changements = diff(avant, this.db);
+    if (!changements.length) return;
+    Sync.envoyerLot({ type, texte: text || '', changements }).catch(e => this.surRefus(e, jeton));
+  },
+  async surRefus(e, jeton) {
+    if (e.code === 'abandon') return;
+    const i = this.undoStack.findIndex(u => u.jeton === jeton);
+    if (e.code === 'conflit' || i < 0) {
+      // Quelqu'un d'autre a modifié la base, ou l'état local n'est plus sûr : on repart de la base du serveur
+      try { await this.recharger(); } catch { /* serveur injoignable : l'état local est gardé, le prochain envoi le signalera */ }
+    } else {
+      // Retour à l'état d'avant la modification refusée ; les modifications suivantes, bâties dessus, sont abandonnées
+      this.db = JSON.parse(this.undoStack[i].snap); this.undoStack.length = i;
+      this.reindex(); this.emit();
+    }
+    if (e.code === 'reseau') Sync.poser('horsligne');
+    this.onSyncError?.(e);
+  },
 
   init() {
     this.db = this.loadLocal() || buildDemo();
@@ -51,6 +92,7 @@ const Store = {
   },
   /* Sauvegarde locale, avec un court délai pour regrouper les modifications */
   save() {
+    if (this.mode === 'serveur') return;   // en mode serveur, rien n'est gardé dans le navigateur
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => {
       try { localStorage.setItem(APP.storageKey, JSON.stringify(this.db)); this.saveError = false; }
@@ -85,7 +127,8 @@ const Store = {
     let res;
     try { res = fn(this.db); }
     catch (e) { this.db = JSON.parse(snap); this.reindex(); throw e; }
-    this.undoStack.push({ snap, text });
+    const jeton = ++this.jetons;
+    this.undoStack.push({ snap, text, jeton });
     if (this.undoStack.length > this.MAX_UNDO) this.undoStack.shift();
     if (text) {
       this.db.history.unshift({ id: nextId(this.db, 'h'), ts: Date.now(), type, text, ref });
@@ -93,14 +136,17 @@ const Store = {
     }
     this.db.meta.updatedAt = Date.now();
     this.reindex(); this.save(); this.emit();
+    if (this.mode === 'serveur') this.pousser(JSON.parse(snap), type, text, jeton);
     return res;
   },
   /* Annule la dernière modification */
   undo() {
     const u = this.undoStack.pop();
     if (!u) return null;
+    const avant = this.db;
     this.db = JSON.parse(u.snap);
     this.reindex(); this.save(); this.emit();
+    if (this.mode === 'serveur') this.pousser(avant, 'annulation', `Annulation : ${u.text || 'modification'}`, -1);
     return u.text || 'modification';
   },
   /* Remplace toute la base (import, réinitialisation). L'ancienne base reste annulable. */
@@ -110,7 +156,9 @@ const Store = {
     this.db = db;
     this.db.history.unshift({ id: nextId(this.db, 'h'), ts: Date.now(), type: 'import', text, ref: null });
     this.reindex(); this.save(); this.emit();
+    if (this.mode === 'serveur') Sync.remplacer(this.db).catch(e => this.surRefus(e, -1));
   },
+  jetons: 0,
   rev: 0,   // numéro de version, augmenté à chaque modification
   on(fn) { this.subs.add(fn); },
   emit() { this.rev++; for (const fn of this.subs) fn(); },

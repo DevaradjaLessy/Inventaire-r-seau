@@ -32,7 +32,8 @@ On le met à jour à chaque étape.
 **Règles :**
 
 - Les données doivent rester **100 % fictives**. La page est publique sur GitHub Pages.
-- Ne pas ajouter de backend ni de nouvelle bibliothèque CDN sans le noter dans la section 3.
+- NetCarto est désormais un logiciel serveur (section 3.14) : suivre l'ordre des lots indiqué en section 4. Ne pas ajouter de bibliothèque sans le noter dans la section 3.
+- Écrire les tests avant le code, et lancer les trois suites avant chaque commit (voir 3.9).
 - S'il manque une réponse à une question de la section 7, applique la valeur par défaut indiquée et continue. Ne bloque pas la session.
 - L'interface et les commentaires du code sont en français.
 - À la fin de la session, résume à l'utilisateur ce qui a été fait, ce qui reste à faire, et comment ouvrir la page.
@@ -305,7 +306,7 @@ history    [{ id, ts, type, text, ref }]                                 // type
   - mention « Données fictives »
 
 ### 3.9 Note technique pour les tests
-- **Les tests sont dans le dépôt :** `tests/netcarto.test.js` (application, 13 scénarios) et `connecteurs/tests/test.js` (relais, 6 scénarios). Les lancer avant chaque commit. Si le CDN est bloqué, indiquer le dossier de Three.js par la variable `NETCARTO_THREE`, ou faire `npm install` dans `tests/`.
+- **Les tests sont dans le dépôt :** `tests/netcarto.test.js` (interface, 23 scénarios dont 9 en mode serveur), `serveur/tests/` (serveur et base, 19 scénarios) et `connecteurs/tests/test.js` (supervision, 6 scénarios). Les lancer tous avant chaque commit (`npm test` dans chacun des trois dossiers). Si le CDN est bloqué, indiquer le dossier de Three.js par la variable `NETCARTO_THREE`, ou faire `npm install` dans `tests/`.
 - Dans l'environnement cloud de Claude, le CDN jsDelivr peut être bloqué (erreur 403 du proxy). Le registre npm, lui, est accessible.
 - Pour tester :
   1. installer `three@0.160.0` avec npm dans un dossier temporaire (pas dans le dépôt) ;
@@ -388,6 +389,45 @@ NetCarto devient un vrai logiciel serveur, installable sur Linux avec ou sans Do
 
 **Ordre de réalisation :** lots 16, 17, 11, 18, 14, 19, 20, 22.
 
+### 3.15 Serveur, base et API (lot 16)
+
+**Schéma (migration `serveur/donnees/migrations/sqlite/001_initial.sql`)**
+
+| Table | Contenu | Contraintes notables |
+|---|---|---|
+| `meta` | révision de la base, drapeau de démonstration | |
+| `vlans` | id, nom, couleur, sous_reseau | id de 1 à 4094 |
+| `sites`, `batiments`, `etages`, `pieces` | la structure | code de bâtiment unique par site, niveau unique par bâtiment, dimensions positives |
+| `catalogue`, `catalogue_ports` | modèles et leurs groupes de ports | catégorie contrôlée |
+| `stock` | disponible, seuil, lieu | jamais négatif |
+| `baies` | nom, hauteur, position | nom unique |
+| `equipements` | nom d'hôte, emplacement, IP, MAC, statut… | IP, MAC et nom d'hôte uniques ; en baie (avec U) ou en pièce, pas les deux ; un équipement hors service libère son IP et son nom |
+| `ports` | rang, nom, type, rôle, état, VLAN, PoE… | nom et rang uniques par équipement |
+| `prises` | repère, position, usage | repère unique |
+| `cables` | `a_port_id`, `a_prise_id`, `b_port_id`, `b_prise_id`, type… | chaque extrémité est un port ou une prise |
+| `journal` | historique affiché dans l'interface | |
+
+Les tables `utilisateurs` et `audit` viendront avec la migration du lot 17.
+
+**Décisions prises pendant le lot**
+- **Pilote `node:sqlite`**, intégré à Node (22.5 ou plus récent) : rien à compiler, portable. Il est encore marqué « expérimental » par Node 22, d'où l'option `--disable-warning=ExperimentalWarning` au lancement. Seul `donnees/pilote-sqlite.js` le connaît.
+- **Dépendance ajoutée :** `smol-toml`, pour lire le fichier de réglages. Le serveur n'utilise aucun cadre web.
+- **Écriture par lots.** L'interface garde sa logique : elle modifie ses données en mémoire, puis `js/sync.js` calcule l'écart et l'envoie (`POST /api/v1/lots`). Le serveur l'applique en une transaction. Chaque changement porte la valeur « avant » ; si elle ne correspond plus à la base, le lot est refusé (code 409). Cela sert déjà à détecter les modifications concurrentes, et fournira le « avant / après » du journal d'audit.
+- **Refus du serveur :** l'écran revient à l'état d'avant la modification et un message explique le refus. En cas de conflit, la base est rechargée.
+- **Changements faits ailleurs :** la page compare la révision toutes les 20 secondes et recharge si un autre poste a écrit.
+- **Identifiants :** tirés au hasard en mode serveur, pour que deux postes ne créent pas le même.
+- **Mode serveur ou démonstration :** le serveur inscrit l'adresse de son API dans la page (`<meta name="netcarto-api">`). Sans cette balise (GitHub Pages), la page reste en démonstration locale.
+- **Modèle de départ et démonstration :** le serveur les lit dans les modules de l'interface (`js/config.js`, `js/catalogue.js`, `js/demo.js`), pour n'avoir qu'une définition.
+- **Supervision :** `connecteurs/lib/releveur.js` est partagé par le relais autonome et par le serveur (`/api/v1/supervision/…`).
+- **Règles vérifiées par le serveur** en plus des contraintes SQL : chevauchement en baie, nombre de câbles par port ou prise, pièce dans son étage. Les autres règles restent contrôlées par l'interface ; les déplacer côté serveur est à prévoir avant d'ouvrir l'API à d'autres outils.
+- **Sécurité provisoire :** écoute sur `127.0.0.1` seulement ; une écriture venue d'une page d'un autre site est refusée. Pas de comptes ni de HTTPS avant le lot 17.
+- **Migrations :** le moteur de migrations existe déjà (une transaction par fichier). La sauvegarde automatique avant migration est prévue au lot 18.
+- **Branche :** le travail reste sur `claude/upbeat-ptolemy-lq3vu6`, déjà distincte de la branche principale ; la session n'était pas autorisée à en pousser une autre.
+
+**API :** liste des routes dans `serveur/README.md`.
+
+**Tests :** `serveur/tests/` (19 scénarios, écrits avant le code) et 9 scénarios de bout en bout en mode serveur dans `tests/netcarto.test.js` (23 au total).
+
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
@@ -418,7 +458,7 @@ NetCarto devient un vrai logiciel serveur, installable sur Linux avec ou sans Do
 | 14 | **Montée en charge :** jeu de test de grande taille, mesures, puis réaffichage partiel et affichage limité à la zone visible si nécessaire | Élevé (high) | ⏳ À faire |
 | 15 | **Confort :** impression d'une fiche de baie et d'un plan de brassage, export en image du plan et de la topologie, navigation au clavier, historique filtrable avec retour à un état antérieur | Moyen | ⏳ À faire |
 
-| 16 | **Serveur et base :** serveur Node, API, SQLite, schéma, couche d'accès aux données, bascule de l'interface vers l'API, mode démo conservé | Maximal (max) | 🔄 En cours |
+| 16 | **Serveur et base :** serveur Node, API, SQLite, schéma, couche d'accès aux données, bascule de l'interface vers l'API, mode démo conservé | Maximal (max) | ✅ Fait |
 | 17 | **Comptes et sécurité :** comptes, rôles, journal d'audit, modifications concurrentes, HTTPS | Très élevé (xhigh) | ⏳ À faire |
 | 18 | **Sauvegardes et migrations :** sauvegardes automatiques planifiées, restauration, migrations versionnées | Élevé (high) | ⏳ À faire |
 | 19 | **Docker :** image NetCarto et `docker-compose.yml` | Élevé (high) | ⏳ À faire |
@@ -461,7 +501,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-18 | Auditer et peaufiner la solution, améliorer encore les visuels 3D | ✅ Fait. **Audit :** faille corrigée à l'import (un fichier JSON pouvait injecter du code par un identifiant ou une couleur : le contenu est maintenant contrôlé élément par élément) ; suite de tests ajoutée au dépôt ; boutons à icône nommés pour les lecteurs d'écran ; message clair si l'on installe sans étage ; états de ports du tableau de bord alignés sur l'affichage ; jeton du relais comparé en temps constant ; code mort retiré. **3D :** ombres portées douces, mur de fond et plinthe, sol et éclairage adaptés au thème clair, passe-câbles verticaux à doigts, bandeaux de prises au fond de la baie, halo lumineux des LEDs, fiches en deux parties (corps clair et manchon à la couleur du cordon), dessus des équipements ajouré, façades légèrement auto-éclairées, bords de scène assombris. |
 | 2026-11-18 | Continuer avec le lot 10 : base vide et création des bâtiments | ✅ Fait. Le bouton Réinitialiser propose « démonstration » ou « base vide » (aucun site, catalogue conservé, stock à zéro). Sites, bâtiments, étages et pièces se créent, se modifient et se suppriment depuis la fiche de droite ; une pièce peut aussi se tracer à la souris sur le plan (alignement tous les 50 cm). Contrôles : pièces sans chevauchement et dans l'étage, codes de bâtiment et niveaux uniques, suppression seulement si l'élément est vide. Gestion des VLAN depuis le tableau de bord ou la fiche d'un port. L'étiquette « Données fictives » ne s'affiche plus que pour la démonstration. Un scénario de test complet a été ajouté (14 tests au total). |
 | 2026-11-18 | Peut-on encore peaufiner le design ? | ✅ Fait (lot 12) : typographie et espacements revus, en-tête plus aéré avec onglets en pastilles, boutons et champs arrondis avec transitions, anneau de focus au clavier, fiches de détail en cartes (Cartographie et Matériel), barres d'outils flottantes translucides sur le plan et la 3D, arbre à lignes arrondies, cartes du catalogue avec effet au survol, fenêtres et notifications animées. Vérifié dans les deux thèmes et sur téléphone. |
-| 2026-11-19 | **Nouvelle orientation :** NetCarto devient un logiciel serveur installable sur Linux, avec ou sans Docker, avec sa propre base de données (décisions détaillées, lots 16 à 22, ordre de réalisation, méthode « tests avant le code ») | 🔄 Décisions notées en 3.14, lots ajoutés en section 4. Lot 16 en cours. |
+| 2026-11-19 | **Nouvelle orientation :** NetCarto devient un logiciel serveur installable sur Linux, avec ou sans Docker, avec sa propre base de données (décisions détaillées, lots 16 à 22, ordre de réalisation, méthode « tests avant le code ») | ✅ Décisions notées en 3.14, lots ajoutés en section 4. **Lot 16 fait** (voir 3.15) : serveur Node dans `serveur/`, base SQLite relationnelle, API `/api/v1`, interface basculée sur l'API, page GitHub Pages inchangée. Prochain lot : 17. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---

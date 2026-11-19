@@ -58,6 +58,9 @@ test('lecture des ressources : listes, filtres, élément, erreurs', async t => 
 test('requêtes refusées : méthode, type de contenu, JSON invalide, corps trop gros', async t => {
   const { api } = await serveur(t, { config: { limites: { corpsMaxMo: 1 } } });
   assert.strictEqual((await requete('DELETE', api + '/base')).code, 405);
+  // Écriture venue d'une page d'un autre site : refusée ; depuis la page de NetCarto elle-même : acceptée
+  assert.strictEqual((await requete('POST', api + '/lots', { changements: [] }, { Origin: 'http://site-malveillant.test' })).code, 403);
+  assert.strictEqual((await requete('POST', api + '/lots', { changements: [] }, { Origin: api.replace('/api/v1', '') })).code, 200);
   assert.strictEqual((await requete('POST', api + '/lots', '{"changements":[]}', { 'Content-Type': 'text/plain' })).code, 415);
   const mauvais = await requete('POST', api + '/lots', '{pas du json');
   assert.strictEqual(mauvais.code, 400); assert.match(mauvais.json.erreur, /JSON/);

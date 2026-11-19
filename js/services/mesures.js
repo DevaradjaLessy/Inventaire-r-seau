@@ -10,6 +10,7 @@
    Ajouter une source = ajouter une entrée dans SOURCES. */
 import { norm } from '../utils.js';
 import { Cache, Store } from '../store.js';
+import { Sync } from '../sync.js';
 import { cablesOf, catOf, portsOf } from './requetes.js';
 
 const DEV_STATE = {
@@ -51,7 +52,8 @@ const SOURCES = {
     async fetch(cfg) {
       const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 10000);
       try {
-        const r = await fetch((cfg.url || location.origin).replace(/\/+$/, '') + '/api/etat', { signal: ctl.signal, headers: cfg.token ? { Authorization: 'Bearer ' + cfg.token } : {} });
+        const adresse = cfg.url ? cfg.url.replace(/\/+$/, '') + '/api/etat' : Sync.api ? Sync.api + '/supervision/etat' : location.origin + '/api/etat';
+        const r = await fetch(adresse, { signal: ctl.signal, headers: cfg.token ? { Authorization: 'Bearer ' + cfg.token } : {} });
         if (!r.ok) throw new Error(r.status === 401 ? 'Jeton refusé par le relais (401).' : `Le relais a répondu ${r.status}.`);
         return await r.json();
       } catch (e) { throw new Error(e.name === 'AbortError' ? 'Le relais ne répond pas (délai dépassé).' : e instanceof TypeError ? 'Relais injoignable. Vérifiez l\'adresse. Depuis une page publique (GitHub Pages), le navigateur bloque l\'accès à un service interne : ouvrez NetCarto depuis le relais lui-même.' : e.message); }

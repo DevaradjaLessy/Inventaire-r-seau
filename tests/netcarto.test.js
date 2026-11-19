@@ -5,7 +5,9 @@
    - Chaque scénario repart d'une page neuve, donc du jeu de démonstration d'origine. */
 'use strict';
 const assert = require('assert'), http = require('http'), fs = require('fs'), path = require('path');
+const os = require('os');
 const { chromium } = require('playwright');
+const { demarrer } = require('../serveur/app');
 
 const RACINE = path.join(__dirname, '..');
 const THREE = [process.env.NETCARTO_THREE, path.join(__dirname, 'node_modules', 'three')].find(d => d && fs.existsSync(d));
@@ -193,6 +195,88 @@ test('Téléphone : pas de débordement, arbre et fiche en volets', async page =
   for (const t of ['inv', 'mat', 'dash']) { await page.tap(`[data-tab=${t}]`); assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, t); }
 }, { mobile: true });
 
+/* ---------- Mode serveur : l'interface lit et écrit par l'API, la base est sur le serveur ---------- */
+const api = (page, chemin, methode = 'GET', corps) => page.evaluate(async ([c, m, b]) => { const r = await fetch('/api/v1' + c, { method: m, headers: b ? { 'Content-Type': 'application/json' } : {}, body: b ? JSON.stringify(b) : undefined }); return { code: r.status, json: await r.json() }; }, [chemin, methode, corps]);
+const synchro = page => page.waitForFunction(() => NetCarto.Sync.enAttente === 0 && NetCarto.Sync.etat !== 'envoi', null, { timeout: 8000 });
+const S = { serveur: true };
+
+test('Serveur : l\'interface charge la base par l\'API, rien dans le stockage du navigateur', async page => {
+  assert.deepStrictEqual(await page.evaluate(() => [NetCarto.Store.mode, NetCarto.Store.db.devices.length, localStorage.getItem('netcarto:db:v1'), document.querySelector('meta[name=netcarto-api]').content]), ['serveur', 102, null, '/api/v1']);
+  assert.ok(await page.isVisible('#srv-tag')); assert.match(await page.locator('#srv-tag').innerText(), /Serveur/);
+  assert.strictEqual((await api(page, '/info')).json.mode, 'serveur');
+}, S);
+test('Serveur : une modification est enregistrée dans la base et survit au rechargement', async page => {
+  const pid = await page.evaluate(() => { const d = NetCarto.Store.db, sw = d.devices.find(x => x.hostname === 'SW-A1-ACC-01'), p = d.ports.find(p => p.deviceId === sw.id && p.idx === 2); NetCarto.select(p.id); return p.id; });
+  await page.selectOption('#detail select[data-f=vlan]', '200'); await synchro(page);
+  assert.strictEqual((await api(page, '/ports/' + pid)).json.vlan, 200);
+  assert.match((await api(page, '/journal')).json[0].text, /VLAN → 200/);
+  await page.reload(); await page.waitForFunction(() => window.NetCarto?.Store.db);
+  assert.strictEqual(await page.evaluate(i => NetCarto.Store.idx.id.get(i).vlan, pid), 200);
+}, S);
+test('Serveur : installer un équipement crée l\'équipement, ses ports et décrémente le stock, d\'un bloc', async page => {
+  const rev = (await api(page, '/revision')).json.revision;
+  await page.click('[data-tab=mat]'); await page.click('.mcard[data-id=cat-c9200l-24p-4g]'); await page.click('#mat-info [data-act=install]'); await page.waitForSelector('#inst-body');
+  await page.selectOption('#inst-body [name=floor]', { label: 'R+2' }); await page.click('[data-act=modal-ok]'); await synchro(page);
+  const dev = (await api(page, '/equipements?hostname=SW-A2-01')).json[0];
+  assert.ok(dev && dev.u === 41, 'équipement absent de la base');
+  assert.doesNotMatch(dev.id, /^dev-[0-9a-z]{1,4}$/, 'en mode serveur, les identifiants sont tirés au hasard');
+  assert.strictEqual((await api(page, '/ports?deviceId=' + dev.id)).json.length, 28);
+  assert.strictEqual((await api(page, '/stock/cat-c9200l-24p-4g')).json.available, 2);
+  assert.strictEqual((await api(page, '/revision')).json.revision, rev + 1, 'une seule transaction');
+  // Annuler défait aussi sur le serveur
+  await page.keyboard.press('Control+z'); await synchro(page);
+  assert.strictEqual((await api(page, '/equipements?hostname=SW-A2-01')).json.length, 0);
+  assert.strictEqual((await api(page, '/stock/cat-c9200l-24p-4g')).json.available, 3);
+}, S);
+test('Serveur : un doublon d\'adresse IP est refusé, l\'écran revient à l\'état précédent', async page => {
+  const [a, b] = await page.evaluate(() => { const d = NetCarto.Store.db.devices.filter(x => x.ip); NetCarto.select(d[0].id); return [d[0], d[1]]; });
+  await page.click('#detail [data-act=dev-edit]'); await page.fill('.modal [name=ip]', b.ip); await page.click('[data-act=modal-ok]');
+  await page.waitForSelector('.toast.err'); await synchro(page);
+  assert.match(await page.locator('.toast.err').first().innerText(), /Adresse IP déjà utilisée/);
+  assert.strictEqual(await page.evaluate(i => NetCarto.Store.idx.id.get(i).ip, a.id), a.ip, 'l\'interface doit revenir à l\'ancienne adresse');
+  assert.strictEqual((await api(page, '/equipements/' + a.id)).json.ip, a.ip);
+  assert.strictEqual(await page.evaluate(() => NetCarto.Store.undoStack.length), 0);
+}, { serveur: true, erreursAttendues: /422/ });
+test('Serveur : modification faite ailleurs entre-temps → prévenu, données rechargées, rien n\'est écrasé', async page => {
+  const dev = await page.evaluate(() => { const x = NetCarto.Store.db.devices.find(d => d.hostname === 'SW-A1-ACC-01'); NetCarto.select(x.id); return x; });
+  const autre = await api(page, '/lots', 'POST', { changements: [{ collection: 'devices', op: 'modifier', cle: dev.id, avant: dev, apres: { ...dev, notes: 'changé par un collègue' } }] });
+  assert.strictEqual(autre.code, 200);
+  await page.click('#detail [data-act=dev-edit]'); await page.fill('.modal [name=firmware]', 'IOS-XE 99'); await page.click('[data-act=modal-ok]');
+  await page.waitForSelector('.toast.warn'); await synchro(page);
+  assert.match(await page.locator('.toast.warn').first().innerText(), /modifié entre-temps/);
+  assert.deepStrictEqual(await page.evaluate(i => { const x = NetCarto.Store.idx.id.get(i); return [x.notes, x.firmware]; }, dev.id), ['changé par un collègue', dev.firmware]);
+  assert.strictEqual((await api(page, '/equipements/' + dev.id)).json.notes, 'changé par un collègue');
+}, { serveur: true, erreursAttendues: /409/ });
+test('Serveur : un changement fait par un autre poste apparaît sans recharger la page', async page => {
+  const site = await page.evaluate(() => { NetCarto.Sync.intervalle = 300; NetCarto.Sync.surveiller(); return NetCarto.Store.db.sites[0]; });
+  await api(page, '/lots', 'POST', { changements: [{ collection: 'sites', op: 'modifier', cle: site.id, avant: site, apres: { ...site, name: 'Campus Renommé' } }] });
+  await page.waitForFunction(() => NetCarto.Store.db.sites[0].name === 'Campus Renommé', null, { timeout: 5000 });
+  assert.match(await page.locator('#tree').innerText(), /Campus Renommé/);
+}, S);
+test('Serveur : base vide, puis création d\'un site, enregistrés sur le serveur', async page => {
+  await page.click('[data-act=reset]'); await page.check('input[value=vide]'); await page.click('[data-act=modal-ok]'); await synchro(page);
+  let b = (await api(page, '/base')).json;
+  assert.deepStrictEqual([b.sites.length, b.devices.length, b.catalog.length, b.meta.demo], [0, 0, 34, false]);
+  await page.click('.empty-state [data-kind=site]'); await page.waitForSelector('.modal'); await page.fill('.modal [name=name]', 'Siège'); await page.click('[data-act=modal-ok]'); await synchro(page);
+  b = (await api(page, '/base')).json;
+  assert.deepStrictEqual(b.sites.map(s => s.name), ['Siège']);
+  await page.reload(); await page.waitForFunction(() => window.NetCarto?.Store.db);
+  assert.strictEqual(await page.evaluate(() => NetCarto.Store.db.sites[0].name), 'Siège');
+}, S);
+test('Serveur : supervision par le module intégré, sans adresse à saisir', async page => {
+  await page.click('[data-act=sources]'); await page.selectOption('.modal [name=type]', 'relais'); await page.click('[data-act=modal-ok]'); await page.waitForFunction(() => NetCarto.Live.state === 'ok', null, { timeout: 5000 });
+  assert.deepStrictEqual(await page.evaluate(() => [NetCarto.Live.matched, NetCarto.Live.port.size]), [1, 2]);
+}, { serveur: true, supervision: [{ type: 'simulation', devices: [{ ip: '10.10.99.18', hostname: 'SW-A1-ACC-01', ports: ['Gi1/0/1', 'Gi1/0/2'] }] }] });
+test('Serveur injoignable : la modification est annulée à l\'écran et l\'utilisateur est prévenu', async (page, ctx) => {
+  const dev = await page.evaluate(() => { const x = NetCarto.Store.db.devices.find(d => d.hostname === 'SW-A1-ACC-01'); NetCarto.select(x.id); return x; });
+  await ctx.app.arreter();
+  await page.click('#detail [data-act=dev-edit]'); await page.fill('.modal [name=notes]', 'perdu ?'); await page.click('[data-act=modal-ok]');
+  await page.waitForSelector('.toast.err'); await synchro(page);
+  assert.match(await page.locator('.toast.err').first().innerText(), /Serveur injoignable/);
+  assert.strictEqual(await page.evaluate(i => NetCarto.Store.idx.id.get(i).notes, dev.id), dev.notes);
+  assert.match(await page.locator('#srv-tag').innerText(), /Hors ligne/);
+}, { serveur: true, erreursAttendues: /ERR_CONNECTION_REFUSED|Failed to fetch|Failed to load/ });
+
 (async () => {
   const srv = await serveur(), base = `http://127.0.0.1:${srv.address().port}/`;
   const nav = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
@@ -202,18 +286,26 @@ test('Téléphone : pas de débordement, arbre et fiche en volets', async page =
     if (filtre && !nom.toLowerCase().includes(filtre.toLowerCase())) continue;
     const ctx = await nav.newContext({ viewport: opts.mobile ? { width: 390, height: 800 } : { width: 1600, height: 900 }, hasTouch: !!opts.mobile, isMobile: !!opts.mobile, acceptDownloads: true });
     const page = await ctx.newPage(), erreurs = [];
-    page.on('console', m => { if (m.type() === 'error' && !(opts.sansCdn && /ERR_FAILED|Failed to load/.test(m.text()))) erreurs.push(m.text()); });
+    // En mode serveur : un vrai serveur NetCarto, sur un dossier de données jetable, avec le jeu de démonstration
+    let app = null, dossier = null, adresse = base;
+    if (opts.serveur) {
+      dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'netcarto-e2e-'));
+      app = await demarrer({ serveur: { hote: '127.0.0.1', port: 0 }, donnees: { dossier }, web: { dossier: RACINE }, supervision: { intervalle: 30, sources: opts.supervision || [] }, demo: true }, { journal: () => {} });
+      adresse = `http://127.0.0.1:${app.port}/`;
+    }
+    page.on('console', m => { if (m.type() === 'error' && !(opts.sansCdn && /ERR_FAILED|Failed to load/.test(m.text())) && !(opts.erreursAttendues && opts.erreursAttendues.test(m.text()))) erreurs.push(m.text()); });
     page.on('pageerror', e => erreurs.push(e.message));
     if (opts.sansCdn) await page.route('https://cdn.jsdelivr.net/**', r => r.abort());
     else if (THREE) await page.route('https://cdn.jsdelivr.net/npm/three@0.160.0/**', r => r.fulfill({ contentType: 'text/javascript', body: fs.readFileSync(path.join(THREE, r.request().url().split('three@0.160.0/')[1])) }));
     faits++;
     try {
-      await page.goto(base); await page.waitForFunction(() => window.NetCarto, null, { timeout: 15000 });
-      await fn(page);
+      await page.goto(adresse); await page.waitForFunction(() => window.NetCarto?.Store.db, null, { timeout: 15000 });
+      await fn(page, { app });
       assert.deepStrictEqual(erreurs, [], 'erreurs dans la console du navigateur');
       console.log('  ok    ' + nom);
     } catch (e) { echecs++; console.log('  ÉCHEC ' + nom + '\n        ' + String(e.message).split('\n').slice(0, 3).join('\n        ')); }
     await ctx.close();
+    if (app) { await app.arreter(); fs.rmSync(dossier, { recursive: true, force: true }); }
   }
   await nav.close(); srv.close();
   console.log(echecs ? `\n${echecs} test(s) en échec sur ${faits}` : `\n${faits} tests réussis`);

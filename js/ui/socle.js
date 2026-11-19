@@ -3,6 +3,7 @@ import { COL, DEVICE_STATUS, PORT_STATUS } from '../config.js';
 import { $, $$, clamp, download, esc, plural, today } from '../utils.js';
 import { ico } from '../icones.js';
 import { Store } from '../store.js';
+import { Sync } from '../sync.js';
 import { computeAlerts, vlanOf } from '../services/requetes.js';
 import { Live } from '../services/mesures.js';
 
@@ -38,6 +39,11 @@ const Theme = {
 };
 function renderShell() {
   $('.demo-tag').classList.toggle('hidden', !Store.db.meta.demo);
+  const tag = $('#srv-tag'), e = Sync.etat;
+  tag.classList.toggle('hidden', Store.mode !== 'serveur');
+  tag.className = `srv-tag ${e}${Store.mode !== 'serveur' ? ' hidden' : ''}`;
+  tag.innerHTML = `<i></i>${e === 'envoi' ? 'Enregistrement…' : e === 'horsligne' ? 'Hors ligne' : 'Serveur · enregistré'}`;
+  tag.dataset.tip = e === 'horsligne' ? 'Serveur injoignable|Les modifications ne sont pas enregistrées tant que la liaison n\'est pas rétablie.' : 'Base sur le serveur NetCarto|Chaque modification est enregistrée dans la base du serveur.';
   const nAlerts = computeAlerts().filter(a => a.level !== 'warn' || a.kind === 'stock').length;
   $('#tabs').innerHTML = TABS.map(t => `<button data-act="tab" data-tab="${t.id}" class="${UI.tab === t.id ? 'on' : ''}">${ico(t.icon)}<span class="lg">${t.label}</span><span class="sh">${t.short || t.label}</span>${t.id === 'dash' && nAlerts ? `<span class="badge" data-tip="${plural(nAlerts, 'alerte')} à traiter">${nAlerts}</span>` : ''}</button>`).join('');
   $('#tools').innerHTML = `
@@ -62,6 +68,10 @@ function renderActive(force) {
   Views[UI.tab]?.render();
 }
 Store.onSaveError = () => toast('Sauvegarde locale impossible (stockage plein ou bloqué). Pensez à exporter vos données.', 'warn');
+/* Mode serveur : état de l'enregistrement, refus du serveur, changements faits par un autre poste */
+Sync.surEtat = () => { if (Store.db) renderShell(); };
+Store.onSyncError = e => toast(e.code === 'conflit' ? e.message : e.code === 'reseau' ? e.message : `Modification refusée par le serveur : ${e.message}`, e.code === 'conflit' ? 'warn' : 'err');
+Store.onExternalChange = () => toast('Données mises à jour : un autre poste a modifié la base.', 'ok');
 Store.on(() => { TABS.forEach(t => UI.dirty.add(t.id)); renderShell(); renderActive(); });
 
 /* --- Notifications --- */

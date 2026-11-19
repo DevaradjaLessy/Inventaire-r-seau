@@ -53,6 +53,9 @@ function creerApi({ depot, releveur, config }) {
   }
   return async function api(req, res, chemin, recherche) {
     const repondre = (statut, corps, entetes = {}) => { res.writeHead(statut, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...entetes }); res.end(JSON.stringify(corps)); };
+    // Une écriture demandée par une page d'un autre site est refusée (la page de NetCarto a la même origine que l'API)
+    const origine = req.headers.origin;
+    if (origine && req.method !== 'GET' && req.method !== 'HEAD') { let hote = ''; try { hote = new URL(origine).host; } catch { /* origine illisible */ } if (hote !== req.headers.host) { req.resume(); return repondre(403, { erreur: 'Écriture refusée : la requête vient d\'un autre site.', code: 'http' }); } }
     try { repondre(200, await traiter(req, chemin, recherche)); }
     catch (e) {
       if (e instanceof ErreurMetier) return repondre(e.statut, { erreur: e.message, code: e.code });

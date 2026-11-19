@@ -3,7 +3,17 @@
 Outil web de cartographie, d'inventaire et de gestion du matériel réseau physique : câblage, équipements, prises, stock.
 L'application fonctionne entièrement dans le navigateur, sans backend ni installation. **Les données fournies sont fictives.**
 
-## Ouvrir l'application
+## Deux façons de l'utiliser
+
+| | Serveur NetCarto | Démonstration |
+|---|---|---|
+| Pour quoi | Travailler sur votre vrai réseau, à plusieurs | Découvrir l'outil |
+| Données | Base SQLite sur le serveur | Fictives, gardées dans le navigateur |
+| Comment | Voir [`serveur/README.md`](serveur/README.md) | Page GitHub Pages, ou la section ci-dessous |
+
+Le serveur est en cours de construction : la base et l'API sont faites, les comptes, le HTTPS et l'installation Linux ou Docker arrivent ensuite. Le suivi est dans `SUIVI.md`.
+
+## Ouvrir la démonstration
 
 - **En local :** la page doit être servie par HTTP (un double-clic sur `index.html` ne suffit pas, car le navigateur bloque les modules en local). Dans le dossier du projet, lancez `python3 -m http.server 8000`, puis ouvrez `http://localhost:8000`.
 - Une connexion Internet est nécessaire pour la vue 3D, car Three.js est chargé depuis le CDN jsDelivr. Sans connexion, tout le reste fonctionne.

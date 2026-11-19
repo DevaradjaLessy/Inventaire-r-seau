@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "description": "Tests de bout en bout de NetCarto dans Chromium (Playwright).",
-  "scripts": { "test": "node netcarto.test.js" },
+  "scripts": { "test": "node --disable-warning=ExperimentalWarning netcarto.test.js" },
   "devDependencies": { "playwright": "^1.48.0", "three": "0.160.0" }
 }

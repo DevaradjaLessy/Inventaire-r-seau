@@ -53,6 +53,11 @@ a{color:var(--accent)}
 .brand svg{width:30px;height:30px}
 .brand b{color:var(--accent);font-weight:700}
 .demo-tag{font-size:11px;font-weight:600;color:var(--warn);border:1px solid rgba(250,178,25,.4);background:rgba(250,178,25,.08);padding:2px 8px;border-radius:20px;white-space:nowrap}
+.srv-tag{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--txt2);border:1px solid var(--line2);background:var(--panel2);padding:2px 9px;border-radius:20px;white-space:nowrap}
+.srv-tag i{width:7px;height:7px;border-radius:50%;background:var(--up)}
+.srv-tag.envoi i{background:var(--warn)} .srv-tag.horsligne i{background:var(--crit)} .srv-tag.horsligne{color:var(--danger-txt)}
+.boot-error{margin:auto;max-width:520px;padding:28px;text-align:center}
+.boot-error h2{margin-bottom:10px}
 #tabs{display:flex;gap:4px;height:100%;align-items:center}
 #tabs button{background:none;border:0;padding:0 13px;color:var(--txt2);cursor:pointer;display:flex;align-items:center;gap:8px;font-weight:550;height:36px;border-radius:9px;transition:background .12s,color .12s}
 #tabs button:hover{color:var(--txt);background:var(--hover)}
@@ -534,4 +539,4 @@ svg.plan,svg.topo{touch-action:none}
   .rg .tube{width:24px;height:90px}
   .mx td{min-width:44px}
 }
-@media (max-width:420px){.demo-tag{display:none}}
+@media (max-width:420px){.demo-tag,.srv-tag{display:none}}

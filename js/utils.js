@@ -28,7 +28,11 @@ function download(name, content, mime = 'application/json') {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 /* Identifiant unique dans toute la base : préfixe + compteur global */
-const nextId = (db, prefix) => `${prefix}-${(++db.meta.seq).toString(36)}`;
+let idsAleatoires = false;
+/* En mode serveur, plusieurs postes créent des objets en même temps : les identifiants sont tirés au hasard */
+const setRandomIds = v => { idsAleatoires = !!v; };
+const hasard = () => Array.from(crypto.getRandomValues(new Uint8Array(10)), b => 'abcdefghijklmnopqrstuvwxyz0123456789'[b % 36]).join('');
+const nextId = (db, prefix) => (idsAleatoires ? `${prefix}-${hasard()}` : `${prefix}-${(++db.meta.seq).toString(36)}`);
 const typeOf = id => PREFIX_TYPE[String(id).slice(0, String(id).indexOf('-'))];
 /* Couleur plus claire ou plus sombre (f > 0 éclaircit, f < 0 assombrit) */
 function shade(hex, f) {
@@ -39,4 +43,4 @@ function shade(hex, f) {
 }
 const luminance = hex => { const n = parseInt(hex.slice(1), 16); return (0.299 * (n >> 16) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) / 255; };
 
-export { $, $$, clamp, download, esc, fmtDate, fmtDateTime, fmtSpeed, groupBy, luminance, mulberry32, nextId, norm, pad2, pct, plural, shade, sum, today, typeOf };
+export { $, $$, clamp, download, esc, fmtDate, fmtDateTime, fmtSpeed, groupBy, luminance, mulberry32, nextId, norm, pad2, pct, plural, setRandomIds, shade, sum, today, typeOf };
