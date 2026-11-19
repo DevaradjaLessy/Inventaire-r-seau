@@ -141,9 +141,9 @@ js/ui/materiel/            catalogue, installation, palette, modele
 ```
 - **Sens des dépendances :** config → utils → store → services → 3d → ui. Les couches basses n'importent jamais l'interface (le store prévient l'interface par `Store.onSaveError` et `Store.on`). Les fichiers de `js/ui/` peuvent s'importer entre eux, mais n'utilisent ces imports que dans des fonctions, jamais au chargement.
 - **Conséquence :** la page doit être servie par HTTP (GitHub Pages, serveur interne, ou `python3 -m http.server` en local). L'ouverture par double-clic ne fonctionne plus.
-- **Bibliothèque unique : Three.js `0.160.0`**, chargée par import map depuis jsDelivr :
-  - `three` → `https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js`
-  - `three/addons/` → `https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/` (OrbitControls, RoomEnvironment)
+- **Bibliothèque unique : Three.js `0.160.0`**, copie locale dans `js/vendor/three/` depuis le lot 22 (voir 3.22), chargée par import map :
+  - `three` → `./js/vendor/three/build/three.module.min.js`
+  - `three/addons/` → `./js/vendor/three/examples/jsm/` (OrbitControls, RoomEnvironment)
 - Plan 2D, élévation de baie, topologie et graphiques : **SVG/HTML natif**, sans autre dépendance.
 - Script en `type="module"`. Les actions passent par des attributs `data-act` et un gestionnaire délégué, pas par des `onclick` en ligne.
 - **Store :** toute modification passe par `commit(type, texte, mutation)`. Cette fonction prend un instantané pour l'annulation, applique la mutation, ajoute une entrée à l'historique, reconstruit les index, sauvegarde (avec un délai court) et notifie les vues. Les vues visibles se redessinent tout de suite, les autres au prochain affichage.
@@ -307,16 +307,13 @@ history    [{ id, ts, type, text, ref }]                                 // type
   - mention « Données fictives »
 
 ### 3.9 Note technique pour les tests
-- **Les tests sont dans le dépôt :** `tests/netcarto.test.js` (interface, 30 scénarios dont 16 en mode serveur), `serveur/tests/` (serveur et base, 33 scénarios) et `connecteurs/tests/test.js` (supervision, 6 scénarios). Les lancer tous avant chaque commit (`npm test` dans chacun des trois dossiers). Si le CDN est bloqué, indiquer le dossier de Three.js par la variable `NETCARTO_THREE`, ou faire `npm install` dans `tests/`.
-- Dans l'environnement cloud de Claude, le CDN jsDelivr peut être bloqué (erreur 403 du proxy). Le registre npm, lui, est accessible.
-- Pour tester :
-  1. installer `three@0.160.0` avec npm dans un dossier temporaire (pas dans le dépôt) ;
-  2. dans Playwright, intercepter les URL jsDelivr avec `page.route` et servir les fichiers locaux ;
-  3. servir le dossier du dépôt par HTTP (ou avec `page.route`), car les modules ne se chargent pas en `file://`.
-- Les fichiers livrés gardent les URL CDN, qui fonctionnent sur GitHub Pages.
+- **Les tests sont dans le dépôt :** `tests/netcarto.test.js` (interface, Chromium via Playwright), `serveur/tests/` (serveur et base), `connecteurs/tests/test.js` (supervision) et `installation/tests/` (image Docker et installation Linux, quand Docker est disponible). Lancer les trois premières suites avant chaque commit (`npm test` dans chacun des trois dossiers), et la quatrième après toute modification de `installation/`.
+- La page ne demande plus rien à Internet : Three.js est dans `js/vendor/three/`. Les tests de l'interface coupent toute requête vers une adresse extérieure et vérifient qu'il n'y en a aucune.
+- Les modules ne se chargent pas en `file://` : les tests servent le dépôt par un petit serveur HTTP local.
+- Dans l'environnement cloud de Claude, Playwright et Chromium sont déjà installés (`NODE_PATH=/opt/node-tools/node_modules`). Le dépôt de paquets Debian y est bloqué ; Docker Hub, npm et nodejs.org sont accessibles.
 
 ### 3.10 Précisions apportées pendant la construction
-- **Three.js est chargé sans bloquer la page** (import dynamique). Si le CDN est inaccessible, seule la vue 3D est indisponible ; un message l'indique.
+- **Three.js est chargé sans bloquer la page** (import dynamique). Si la bibliothèque ne se charge pas, seule la vue 3D est indisponible ; un message l'indique.
 - **Catégories :** les « Terminaux » sont séparés en deux catégories, Téléphones IP et Caméras IP, pour des comptages plus lisibles.
 - **Prise murale :** le modèle du catalogue est une prise simple (1 RJ45), en accord avec le modèle de données.
 - **Jeu de démo réel :** 121 prises murales (dont 21 pour les bornes et caméras), 102 équipements, 26 téléphones, 15 bornes, 6 caméras, 972 ports, 344 câbles, 34 modèles au catalogue.
@@ -535,6 +532,16 @@ Les tables `utilisateurs` et `audit` viendront avec la migration du lot 17.
 - **Essais réels :** `installation/tests/linux.test.js` déroule tout dans un conteneur Debian 12 où tourne un vrai systemd : installation, droits, cloisonnement, exploitation, mise à jour, retour arrière sur une version cassée, désinstallation, garde-fou (dossier étranger, lien symbolique), désinstallation complète.
 - **Non essayé :** Ubuntu (même famille, mêmes outils, mais non déroulé) ; le téléchargement de Node.js depuis l'intérieur du script sur une machine réelle (la fonction de téléchargement et de vérification est essayée à part) ; processeurs ARM.
 
+### 3.22 Three.js local et politique de sécurité du contenu (lot 22)
+
+- **Three.js dans le dépôt :** `js/vendor/three/` contient les trois fichiers utilisés de la version 0.160.0 (`three.module.min.js`, `OrbitControls.js`, `RoomEnvironment.js`), repris sans modification du paquet npm, avec leur licence MIT. Poids : 0,7 Mo. `SOMMES.txt` garde leur empreinte ; un test signale toute modification ultérieure.
+- **Plus aucun appel à Internet :** `index.html` ne cite plus aucune adresse extérieure. Cela vaut aussi pour la démonstration GitHub Pages, par simplicité (un seul chemin de chargement). Le serveur NetCarto fonctionne donc sur un réseau sans accès à Internet, vue 3D comprise.
+- **Politique de sécurité du contenu (CSP)**, posée par le serveur sur la page : tout doit venir de NetCarto lui-même (`default-src 'self'`). Les deux scripts écrits dans la page (carte d'import et thème) sont autorisés par leur empreinte, calculée sur la page servie ; aucun `unsafe-inline` ni `unsafe-eval` pour les scripts. Un script injecté ne s'exécute pas, et la page ne peut pas envoyer de données vers un autre site. Les styles en attribut restent permis, car l'interface en utilise partout.
+- **Limite :** la démonstration GitHub Pages, sans serveur, n'a pas cette politique (elle ne contient que des données fictives).
+- **Bibliothèque de test retirée :** `tests/package.json` ne dépend plus de `three`.
+
+**Tests :** 41 scénarios de bout en bout (dont « sans Internet » et la politique de sécurité), 50 pour le serveur.
+
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
@@ -570,7 +577,7 @@ Les tables `utilisateurs` et `audit` viendront avec la migration du lot 17.
 | 18 | **Sauvegardes et migrations :** sauvegardes automatiques planifiées, restauration, migrations versionnées | Élevé (high) | ✅ Fait (voir 3.18) |
 | 19 | **Docker :** image NetCarto et `docker-compose.yml` | Élevé (high) | ✅ Fait (voir 3.20) |
 | 20 | **Installation Linux :** `installer.sh`, systemd, mise à jour, désinstallation | Élevé (high) | ✅ Fait (voir 3.21) |
-| 22 | **Three.js hébergé localement**, pour fonctionner sans Internet | Moyen | ⏳ À faire |
+| 22 | **Three.js hébergé localement**, pour fonctionner sans Internet | Moyen | ✅ Fait (voir 3.22) |
 
 **Ordre de réalisation (décision du 2026-11-19) :** 16, 17, 11, 18, 14, 19, 20, 22. Les lots 9 (reste), 13 et 15 viennent ensuite. Il n'y a pas de lot 21.
 
@@ -609,7 +616,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-18 | Continuer avec le lot 10 : base vide et création des bâtiments | ✅ Fait. Le bouton Réinitialiser propose « démonstration » ou « base vide » (aucun site, catalogue conservé, stock à zéro). Sites, bâtiments, étages et pièces se créent, se modifient et se suppriment depuis la fiche de droite ; une pièce peut aussi se tracer à la souris sur le plan (alignement tous les 50 cm). Contrôles : pièces sans chevauchement et dans l'étage, codes de bâtiment et niveaux uniques, suppression seulement si l'élément est vide. Gestion des VLAN depuis le tableau de bord ou la fiche d'un port. L'étiquette « Données fictives » ne s'affiche plus que pour la démonstration. Un scénario de test complet a été ajouté (14 tests au total). |
 | 2026-11-18 | Peut-on encore peaufiner le design ? | ✅ Fait (lot 12) : typographie et espacements revus, en-tête plus aéré avec onglets en pastilles, boutons et champs arrondis avec transitions, anneau de focus au clavier, fiches de détail en cartes (Cartographie et Matériel), barres d'outils flottantes translucides sur le plan et la 3D, arbre à lignes arrondies, cartes du catalogue avec effet au survol, fenêtres et notifications animées. Vérifié dans les deux thèmes et sur téléphone. |
 | 2026-11-19 | **Nouvelle orientation :** NetCarto devient un logiciel serveur installable sur Linux, avec ou sans Docker, avec sa propre base de données (décisions détaillées, lots 16 à 22, ordre de réalisation, méthode « tests avant le code ») | ✅ Décisions notées en 3.14, lots ajoutés en section 4. **Lot 16 fait** (voir 3.15) : serveur Node dans `serveur/`, base SQLite relationnelle, API `/api/v1`, interface basculée sur l'API, page GitHub Pages inchangée. Prochain lot : 17. |
-| 2026-11-19 | « Continue à tout concevoir, je vais tester à la maison » | 🔄 Lots 17 (voir 3.16), 11 (voir 3.17), 18 (voir 3.18), 14 (voir 3.19), 19 (voir 3.20) et 20 (voir 3.21) faits. Reste le lot 22. |
+| 2026-11-19 | « Continue à tout concevoir, je vais tester à la maison » | ✅ Lots 17, 11, 18, 14, 19, 20 et 22 faits (voir 3.16 à 3.22). Restent, hors de l'ordre fixé : la fin du lot 9, les lots 13 et 15. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---

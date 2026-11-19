@@ -1,7 +1,6 @@
 /* Tests de bout en bout de NetCarto. Lancer avec : npm test (dans le dossier tests/).
    - L'application est servie par un petit serveur HTTP local (les modules ne se chargent pas en file://).
-   - Three.js est servi depuis node_modules s'il est installé (utile quand le CDN est bloqué) ;
-     le dossier peut aussi être indiqué par la variable NETCARTO_THREE.
+   - Toute requête vers une adresse extérieure est coupée : la page doit se suffire à elle-même (Three.js est dans js/vendor/).
    - Chaque scénario repart d'une page neuve, donc du jeu de démonstration d'origine. */
 'use strict';
 const assert = require('assert'), http = require('http'), fs = require('fs'), path = require('path');
@@ -10,7 +9,6 @@ const { chromium } = require('playwright');
 const { demarrer } = require('../serveur/app');
 
 const RACINE = path.join(__dirname, '..');
-const THREE = [process.env.NETCARTO_THREE, path.join(__dirname, 'node_modules', 'three')].find(d => d && fs.existsSync(d));
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
 const tests = [];
 const test = (nom, fn, opts = {}) => tests.push({ nom, fn, opts });
@@ -183,11 +181,19 @@ test('Supervision : simulation, écart saisi / mesuré, alerte, arrêt', async p
   await page.click('[data-act=sources]'); await page.selectOption('.modal [name=type]', 'none'); await page.click('[data-act=modal-ok]'); await page.waitForFunction(() => NetCarto.Live.state === 'off');
   assert.strictEqual(await page.evaluate(() => NetCarto.Live.port.size), 0);
 });
-test('Sans CDN : l\'application reste utilisable, la 3D prévient', async page => {
+test('Sans Internet : la vue 3D fonctionne avec la copie locale de Three.js, rien n\'est demandé à l\'extérieur', async (page, { requetes }) => {
+  await choisir(page, 'BAIE-A0-01'); await page.waitForSelector('#r3d-canvas canvas', { timeout: 20000 });
+  assert.strictEqual(await page.evaluate(() => import('/js/3d/three.js').then(m => m.threeReady)), true);
+  assert.strictEqual(await page.evaluate(() => import('three').then(m => m.REVISION)), '160');
+  assert.ok(requetes.some(u => /\/js\/vendor\/three\/build\/three\.module\.min\.js$/.test(u)) && requetes.some(u => /\/js\/vendor\/three\/examples\/jsm\/controls\/OrbitControls\.js$/.test(u)));
+  assert.deepStrictEqual(requetes.filter(u => !/^(http:\/\/127\.0\.0\.1|data:|blob:)/.test(u)), [], 'aucune adresse extérieure dans la page');
+  assert.doesNotMatch(await page.content(), /cdn\.jsdelivr|unpkg|googleapis/);
+});
+test('Three.js illisible : l\'application reste utilisable, la 3D prévient', async page => {
   await choisir(page, 'BAIE-A0-01'); await page.waitForTimeout(600);
   assert.match(await page.$eval('#r3d-canvas', e => e.innerText), /Vue 3D indisponible/);
   assert.ok(await page.$$eval('.eu.dev', a => a.length) > 5);
-}, { sansCdn: true });
+}, { sansThree: true });
 test('Téléphone : pas de débordement, arbre et fiche en volets', async page => {
   await page.evaluate(() => NetCarto.select(NetCarto.Store.db.floors[1].id));
   assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
@@ -379,6 +385,16 @@ test('Serveur : deux modifications coup sur coup du même élément sont enregis
   await page.evaluate(() => { NetCarto.Store.undo(); NetCarto.Store.undo(); }); await synchro(page);
   assert.strictEqual((await api(page, '/equipements/' + id)).json.notes, ''); assert.strictEqual(await page.locator('.toast.err').count(), 0);
 }, S);
+test('Serveur : politique de sécurité du contenu — la page et la 3D fonctionnent, un script injecté ne s\'exécute pas', async (page, { reponse }) => {
+  const csp = reponse.headers()['content-security-policy'];
+  assert.match(csp, /default-src 'self'/); assert.doesNotMatch(/script-src[^;]*/.exec(csp)[0], /unsafe-inline|unsafe-eval|\*/);
+  // La 3D (modules, carte d'import) fonctionne sous cette politique
+  await choisir(page, 'BAIE-A0-01'); await page.waitForSelector('#r3d-canvas canvas', { timeout: 20000 });
+  assert.strictEqual(await page.evaluate(() => document.documentElement.dataset.theme), 'dark', 'le script du thème, autorisé par son empreinte, s\'est exécuté');
+  // Un script ajouté à la page (ce que ferait une injection) est bloqué, tout comme un appel vers un autre site
+  assert.strictEqual(await page.evaluate(() => { const s = document.createElement('script'); s.textContent = 'window.__injecte = 1'; document.head.appendChild(s); return window.__injecte; }), undefined);
+  assert.strictEqual(await page.evaluate(() => fetch('https://exemple.invalid/vol?d=1').then(() => 'parti', () => 'bloqué')), 'bloqué');
+}, { serveur: true, erreursAttendues: /Content Security Policy/ });
 test('Serveur : modification faite ailleurs entre-temps → prévenu, données rechargées, rien n\'est écrasé', async page => {
   const dev = await page.evaluate(() => { const x = NetCarto.Store.db.devices.find(d => d.hostname === 'SW-A1-ACC-01'); NetCarto.select(x.id); return x; });
   const autre = await api(page, '/lots', 'POST', { changements: [{ collection: 'devices', op: 'modifier', cle: dev.id, avant: dev, apres: { ...dev, notes: 'changé par un collègue' } }] });
@@ -535,14 +551,17 @@ test('Comptes : session expirée en cours de travail → on se reconnecte sans p
         }
       }
     }
-    page.on('console', m => { if (m.type() === 'error' && !(opts.sansCdn && /ERR_FAILED|Failed to load/.test(m.text())) && !(opts.erreursAttendues && opts.erreursAttendues.test(m.text()))) erreurs.push(m.text()); });
+    page.on('console', m => { if (m.type() === 'error' && !(opts.sansThree && /ERR_FAILED|Failed to load/.test(m.text())) && !(opts.erreursAttendues && opts.erreursAttendues.test(m.text()))) erreurs.push(m.text()); });
     page.on('pageerror', e => erreurs.push(e.message));
-    if (opts.sansCdn) await page.route('https://cdn.jsdelivr.net/**', r => r.abort());
-    else if (THREE) await page.route('https://cdn.jsdelivr.net/npm/three@0.160.0/**', r => r.fulfill({ contentType: 'text/javascript', body: fs.readFileSync(path.join(THREE, r.request().url().split('three@0.160.0/')[1])) }));
+    // Aucune sortie vers Internet : toute adresse extérieure est notée, puis coupée (le test « Sans Internet » vérifie qu'il n'y en a pas)
+    const requetes = [];
+    page.on('request', r => requetes.push(r.url()));
+    await ctx.route(u => !['127.0.0.1', 'localhost'].includes(u.hostname) && /^https?:$/.test(u.protocol), r => r.abort());
+    if (opts.sansThree) await page.route('**/js/vendor/three/**', r => r.abort());
     faits++;
     try {
-      await page.goto(adresse); await page.waitForFunction(() => window.NetCarto?.Store.db || document.querySelector('#auth form'), null, { timeout: 15000 });
-      await fn(page, { app });
+      const reponse = await page.goto(adresse); await page.waitForFunction(() => window.NetCarto?.Store.db || document.querySelector('#auth form'), null, { timeout: 15000 });
+      await fn(page, { app, requetes, reponse });
       assert.deepStrictEqual(erreurs, [], 'erreurs dans la console du navigateur');
       console.log('  ok    ' + nom);
     } catch (e) { echecs++; console.log('  ÉCHEC ' + nom + '\n        ' + String(e.message).split('\n').slice(0, 3).join('\n        ')); }

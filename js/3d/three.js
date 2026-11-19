@@ -1,6 +1,5 @@
-/* Chargement de Three.js sans bloquer l'application : si le CDN est inaccessible, tout fonctionne sauf la vue 3D. */
-/* Three.js est chargé sans bloquer le reste de l'application : si le CDN est
-   inaccessible, tout fonctionne sauf la vue 3D. */
+/* Chargement de Three.js (copie locale, js/vendor/three) sans bloquer l'application :
+   si la bibliothèque ne se charge pas, tout fonctionne sauf la vue 3D. */
 let THREE = null, OrbitControls = null, RoomEnvironment = null;
 const threeReady = (async () => {
   try {

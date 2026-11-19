@@ -1,7 +1,7 @@
 # NetCarto
 
 Outil web de cartographie, d'inventaire et de gestion du matériel réseau physique : câblage, équipements, prises, stock.
-L'application fonctionne entièrement dans le navigateur, sans backend ni installation. **Les données fournies sont fictives.**
+NetCarto est un logiciel serveur, avec sa propre base de données ; son interface fonctionne aussi seule dans le navigateur, en démonstration. **Les données fournies dans ce dépôt sont fictives.**
 
 ## Deux façons de l'utiliser
 
@@ -9,14 +9,14 @@ L'application fonctionne entièrement dans le navigateur, sans backend ni instal
 |---|---|---|
 | Pour quoi | Travailler sur votre vrai réseau, à plusieurs | Découvrir l'outil |
 | Données | Base SQLite sur le serveur | Fictives, gardées dans le navigateur |
-| Comment | Voir [`serveur/README.md`](serveur/README.md) | Page GitHub Pages, ou la section ci-dessous |
+| Comment | Installer : [`installation/README.md`](installation/README.md) (Docker, ou Debian et Ubuntu). Essayer sur son poste : [`serveur/README.md`](serveur/README.md) | Page GitHub Pages, ou la section ci-dessous |
 
-Le serveur est en cours de construction : la base, l'API, les comptes, le journal d'audit et le HTTPS sont faits ; les sauvegardes automatiques et l'installation Linux ou Docker arrivent ensuite. Le suivi est dans `SUIVI.md`.
+Le serveur apporte les comptes et les rôles, le journal d'audit, le HTTPS, les sauvegardes automatiques et la restauration. Il s'installe avec Docker ou sur Debian et Ubuntu, et fonctionne sans accès à Internet. Le suivi du projet est dans `SUIVI.md`.
 
 ## Ouvrir la démonstration
 
 - **En local :** la page doit être servie par HTTP (un double-clic sur `index.html` ne suffit pas, car le navigateur bloque les modules en local). Dans le dossier du projet, lancez `python3 -m http.server 8000`, puis ouvrez `http://localhost:8000`.
-- Une connexion Internet est nécessaire pour la vue 3D, car Three.js est chargé depuis le CDN jsDelivr. Sans connexion, tout le reste fonctionne.
+- Aucune connexion Internet n'est nécessaire : Three.js (vue 3D) est fourni avec le projet, dans `js/vendor/three/`.
 - **Sur GitHub Pages :** dans le dépôt, allez dans *Settings → Pages*, choisissez *Deploy from a branch*, puis la branche qui contient `index.html` et le dossier `/ (root)`. La page est publiée à l'adresse `https://<utilisateur>.github.io/<dépôt>/`.
 
 ## Les quatre onglets
