@@ -1,0 +1,32 @@
+# NetCarto — exemple de fichier de réglages.
+# Copiez-le (par exemple en netcarto.toml), adaptez-le, puis lancez :
+#   node netcarto.js --config netcarto.toml
+# Ne mettez aucun mot de passe ici : une valeur "env:NOM" est lue dans la variable d'environnement NOM.
+
+[serveur]
+hote = "127.0.0.1"      # 127.0.0.1 = ce poste seulement. N'ouvrez pas au réseau avant le lot 17 (comptes, HTTPS).
+port = 8080
+
+[donnees]
+dossier = "donnees"     # dossier de la base ; un chemin relatif part du dossier de ce fichier
+
+[web]
+dossier = ".."          # dossier qui contient index.html, css/ et js/
+
+[limites]
+corpsMaxMo = 25         # taille maximale d'une requête (import d'une base, plan en image)
+
+[supervision]
+intervalle = 30         # secondes entre deux relevés
+
+# Sources de supervision (facultatif). Voir connecteurs/README.md pour le détail.
+# [[supervision.sources]]
+# type = "prtg"
+# url = "https://prtg.exemple.interne"
+# apiToken = "env:PRTG_TOKEN"
+#
+# [[supervision.sources]]
+# type = "snmp"
+# version = "2c"
+# community = "env:SNMP_COMMUNITY"
+# devices = [{ ip = "192.0.2.10", hostname = "SW-EXEMPLE-01" }]

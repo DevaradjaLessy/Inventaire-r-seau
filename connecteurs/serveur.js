@@ -10,30 +10,15 @@
    Les identifiants restent ici : ils ne sont jamais envoyés au navigateur. */
 'use strict';
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
-const { fusionner, secret } = require('./lib/contrat');
-
-const TYPES = { simulation: './sources/simulation', prtg: './sources/prtg', snmp: './sources/snmp' };
+const { secret } = require('./lib/contrat');
+const { creerReleveur } = require('./lib/releveur');
 
 function demarrer(cfg, journal = console.log) {
-  const sources = (cfg.sources || []).map((c, i) => {
-    if (!TYPES[c.type]) throw new Error(`Source n° ${i + 1} : type « ${c.type} » inconnu (attendu : ${Object.keys(TYPES).join(', ')}).`);
-    return { src: require(TYPES[c.type])(c), devices: [], ok: null, erreur: '', ts: 0 };
-  });
+  const releveur = creerReleveur(cfg.sources || [], journal);
   const jeton = cfg.token ? secret(cfg.token) : '';
   const origines = cfg.corsOrigins || [];
   // Comparaison en temps constant, pour ne rien laisser deviner du jeton
   const jetonValide = recu => { const a = Buffer.from(String(recu || '')), b = Buffer.from('Bearer ' + jeton); return a.length === b.length && crypto.timingSafeEqual(a, b); };
-  let enCours = false;
-  async function relever() {
-    if (enCours) return;
-    enCours = true;
-    await Promise.all(sources.map(async s => {
-      try { s.devices = await s.src.relever(); s.ok = true; s.erreur = ''; }
-      catch (e) { s.ok = false; s.erreur = e.message; journal(`[${s.src.nom}] ${e.message}`); }
-      s.ts = Date.now();
-    }));
-    enCours = false;
-  }
   const serveur = http.createServer((req, res) => {
     const origine = req.headers.origin;
     if (origine && (origines.includes('*') || origines.includes(origine))) { res.setHeader('Access-Control-Allow-Origin', origine); res.setHeader('Vary', 'Origin'); res.setHeader('Access-Control-Allow-Headers', 'Authorization'); }
@@ -42,8 +27,8 @@ function demarrer(cfg, journal = console.log) {
     if (req.method !== 'GET') return json(405, { erreur: 'Lecture seule : seule la méthode GET est acceptée.' });
     const chemin = new URL(req.url, 'http://x').pathname;
     if (jeton && chemin.startsWith('/api/') && !jetonValide(req.headers.authorization)) return json(401, { erreur: 'Jeton absent ou invalide.' });
-    if (chemin === '/api/etat') return json(200, { version: 1, source: sources.map(s => s.src.nom).join(' + ') || 'aucune', ts: Math.max(0, ...sources.map(s => s.ts)), devices: fusionner(sources.filter(s => s.ok).map(s => s.devices)) });
-    if (chemin === '/api/sante') return json(200, { sources: sources.map(s => ({ nom: s.src.nom, ok: s.ok, erreur: s.erreur, equipements: s.devices.length, ts: s.ts })) });
+    if (chemin === '/api/etat') return json(200, releveur.etat());
+    if (chemin === '/api/sante') return json(200, releveur.sante());
     if (chemin.startsWith('/api/')) return json(404, { erreur: 'Chemin inconnu. Disponibles : /api/etat, /api/sante' });
     return fichier(chemin, res);
   });
@@ -64,9 +49,8 @@ function demarrer(cfg, journal = console.log) {
     if (!cible.startsWith(racine + path.sep)) return refus(403);
     fs.readFile(cible, (err, data) => { if (err) return refus(404); res.writeHead(200, { 'Content-Type': MIME[path.extname(rel).toLowerCase()], 'Cache-Control': 'no-cache' }); res.end(data); });
   }
-  const minuterie = setInterval(relever, Math.max(5, cfg.intervalSeconds || 30) * 1000);
-  const pret = relever().then(() => new Promise(ok => serveur.listen(cfg.port || 8787, cfg.host || '127.0.0.1', ok)));
-  return { serveur, pret, relever, arreter: () => { clearInterval(minuterie); return new Promise(ok => serveur.close(ok)); } };
+  const pret = releveur.demarrer(cfg.intervalSeconds || 30).then(() => new Promise(ok => serveur.listen(cfg.port || 8787, cfg.host || '127.0.0.1', ok)));
+  return { serveur, pret, relever: releveur.relever, arreter: () => { releveur.arreter(); return new Promise(ok => serveur.close(ok)); } };
 }
 
 if (require.main === module) {

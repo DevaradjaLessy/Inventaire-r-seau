@@ -1,0 +1,16 @@
+{
+  "name": "netcarto-serveur",
+  "version": "0.16.0",
+  "private": true,
+  "description": "Serveur NetCarto : interface web, API et base de données SQLite.",
+  "main": "netcarto.js",
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning netcarto.js",
+    "demo": "node --disable-warning=ExperimentalWarning netcarto.js --demo",
+    "test": "node --disable-warning=ExperimentalWarning --test \"tests/*.test.js\""
+  },
+  "engines": { "node": ">=22.5" },
+  "dependencies": {
+    "smol-toml": "^1.3.1"
+  }
+}
