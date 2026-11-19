@@ -62,7 +62,7 @@ Actions['compte-menu'] = () => {
   Modal.open({ title: 'Mon compte', ok: false, cancel: 'Fermer',
     body: `<div class="d-head" style="margin:0 0 14px"><div class="dico">${ico('user')}</div><div><h2>${esc(u.nom || u.identifiant)}</h2><div class="sub">${esc(u.identifiant)} · ${ROLES[u.role]}</div></div></div>
       <div class="compte-actions"><button class="btn" data-act="compte-mdp">${ico('edit')}Changer mon mot de passe</button>
-      ${admin ? `<button class="btn" data-act="compte-utilisateurs">${ico('user')}Utilisateurs</button><button class="btn" data-act="compte-audit">${ico('history')}Journal d'audit</button>` : ''}
+      ${admin ? `<button class="btn" data-act="compte-utilisateurs">${ico('user')}Utilisateurs</button><button class="btn" data-act="compte-audit">${ico('history')}Journal d'audit</button><button class="btn" data-act="compte-sauvegardes">${ico('download')}Sauvegardes</button>` : ''}
       <button class="btn danger" data-act="compte-deconnexion">${ico('out')}Se déconnecter</button></div>` });
 };
 Actions['compte-deconnexion'] = async () => { Modal.close(); try { await Sync.appel('DELETE', '/session'); } catch { /* déjà déconnecté */ } location.reload(); };
@@ -109,7 +109,7 @@ Actions['user-mdp'] = el => { const id = idLigne(el); Modal.open({ title: `Nouve
   onOk(v) { Sync.appel('PUT', '/utilisateurs/' + id, { motDePasse: v.motDePasse, deverrouiller: true }).then(() => { toast('Mot de passe enregistré', 'ok'); ouvrirUtilisateurs(); }, e => toast(e.message, 'err')); return false; } }); };
 
 /* --- Journal d'audit (administrateur) --- */
-const ACTIONS = { creer: 'Création', modifier: 'Modification', supprimer: 'Suppression', remplacement: 'Remplacement de la base', connexion: 'Connexion', echec_connexion: 'Échec de connexion', utilisateur_creer: 'Compte créé', utilisateur_modifier: 'Compte modifié', utilisateur_supprimer: 'Compte supprimé', mot_de_passe: 'Mot de passe changé' };
+const ACTIONS = { sauvegarde: 'Sauvegarde', sauvegarde_supprimer: 'Sauvegarde supprimée', restauration: 'Restauration', creer: 'Création', modifier: 'Modification', supprimer: 'Suppression', remplacement: 'Remplacement de la base', connexion: 'Connexion', echec_connexion: 'Échec de connexion', utilisateur_creer: 'Compte créé', utilisateur_modifier: 'Compte modifié', utilisateur_supprimer: 'Compte supprimé', mot_de_passe: 'Mot de passe changé' };
 const OBJETS = { sites: 'site', buildings: 'bâtiment', floors: 'étage', rooms: 'pièce', racks: 'baie', devices: 'équipement', ports: 'port', outlets: 'prise', cables: 'câble', catalog: 'modèle', stock: 'stock', vlans: 'VLAN', utilisateurs: 'compte' };
 const court = v => { const s = v === null || v === undefined || v === '' ? '∅' : typeof v === 'object' ? JSON.stringify(v) : String(v); return s.length > 60 ? s.slice(0, 57) + '…' : s; };
 /* Champs qui diffèrent entre la valeur avant et la valeur après */
@@ -120,7 +120,7 @@ function ecarts(avant, apres) {
 }
 const Audit = { identifiant: '', lignes: [] };
 function ligneAudit(a) {
-  const detail = a.action === 'modifier' ? ecarts(a.avant, a.apres).join('') : a.action === 'remplacement' ? esc(Object.entries(a.apres || {}).filter(([, n]) => n).map(([k, n]) => `${n} ${k}`).join(', ')) : a.action === 'utilisateur_modifier' ? esc(Object.entries(a.apres || {}).map(([k, v]) => `${k} : ${v}`).join(', ')) : '';
+  const detail = a.action === 'modifier' ? ecarts(a.avant, a.apres).join('') : a.action === 'remplacement' || a.action === 'restauration' ? esc(Object.entries(a.apres || {}).filter(([, n]) => n).map(([k, n]) => `${n} ${k}`).join(', ')) : a.action === 'utilisateur_modifier' ? esc(Object.entries(a.apres || {}).map(([k, v]) => `${k} : ${v}`).join(', ')) : '';
   return `<div class="a-row"><span class="muted">${fmtDateTime(a.date)}</span><b>${esc(a.identifiant || 'système')}</b><span class="chip">${ACTIONS[a.action] || esc(a.action)}</span>
     <div><span>${a.collection && OBJETS[a.collection] ? OBJETS[a.collection] + ' ' : ''}<b>${esc(a.libelle)}</b></span>${detail ? `<div class="a-detail">${detail}</div>` : ''}</div></div>`;
 }

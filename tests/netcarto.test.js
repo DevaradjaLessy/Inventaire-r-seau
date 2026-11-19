@@ -312,8 +312,9 @@ test('Serveur : un doublon d\'adresse IP qui échappe à l\'interface est refus�
   const [a, b] = await page.evaluate(() => { const d = NetCarto.Store.db.devices.filter(x => x.ip); NetCarto.select(d[0].id); return [d[0], d[1]]; });
   // Écriture directe dans le store, sans passer par les contrôles de l'interface (comme le ferait un autre outil)
   await page.evaluate(([i, ip]) => NetCarto.Store.commit('edit', 'Test', () => { NetCarto.Store.idx.id.get(i).ip = ip; }), [a.id, b.ip]);
-  await page.waitForSelector('.toast.err'); await synchro(page);
-  assert.match(await page.locator('.toast.err').first().innerText(), /Adresse IP déjà utilisée/);
+  const refus = await (await page.waitForSelector('.toast.err')).innerText();   // lu tout de suite : la notification s'efface seule
+  await synchro(page);
+  assert.match(refus, /Adresse IP déjà utilisée/);
   assert.strictEqual(await page.evaluate(i => NetCarto.Store.idx.id.get(i).ip, a.id), a.ip, 'l\'interface doit revenir à l\'ancienne adresse');
   assert.strictEqual((await api(page, '/equipements/' + a.id)).json.ip, a.ip);
   assert.strictEqual(await page.evaluate(() => NetCarto.Store.undoStack.length), 0);
@@ -420,6 +421,23 @@ test('Comptes : le journal d\'audit montre qui a fait quoi, avec la valeur avant
   assert.match(texte, /admin/); assert.match(texte, /Modification/); assert.match(texte, /notes/); assert.match(texte, /baie réorganisée/);
   await page.fill('#audit-filtre', 'tech'); await page.waitForFunction(() => !document.querySelector('#audit-list .a-row') || [...document.querySelectorAll('#audit-list .a-row')].every(r => /tech/.test(r.textContent)), null, { timeout: 4000 });
   assert.strictEqual(await page.locator('#audit-list .a-row', { hasText: 'SW-A1-ACC-01' }).count(), 0, 'le filtre par personne s\'applique');
+}, S);
+test('Sauvegardes : l\'administrateur sauvegarde, puis restaure l\'inventaire après une erreur', async page => {
+  const ouvrir = async () => { await page.click('#user-chip'); await page.click('[data-act=compte-sauvegardes]'); await page.waitForSelector('#sv-reglages b'); };
+  await ouvrir();
+  assert.match(await page.locator('#sv-reglages').innerText(), /chaque jour à 02:30/);
+  await page.click('[data-act=sv-creer]'); await page.waitForSelector('#sv-list .sv-row:has-text("Manuelle")');
+  assert.match(await page.locator('#sv-list .sv-row:has-text("Manuelle") a[download]').getAttribute('href'), /^\/api\/v1\/sauvegardes\/netcarto-[\w-]+-manuelle\.sqlite$/);
+  await page.click('[data-act=modal-close]');
+  const dev = await page.evaluate(() => { const x = NetCarto.Store.db.devices.find(d => d.hostname === 'SW-A1-ACC-01'); NetCarto.select(x.id); return x; });
+  await page.click('#detail [data-act=dev-edit]'); await page.fill('.modal [name=hostname]', 'NOM-FAUX'); await page.click('[data-act=modal-ok]'); await synchro(page);
+  assert.strictEqual((await api(page, '/equipements/' + dev.id)).json.hostname, 'NOM-FAUX');
+  await ouvrir(); await page.click('#sv-list .sv-row:has-text("Manuelle") [data-act=sv-restaurer]');
+  assert.match(await page.locator('.modal .body').innerText(), /comptes et le journal d'audit sont conservés/);
+  await page.click('[data-act=modal-ok]'); await page.waitForSelector('.toast.ok:has-text("restauré")');
+  assert.strictEqual(await page.evaluate(i => NetCarto.Store.idx.id.get(i).hostname, dev.id), 'SW-A1-ACC-01', 'l\'écran montre les données restaurées');
+  assert.strictEqual((await api(page, '/equipements/' + dev.id)).json.hostname, 'SW-A1-ACC-01');
+  await page.waitForSelector('#sv-list .sv-row:has-text("Avant restauration")');
 }, S);
 test('Comptes : session expirée en cours de travail → on se reconnecte sans perdre la page', async page => {
   const dev = await page.evaluate(() => { const x = NetCarto.Store.db.devices.find(d => d.hostname === 'SW-A1-ACC-01'); NetCarto.select(x.id); return x; });

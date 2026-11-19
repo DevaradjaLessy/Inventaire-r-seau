@@ -34,7 +34,28 @@ function ouvrir(fichier) {
     },
     /* Lignes qui violent une clé étrangère : [{ table, parent }] */
     violationsCles: () => prep('PRAGMA foreign_key_check').all().map(l => ({ table: l.table, parent: l.parent })),
+    /* Copie complète et cohérente de la base dans un nouveau fichier, sans arrêter les lectures ni les écritures */
+    sauvegarder(destination) {
+      if (dansTransaction) throw new Error('Sauvegarde impossible pendant une transaction.');
+      db.prepare('VACUUM INTO ?').run(destination);
+    },
     fermer() { cache.clear(); db.close(); },
   };
 }
-module.exports = { ouvrir };
+/* Contrôle un fichier de base sans le modifier : intégrité, niveau du schéma, révision.
+   Renvoie { ok, version, revision, erreur }. */
+function controler(fichier) {
+  let db = null;
+  try {
+    db = new DatabaseSync(fichier, { readOnly: true });
+    const etat = db.prepare('PRAGMA integrity_check').all().map(l => l.integrity_check).join(' ; ');
+    if (etat !== 'ok') return { ok: false, version: 0, revision: 0, erreur: etat };
+    const version = db.prepare('SELECT MAX(version) AS v FROM migrations').get().v || 0;
+    const revision = +(db.prepare('SELECT valeur FROM meta WHERE cle = ?').get('revision')?.valeur || 0);
+    return { ok: version > 0, version, revision, erreur: version > 0 ? '' : 'ce n\'est pas une base NetCarto' };
+  } catch (e) { return { ok: false, version: 0, revision: 0, erreur: /no such table/.test(e.message) ? 'ce n\'est pas une base NetCarto' : e.message }; }
+  finally { try { db?.close(); } catch { /* déjà fermée */ } }
+}
+/* Fichiers annexes que le moteur pose à côté de la base (journal d'écriture) */
+const annexes = fichier => [fichier + '-wal', fichier + '-shm'];
+module.exports = { ouvrir, controler, annexes };

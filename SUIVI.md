@@ -459,6 +459,24 @@ Les tables `utilisateurs` et `audit` viendront avec la migration du lot 17.
 
 **Tests :** 35 scénarios de bout en bout (dont 17 en mode serveur), 33 pour le serveur, 6 pour les connecteurs.
 
+### 3.18 Sauvegardes et restauration (lot 18)
+
+- **Copie à chaud :** une sauvegarde est une copie complète et cohérente de la base, faite par le moteur pendant que le serveur tourne (`VACUUM INTO`, dans `pilote-sqlite.js`). Elle est relue et vérifiée (intégrité, niveau du schéma) ; une copie illisible est supprimée et signalée.
+- **Nom des fichiers :** `netcarto-AAAA-MM-JJ_HHMMSS-motif.sqlite`, dans `sauvegardes/` sous le dossier de données, ou dans le dossier réglé (`sauvegardes.dossier`).
+- **Planification :** une sauvegarde automatique par jour à l'heure réglée (02:30 par défaut). Le serveur vérifie chaque minute, et au démarrage : une sauvegarde manquée parce qu'il était arrêté est rattrapée. Réglages : `sauvegardes.actif`, `heure`, `conserver`.
+- **Conservation :** seules les sauvegardes automatiques sont purgées (les 14 plus récentes sont gardées). Les sauvegardes manuelles, « avant mise à jour » et « avant restauration » restent jusqu'à ce qu'un administrateur les supprime.
+- **Avant une migration :** une base existante est sauvegardée juste avant sa première migration en attente. Une base neuve ne l'est pas.
+- **Deux restaurations, deux usages :**
+  - *Depuis l'interface* (administrateur, serveur en marche) : les données d'inventaire reviennent à l'état de la sauvegarde, en une transaction. Les comptes, les sessions et le journal d'audit sont gardés, car un journal d'audit ne doit pas pouvoir être remonté dans le temps. L'opération est tracée, et l'état d'avant est sauvegardé.
+  - *En ligne de commande* (`node netcarto.js restaurer <sauvegarde>`, serveur arrêté) : le fichier de la base est remplacé en entier, comptes et journal compris. Pour une panne ou un changement de machine. La commande refuse de s'exécuter si le serveur tourne (témoin `netcarto.verrou` dans le dossier de données) et met l'état d'avant de côté.
+- **Sauvegarde plus ancienne que le logiciel :** elle est mise au niveau du schéma actuel par les migrations avant d'être relue.
+- **Sécurité :** routes réservées à l'administrateur ; une sauvegarde n'est désignée que par son nom, contrôlé, jamais par un chemin ; création, suppression et restauration sont inscrites au journal d'audit. Un fichier de sauvegarde contient les empreintes des mots de passe : il est créé lisible par le seul compte du serveur.
+- **Routes ajoutées :** `GET|POST /sauvegardes`, `GET|DELETE /sauvegardes/{nom}`, `POST /sauvegardes/restauration`.
+- **Interface :** fenêtre « Sauvegardes » dans le menu du compte (`js/ui/sauvegardes.js`) : liste, sauvegarde immédiate, téléchargement, restauration, suppression.
+- **Non fait :** envoi automatique des sauvegardes vers un autre serveur (à faire avec l'outil de sauvegarde de l'entreprise, en pointant sur le dossier) ; chiffrement des fichiers de sauvegarde.
+
+**Tests :** 42 scénarios pour le serveur (dont 9 pour les sauvegardes), 36 de bout en bout.
+
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
@@ -491,7 +509,7 @@ Les tables `utilisateurs` et `audit` viendront avec la migration du lot 17.
 
 | 16 | **Serveur et base :** serveur Node, API, SQLite, schéma, couche d'accès aux données, bascule de l'interface vers l'API, mode démo conservé | Maximal (max) | ✅ Fait |
 | 17 | **Comptes et sécurité :** comptes, rôles, journal d'audit, modifications concurrentes, HTTPS | Très élevé (xhigh) | ✅ Fait |
-| 18 | **Sauvegardes et migrations :** sauvegardes automatiques planifiées, restauration, migrations versionnées | Élevé (high) | ⏳ À faire |
+| 18 | **Sauvegardes et migrations :** sauvegardes automatiques planifiées, restauration, migrations versionnées | Élevé (high) | ✅ Fait (voir 3.18) |
 | 19 | **Docker :** image NetCarto et `docker-compose.yml` | Élevé (high) | ⏳ À faire |
 | 20 | **Installation Linux :** `installer.sh`, systemd, mise à jour, désinstallation | Élevé (high) | ⏳ À faire |
 | 22 | **Three.js hébergé localement**, pour fonctionner sans Internet | Moyen | ⏳ À faire |
@@ -533,7 +551,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-18 | Continuer avec le lot 10 : base vide et création des bâtiments | ✅ Fait. Le bouton Réinitialiser propose « démonstration » ou « base vide » (aucun site, catalogue conservé, stock à zéro). Sites, bâtiments, étages et pièces se créent, se modifient et se suppriment depuis la fiche de droite ; une pièce peut aussi se tracer à la souris sur le plan (alignement tous les 50 cm). Contrôles : pièces sans chevauchement et dans l'étage, codes de bâtiment et niveaux uniques, suppression seulement si l'élément est vide. Gestion des VLAN depuis le tableau de bord ou la fiche d'un port. L'étiquette « Données fictives » ne s'affiche plus que pour la démonstration. Un scénario de test complet a été ajouté (14 tests au total). |
 | 2026-11-18 | Peut-on encore peaufiner le design ? | ✅ Fait (lot 12) : typographie et espacements revus, en-tête plus aéré avec onglets en pastilles, boutons et champs arrondis avec transitions, anneau de focus au clavier, fiches de détail en cartes (Cartographie et Matériel), barres d'outils flottantes translucides sur le plan et la 3D, arbre à lignes arrondies, cartes du catalogue avec effet au survol, fenêtres et notifications animées. Vérifié dans les deux thèmes et sur téléphone. |
 | 2026-11-19 | **Nouvelle orientation :** NetCarto devient un logiciel serveur installable sur Linux, avec ou sans Docker, avec sa propre base de données (décisions détaillées, lots 16 à 22, ordre de réalisation, méthode « tests avant le code ») | ✅ Décisions notées en 3.14, lots ajoutés en section 4. **Lot 16 fait** (voir 3.15) : serveur Node dans `serveur/`, base SQLite relationnelle, API `/api/v1`, interface basculée sur l'API, page GitHub Pages inchangée. Prochain lot : 17. |
-| 2026-11-19 | « Continue à tout concevoir, je vais tester à la maison » | 🔄 Lots 17 (voir 3.16) et 11 (voir 3.17) faits. Suite dans l'ordre prévu : 18, 14, 19, 20, 22. |
+| 2026-11-19 | « Continue à tout concevoir, je vais tester à la maison » | 🔄 Lots 17 (voir 3.16), 11 (voir 3.17) et 18 (voir 3.18) faits. Suite dans l'ordre prévu : 14, 19, 20, 22. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---

@@ -106,7 +106,7 @@ function creerDepot(pilote, versionSchema) {
     });
   }
   /* Remplace toute la base par un document JSON (import, réinitialisation), tout ou rien */
-  function remplacerBase(doc, ctx = null) {
+  function remplacerBase(doc, ctx = null, trace = { action: 'remplacement', libelle: 'Remplacement de toute la base' }) {
     if (!doc || typeof doc !== 'object' || !doc.meta || doc.meta.app !== APP) throw new ErreurMetier('invalide', 'Ce document n\'est pas une base NetCarto.');
     for (const c of ORDRE) if (!Array.isArray(doc[c])) throw new ErreurMetier('invalide', `Section « ${c} » absente ou invalide.`);
     return p.transaction(() => {
@@ -118,7 +118,7 @@ function creerDepot(pilote, versionSchema) {
       }
       ecrire(() => controler(null));
       const r = revision() + 1;
-      tracer(ctx, 'remplacement', '', '', 'Remplacement de toute la base', null, Object.fromEntries(ORDRE.map(c => [c, doc[c].length])), r);
+      tracer(ctx, trace.action, '', '', trace.libelle, null, Object.fromEntries(ORDRE.map(c => [c, doc[c].length])), r);
       poserMeta('revision', r); poserMeta('maj', Date.now()); poserMeta('demo', doc.meta.demo ? 1 : 0); poserMeta('seq', +doc.meta.seq || 0); poserMeta('initialisee', 1);
       return { revision: r };
     });
@@ -133,6 +133,6 @@ function creerDepot(pilote, versionSchema) {
     });
     return true;
   }
-  return { comptes, lire, lister, lireBase, appliquerLot, remplacerBase, initialiser, revision, versionSchema: () => versionSchema, estVide: () => !p.un('SELECT 1 AS x FROM sites LIMIT 1'), sain: () => p.un('SELECT 1 AS ok').ok === 1, fermer: () => p.fermer() };
+  return { comptes, tracer, lire, lister, lireBase, appliquerLot, remplacerBase, initialiser, revision, versionSchema: () => versionSchema, estVide: () => !p.un('SELECT 1 AS x FROM sites LIMIT 1'), sain: () => p.un('SELECT 1 AS ok').ok === 1, fermer: () => p.fermer() };
 }
 module.exports = { creerDepot };

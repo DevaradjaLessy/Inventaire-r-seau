@@ -3,7 +3,7 @@
 Le serveur sert l'interface web, expose une API et range les données dans sa propre base SQLite.
 Il n'y a rien d'autre à installer : le moteur SQLite est intégré à Node.js.
 
-> **État actuel (lots 16 et 17).** Base, API, comptes, rôles, journal d'audit et HTTPS sont faits. Restent les sauvegardes automatiques (lot 18) et les paquets d'installation Docker et Linux (lots 19 et 20). Les connecteurs de supervision n'ont pas encore été validés sur du matériel réel.
+> **État actuel (lots 16, 17 et 18).** Base, API, comptes, rôles, journal d'audit, HTTPS, sauvegardes et restauration sont faits. Restent les paquets d'installation Docker et Linux (lots 19 et 20). Les connecteurs PRTG et SNMP n'ont été validés que contre des simulateurs.
 
 ## Lancer le serveur
 
@@ -44,7 +44,7 @@ Ouvrez ensuite `https://127.0.0.1:8443`.
 | Technicien | modifier les données (équipements, câblage, stock, structure) |
 | Administrateur | en plus : gérer les comptes, lire le journal d'audit, importer ou réinitialiser la base |
 
-Dans l'interface, le bouton à votre nom (en haut à droite) ouvre : *Changer mon mot de passe*, *Utilisateurs*, *Journal d'audit*, *Se déconnecter*.
+Dans l'interface, le bouton à votre nom (en haut à droite) ouvre : *Changer mon mot de passe*, *Utilisateurs*, *Journal d'audit*, *Sauvegardes*, *Se déconnecter*.
 
 - **Mots de passe** : 12 caractères au moins, jamais enregistrés en clair (empreinte scrypt salée).
 - **Verrouillage** : 5 échecs de suite verrouillent le compte 15 minutes. Un administrateur peut le déverrouiller.
@@ -94,6 +94,7 @@ node --disable-warning=ExperimentalWarning netcarto.js --config netcarto.toml
 | Taille maximale d'une requête | `limites.corpsMaxMo` | | |
 | HTTPS | `https.actif`, `https.certificat`, `https.cle` | | `--http` |
 | Sécurité | `securite.echecsMax`, `securite.verrouillageMinutes`, `securite.sessionHeures`, `securite.inactiviteMinutes` | | |
+| Sauvegardes | `sauvegardes.actif`, `sauvegardes.heure`, `sauvegardes.conserver`, `sauvegardes.dossier` | | |
 | Supervision | `supervision.intervalle`, `[[supervision.sources]]` | | |
 
 Priorité : argument, puis variable, puis fichier, puis valeur par défaut. Un chemin relatif écrit dans le fichier part du dossier de ce fichier.
@@ -102,7 +103,7 @@ Aucun secret dans le fichier : une valeur `"env:NOM"` est lue dans la variable d
 
 ## La base de données
 
-Un seul fichier, `netcarto.sqlite`, dans le dossier de données. Pour une sauvegarde manuelle, arrêtez le serveur puis copiez ce fichier (les sauvegardes automatiques sont prévues au lot 18).
+Un seul fichier, `netcarto.sqlite`, dans le dossier de données. Ne le copiez pas à la main pendant que le serveur tourne : utilisez les sauvegardes ci-dessous, qui donnent une copie cohérente.
 
 Une table par type d'objet : `sites`, `batiments`, `etages`, `pieces`, `baies`, `equipements`, `ports`, `prises`, `cables`, `catalogue`, `catalogue_ports`, `stock`, `vlans`, `journal`, `meta`, puis `utilisateurs`, `sessions` et `audit`. Le schéma complet est dans `donnees/migrations/sqlite/`.
 
@@ -112,7 +113,40 @@ Ce que la base garantit :
 - **Unicité** : adresse IP, adresse MAC, nom d'hôte, repère de prise, nom de baie, code de bâtiment par site, niveau par bâtiment. Un équipement hors service libère son IP et son nom.
 - **Tout ou rien** : une opération en plusieurs étapes est une transaction. Installer un équipement crée l'équipement, ses ports et décrémente le stock ; si une étape est refusée, rien n'est écrit.
 - **Règles vérifiées par le serveur** : pas de chevauchement en baie, pas plus de câbles que permis sur un port ou une prise, pièce contenue dans son étage.
-- **Migrations** : au démarrage, une base plus ancienne reçoit les migrations manquantes, dans l'ordre.
+- **Migrations** : au démarrage, une base plus ancienne reçoit les migrations manquantes, dans l'ordre. Elle est sauvegardée juste avant.
+
+## Sauvegardes et restauration
+
+Les sauvegardes sont rangées dans `sauvegardes/`, à l'intérieur du dossier de données (réglage `sauvegardes.dossier` pour les mettre sur un autre disque). Chacune est un fichier complet, vérifié après écriture : `netcarto-AAAA-MM-JJ_HHMMSS-motif.sqlite`.
+
+| Sauvegarde | Quand | Conservation |
+|---|---|---|
+| Automatique | chaque jour à l'heure réglée (02:30 par défaut) ; rattrapée au démarrage si le serveur était arrêté | les 14 plus récentes (réglable) |
+| Manuelle | bouton *Sauvegarder maintenant*, ou ligne de commande | jusqu'à suppression par un administrateur |
+| Avant mise à jour | avant d'appliquer une migration à une base existante | idem |
+| Avant restauration | juste avant chaque restauration | idem |
+
+Une sauvegarde contient toute la base, y compris les empreintes des mots de passe : gardez ces fichiers à l'abri. Téléchargez-en une régulièrement (fenêtre *Sauvegardes*) pour en avoir une copie hors du serveur.
+
+**Revenir en arrière après une erreur de saisie** : fenêtre *Sauvegardes*, bouton *Restaurer*. Les données d'inventaire reviennent à l'état de la sauvegarde ; les comptes et le journal d'audit sont conservés ; le serveur reste en marche.
+
+**Restaurer toute la base** (panne, changement de machine), comptes et journal d'audit compris : arrêtez le serveur, puis
+
+```bash
+node --disable-warning=ExperimentalWarning netcarto.js sauvegardes
+```
+
+```bash
+node --disable-warning=ExperimentalWarning netcarto.js restaurer netcarto-2026-01-15_023000-auto.sqlite
+```
+
+La commande accepte un nom de la liste ou le chemin d'un fichier. Elle refuse de s'exécuter si le serveur tourne, et ne touche à rien si la sauvegarde est abîmée. Pour une copie immédiate, serveur en marche ou non :
+
+```bash
+node --disable-warning=ExperimentalWarning netcarto.js sauvegarde
+```
+
+Ajoutez `--config` ou `--donnees` à ces commandes si vous n'utilisez pas les réglages par défaut.
 
 ## L'API
 
@@ -133,6 +167,9 @@ Préfixe : `/api/v1`. Tout est en JSON.
 | `PUT /base` | administrateur | remplace toute la base |
 | `GET`, `POST /utilisateurs` ; `PUT`, `DELETE /utilisateurs/{id}` | administrateur | gestion des comptes |
 | `GET /audit` | administrateur | journal d'audit (filtres : `cle`, `collection`, `identifiant`, `action`, `avant`, `limite`) |
+| `GET`, `POST /sauvegardes` | administrateur | liste et réglages ; sauvegarde immédiate |
+| `GET`, `DELETE /sauvegardes/{nom}` | administrateur | télécharger, supprimer |
+| `POST /sauvegardes/restauration` | administrateur | `{ nom }` : restaure les données d'inventaire |
 
 La session tient dans un cookie `HttpOnly`, `SameSite=Strict` (et `Secure` en HTTPS).
 
@@ -167,6 +204,7 @@ curl -k -b cookies.txt "https://127.0.0.1:8443/api/v1/equipements?hostname=SW-A0
 | `400` | demande mal formée |
 | `401` | connexion requise |
 | `403` | rôle insuffisant, ou écriture demandée par une page d'un autre site |
+| `404` | élément ou sauvegarde introuvable |
 | `409` | conflit : l'élément a changé entre-temps |
 | `422` | contrainte ou règle non respectée ; le message dit laquelle |
 
@@ -185,6 +223,7 @@ donnees/             couche d'accès aux données, la seule à connaître la bas
   depot.js           lectures et écritures
   regles.js          règles vérifiées avant de valider une transaction
   comptes.js         utilisateurs, sessions, journal d'audit
+  sauvegardes.js     copies de la base, planification, purge, restauration
   erreurs.js         refus de la base traduits en messages clairs
 securite/            comptes, sessions, mots de passe, certificat HTTPS
 tests/               tests (node:test)

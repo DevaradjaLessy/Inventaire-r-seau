@@ -21,6 +21,12 @@ inactiviteMinutes = 120 # une session inactive est fermée
 [donnees]
 dossier = "donnees"     # dossier de la base ; un chemin relatif part du dossier de ce fichier
 
+[sauvegardes]
+actif = true            # une sauvegarde automatique par jour
+heure = "02:30"         # heure locale du serveur
+conserver = 14          # nombre de sauvegardes automatiques gardées
+# dossier = "/chemin/vers/un/autre/disque"   # par défaut : « sauvegardes » dans le dossier de données
+
 [web]
 dossier = ".."          # dossier qui contient index.html, css/ et js/
 

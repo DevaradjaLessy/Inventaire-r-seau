@@ -11,10 +11,10 @@ function lister(dialecte) {
 function migrer(pilote, { avant = null, jusqua = Infinity } = {}) {
   pilote.executer('CREATE TABLE IF NOT EXISTS migrations (version INTEGER PRIMARY KEY, nom TEXT NOT NULL, appliquee_le TEXT NOT NULL)');
   const faites = new Set(pilote.tous('SELECT version FROM migrations').map(l => l.version));
-  const appliquees = [];
+  const appliquees = [], existante = faites.size > 0;   // une base neuve n'a rien à sauvegarder
   for (const m of lister(pilote.dialecte)) {
     if (faites.has(m.version) || m.version > jusqua) continue;
-    if (faites.size && avant) avant(m.version);
+    if (existante && avant) avant(m.version);
     pilote.transaction(() => { pilote.executer(m.sql); pilote.lancer('INSERT INTO migrations (version, nom, appliquee_le) VALUES (?, ?, ?)', [m.version, m.nom, new Date().toISOString()]); });
     faites.add(m.version); appliquees.push(m.version);
   }

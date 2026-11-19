@@ -14,8 +14,13 @@
    Administrateur
      PUT    /base                       remplace toute la base
      GET|POST /utilisateurs, PUT|DELETE /utilisateurs/{id}
-     GET    /audit                      journal d'audit (filtres : cle, collection, identifiant, action, avant, limite) */
+     GET    /audit                      journal d'audit (filtres : cle, collection, identifiant, action, avant, limite)
+     GET    /sauvegardes                réglages et liste des sauvegardes
+     POST   /sauvegardes                sauvegarde immédiate
+     GET|DELETE /sauvegardes/{nom}      télécharger ou supprimer une sauvegarde
+     POST   /sauvegardes/restauration   { nom } : remet les données d'inventaire dans l'état de la sauvegarde */
 'use strict';
+const fs = require('fs');
 const { ErreurMetier, RESSOURCES } = require('../donnees');
 
 const VERSION = require('../package.json').version, COOKIE = 'netcarto_session';
@@ -23,6 +28,8 @@ const VERSION = require('../package.json').version, COOKIE = 'netcarto_session';
 class ErreurHttp extends Error { constructor(statut, message) { super(message); this.statut = statut; } }
 /* Réponse qui porte aussi des en-têtes (cookie de session) */
 class Reponse { constructor(corps, entetes) { this.corps = corps; this.entetes = entetes; } }
+/* Réponse qui envoie un fichier à télécharger */
+class Fichier { constructor(chemin, nom) { this.chemin = chemin; this.nom = nom; } }
 
 /* Lit le corps JSON d'une requête, dans la limite fixée */
 function lireJson(req, maxOctets) {
@@ -39,7 +46,7 @@ function lireJson(req, maxOctets) {
 }
 const jetonDe = req => (req.headers.cookie || '').split(';').map(x => x.trim().split('=')).find(([k]) => k === COOKIE)?.[1] || '';
 
-function creerApi({ depot, releveur, securite, config, https }) {
+function creerApi({ depot, sauvegardes, releveur, securite, config, https }) {
   const max = config.limites.corpsMaxMo * 1048576;
   const cookie = (jeton, duree) => `${COOKIE}=${jeton}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${duree}${https ? '; Secure' : ''}`;
   const methode = (req, ...permises) => { if (!permises.includes(req.method)) throw Object.assign(new ErreurHttp(405, `Méthode non permise (attendu : ${permises.join(', ')}).`), { permises }); };
@@ -87,6 +94,24 @@ function creerApi({ depot, releveur, securite, config, https }) {
       return securite.modifierUtilisateur(b, await lireJson(req, max), moi);
     }
     if (a === 'audit' && !b) { methode(req, 'GET'); exiger(moi, 'administrateur'); return depot.comptes.listerAudit(Object.fromEntries(recherche)); }
+    if (a === 'sauvegardes') {
+      exiger(moi, 'administrateur');
+      if (!b) {
+        methode(req, 'GET', 'POST');
+        if (req.method === 'GET') return { reglages: sauvegardes.reglages(), liste: sauvegardes.lister() };
+        await lireJson(req, max);
+        const s = sauvegardes.creer('manuelle');
+        depot.tracer(ctx, 'sauvegarde', '', '', `Sauvegarde ${s.nom}`, null, { taille: s.taille }, null);
+        return s;
+      }
+      if (b === 'restauration') { methode(req, 'POST'); const v = await lireJson(req, max); return sauvegardes.restaurer(v.nom, ctx); }
+      methode(req, 'GET', 'DELETE');
+      let nom; try { nom = decodeURIComponent(b); } catch { throw new ErreurHttp(400, 'Nom de sauvegarde illisible.'); }
+      if (req.method === 'GET') return new Fichier(sauvegardes.chemin(nom), nom);
+      sauvegardes.supprimer(nom);
+      depot.tracer(ctx, 'sauvegarde_supprimer', '', '', `Suppression de la sauvegarde ${nom}`, null, null, null);
+      return { ok: true };
+    }
     const collection = RESSOURCES[a];
     if (!collection) throw new ErreurHttp(404, 'Adresse inconnue.');
     methode(req, 'GET');
@@ -101,7 +126,14 @@ function creerApi({ depot, releveur, securite, config, https }) {
     // Une écriture demandée par une page d'un autre site est refusée (la page de NetCarto a la même origine que l'API)
     const origine = req.headers.origin;
     if (origine && req.method !== 'GET' && req.method !== 'HEAD') { let hote = ''; try { hote = new URL(origine).host; } catch { /* origine illisible */ } if (hote !== req.headers.host) { req.resume(); return repondre(403, { erreur: 'Écriture refusée : la requête vient d\'un autre site.', code: 'http' }); } }
-    try { const r = await traiter(req, chemin, recherche); if (r instanceof Reponse) repondre(200, r.corps, r.entetes); else repondre(200, r); }
+    try {
+      const r = await traiter(req, chemin, recherche);
+      if (r instanceof Fichier) {
+        res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': fs.statSync(r.chemin).size, 'Content-Disposition': `attachment; filename="${r.nom}"`, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+        return fs.createReadStream(r.chemin).on('error', () => res.destroy()).pipe(res);
+      }
+      if (r instanceof Reponse) repondre(200, r.corps, r.entetes); else repondre(200, r);
+    }
     catch (e) {
       if (e instanceof ErreurMetier) return repondre(e.statut, { erreur: e.message, code: e.code });
       if (e instanceof ErreurHttp) return repondre(e.statut, { erreur: e.message, code: 'http' }, e.permises ? { Allow: e.permises.join(', ') } : {});

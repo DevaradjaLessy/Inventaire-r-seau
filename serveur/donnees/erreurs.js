@@ -1,10 +1,10 @@
 /* Erreurs attendues de la couche de données. Le code indique la nature du refus :
    invalide (demande mal formée, 400), conflit (la base a changé entre-temps, 409),
    regle (contrainte ou règle métier non respectée, 422), acces (connexion requise ou refusée, 401),
-   interdit (rôle insuffisant, 403), verrouille (compte verrouillé, 429). */
+   interdit (rôle insuffisant, 403), introuvable (404), verrouille (compte verrouillé, 429). */
 'use strict';
 
-const STATUT = { invalide: 400, acces: 401, interdit: 403, conflit: 409, regle: 422, verrouille: 429 };
+const STATUT = { invalide: 400, acces: 401, interdit: 403, introuvable: 404, conflit: 409, regle: 422, verrouille: 429 };
 class ErreurMetier extends Error {
   constructor(code, message) { super(message); this.name = 'ErreurMetier'; this.code = code; this.statut = STATUT[code] || 400; }
 }

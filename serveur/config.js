@@ -11,6 +11,7 @@ const DEFAUTS = {
   https: { actif: true, certificat: '', cle: '' },   // sans fichiers fournis, un certificat auto-signé est créé dans le dossier de données
   securite: { echecsMax: 5, verrouillageMinutes: 15, sessionHeures: 12, inactiviteMinutes: 120 },
   donnees: { dossier: 'donnees-locales' },
+  sauvegardes: { actif: true, heure: '02:30', conserver: 14, dossier: '' },   // dossier vide : « sauvegardes » dans le dossier de données
   web: { dossier: '..' },
   supervision: { intervalle: 30, sources: [] },
   limites: { corpsMaxMo: 25 },
@@ -18,6 +19,13 @@ const DEFAUTS = {
 const fusion = (a, b) => { const o = { ...a }; for (const [k, v] of Object.entries(b || {})) o[k] = v && typeof v === 'object' && !Array.isArray(v) && a[k] && typeof a[k] === 'object' ? fusion(a[k], v) : v; return o; };
 const arg = (args, nom) => { const i = args.indexOf('--' + nom); return i >= 0 ? args[i + 1] : undefined; };
 
+/* Réglages des sauvegardes : heure au format HH:MM, nombre entier de sauvegardes automatiques gardées */
+function controlerSauvegardes(s) {
+  if (typeof s.actif !== 'boolean') throw new Error('Réglage « sauvegardes.actif » invalide : true ou false attendu.');
+  if (typeof s.heure !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(s.heure)) throw new Error('Réglage « sauvegardes.heure » invalide : heure attendue au format HH:MM, par exemple "02:30".');
+  if (!Number.isInteger(s.conserver) || s.conserver < 1) throw new Error('Réglage « sauvegardes.conserver » invalide : nombre entier d\'au moins 1 attendu.');
+  if (typeof s.dossier !== 'string') throw new Error('Réglage « sauvegardes.dossier » invalide : chemin attendu.');
+}
 /* options : { env, args } (par défaut : ceux du processus) */
 function chargerConfig({ env = process.env, args = process.argv.slice(2) } = {}) {
   const fichier = arg(args, 'config') || env.NETCARTO_CONFIG || null;
@@ -31,6 +39,7 @@ function chargerConfig({ env = process.env, args = process.argv.slice(2) } = {})
   }
   cfg.donnees.dossier = path.resolve(base, cfg.donnees.dossier);
   cfg.web.dossier = path.resolve(base, cfg.web.dossier);
+  if (cfg.sauvegardes.dossier) cfg.sauvegardes.dossier = path.resolve(base, cfg.sauvegardes.dossier);
   for (const k of ['certificat', 'cle']) if (cfg.https[k]) cfg.https[k] = path.resolve(base, cfg.https[k]);
   // Variables d'environnement et arguments : chemins relatifs au dossier courant
   const hote = arg(args, 'hote') || env.NETCARTO_HOTE, port = arg(args, 'port') || env.NETCARTO_PORT, donnees = arg(args, 'donnees') || env.NETCARTO_DONNEES;
@@ -45,7 +54,8 @@ function chargerConfig({ env = process.env, args = process.argv.slice(2) } = {})
   if (!Array.isArray(cfg.supervision.sources)) throw new Error('Réglage « supervision.sources » invalide : liste attendue.');
   if (args.includes('--http')) cfg.https.actif = false;
   for (const k of ['echecsMax', 'verrouillageMinutes', 'sessionHeures', 'inactiviteMinutes']) if (!(cfg.securite[k] > 0)) throw new Error(`Réglage « securite.${k} » invalide : nombre positif attendu.`);
+  controlerSauvegardes(cfg.sauvegardes);
   if (!(cfg.limites.corpsMaxMo > 0)) throw new Error('Réglage « limites.corpsMaxMo » invalide.');
   return cfg;
 }
-module.exports = { chargerConfig, DEFAUTS };
+module.exports = { chargerConfig, controlerSauvegardes, DEFAUTS };

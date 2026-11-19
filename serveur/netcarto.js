@@ -2,6 +2,7 @@
 /* NetCarto — lancement du serveur et gestion des comptes en ligne de commande.
    Usage : node netcarto.js [--config fichier.toml] [--port 8443] [--hote 127.0.0.1] [--donnees dossier] [--demo] [--http]
            node netcarto.js compte <identifiant> [--role administrateur]     crée le compte, ou change son mot de passe et le déverrouille
+           node netcarto.js sauvegarde | sauvegardes | restaurer <sauvegarde>  copie immédiate, liste, restauration complète
    Sans fichier de réglages, le serveur écoute sur https://127.0.0.1:8443 et range ses données à côté de lui. */
 'use strict';
 const path = require('path'), readline = require('readline');
@@ -20,7 +21,14 @@ const AIDE = `NetCarto — serveur
 Comptes (le serveur peut rester en marche) :
   node netcarto.js compte <identifiant> [--role lecture|technicien|administrateur]
       crée le compte, ou, s'il existe, change son mot de passe et le déverrouille.
-      Le mot de passe est demandé au clavier (ou lu dans la variable NETCARTO_MOT_DE_PASSE).`;
+      Le mot de passe est demandé au clavier (ou lu dans la variable NETCARTO_MOT_DE_PASSE).
+
+Sauvegardes (mêmes options --config et --donnees que le serveur) :
+  node netcarto.js sauvegarde               copie immédiate de la base (le serveur peut rester en marche)
+  node netcarto.js sauvegardes              liste des sauvegardes
+  node netcarto.js restaurer <sauvegarde>   remplace toute la base par une sauvegarde, comptes et journal d'audit compris.
+      Le serveur doit être arrêté. <sauvegarde> : un nom de la liste, ou le chemin d'un fichier.
+      L'état d'avant est gardé dans le dossier des sauvegardes.`;
 
 /* Demande un mot de passe au clavier, sans l'afficher */
 function demanderMotDePasse(question) {
@@ -46,9 +54,35 @@ async function commandeCompte(args) {
   } finally { depot.fermer(); }
 }
 
+/* Sauvegarde immédiate, liste, restauration complète */
+function commandeSauvegardes(args) {
+  const cfg = chargerConfig({ args: args.filter((a, i) => i > 0 && !(args[0] === 'restaurer' && i === 1)) });
+  const { ouvrirBase, restaurerFichier, listerDossier, dossierSauvegardes } = require('./donnees');
+  const fichier = path.join(cfg.donnees.dossier, 'netcarto.sqlite'), dossier = dossierSauvegardes(fichier, cfg.sauvegardes);
+  const taille = n => (n > 1048576 ? `${(n / 1048576).toFixed(1)} Mo` : `${Math.ceil(n / 1024)} Ko`);
+  if (args[0] === 'sauvegardes') {
+    const liste = listerDossier(dossier);
+    console.log(liste.length ? liste.map(s => `${s.nom}   ${new Date(s.date).toLocaleString('fr-FR')}   ${taille(s.taille)}`).join('\n') : 'Aucune sauvegarde.');
+    console.log(`Dossier : ${dossier}`);
+    return;
+  }
+  if (!require('fs').existsSync(fichier) && args[0] === 'sauvegarde') throw new Error(`aucune base dans ${cfg.donnees.dossier}`);
+  if (args[0] === 'sauvegarde') {
+    const depot = ouvrirBase({ fichier, sauvegardes: cfg.sauvegardes });
+    try { const s = depot.sauvegardes.creer('manuelle'); console.log(`Sauvegarde faite : ${s.nom} (${taille(s.taille)})\nDossier : ${dossier}`); } finally { depot.fermer(); }
+    return;
+  }
+  const source = args[1];
+  if (!source || source.startsWith('--')) throw new Error('indiquez la sauvegarde : node netcarto.js restaurer <sauvegarde>');
+  if (!args.includes('--forcer') && require('./app').serveurEnMarche(cfg.donnees.dossier)) throw new Error('le serveur NetCarto est en marche sur ce dossier de données. Arrêtez-le, puis relancez la commande.');
+  const r = restaurerFichier({ fichier, source, sauvegardes: cfg.sauvegardes });
+  console.log(`Base restaurée depuis ${r.source}\nSchéma niveau ${r.version}, révision ${r.revision}.${r.avant ? `\nL'état d'avant est gardé : ${path.join(dossier, r.avant)}` : ''}\nVous pouvez relancer le serveur.`);
+}
+
 (async () => {
   const args = process.argv.slice(2);
   if (args.includes('--aide') || args.includes('--help')) { console.log(AIDE); return; }
+  if (['sauvegarde', 'sauvegardes', 'restaurer'].includes(args[0])) { try { commandeSauvegardes(args); } catch (e) { console.error(`Impossible : ${e.message}`); process.exit(1); } return; }
   if (args[0] === 'compte') { try { await commandeCompte(args); } catch (e) { console.error(`Impossible : ${e.message}`); process.exit(1); } return; }
   let app;
   try {
