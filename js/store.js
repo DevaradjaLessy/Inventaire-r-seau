@@ -4,6 +4,7 @@ import { nextId, setRandomIds } from './utils.js';
 import { buildDemo, emptyDb } from './demo.js';
 import { defaire, diff, ecartEntre, lotInverse } from './ecarts.js';
 import { Sync } from './sync.js';
+import { Stockage } from './stockage.js';
 
 const Store = {
   db: null, idx: null, undoStack: [], subs: new Set(), saveTimer: 0, saveError: false,
@@ -58,9 +59,17 @@ const Store = {
     if (e.code !== 'acces') this.onSyncError?.(e);   // session expirée : l'écran de connexion s'affiche déjà
   },
 
-  init() {
-    this.db = this.loadLocal() || buildDemo();
+  /* Mode démonstration : la base vient du stockage du navigateur, ou du jeu de démonstration.
+     La base retrouvée est gardée en copie de secours avant toute nouvelle modification. */
+  async init() {
+    let d = null;
+    try { d = await Stockage.lire(); } catch { /* stockage illisible */ }
+    const retrouvee = d && !this.validate(d);
+    this.db = retrouvee ? d : buildDemo();
     this.reindex();
+    if (retrouvee) { await Stockage.copier(this.db); this.enregistrer(); }
+    // Une modification en attente est écrite avant que la page soit quittée ou mise en arrière-plan
+    document.addEventListener('visibilitychange', () => { if (document.hidden && this.saveTimer) this.enregistrer(); });
   },
   /* Vérifie qu'un objet ressemble à une base NetCarto */
   validate(d) {
@@ -91,22 +100,15 @@ const Store = {
     }
     return null;
   },
-  loadLocal() {
-    try {
-      const s = localStorage.getItem(APP.storageKey);
-      if (!s) return null;
-      const d = JSON.parse(s);
-      return this.validate(d) ? null : d;
-    } catch { return null; }
-  },
-  /* Sauvegarde locale, avec un court délai pour regrouper les modifications */
+  /* Sauvegarde locale (IndexedDB), avec un court délai pour regrouper les modifications */
   save() {
     if (this.mode === 'serveur') return;   // en mode serveur, rien n'est gardé dans le navigateur
     clearTimeout(this.saveTimer);
-    this.saveTimer = setTimeout(() => {
-      try { localStorage.setItem(APP.storageKey, JSON.stringify(this.db)); this.saveError = false; }
-      catch (e) { if (!this.saveError) this.onSaveError?.(); this.saveError = true; }
-    }, 300);
+    this.saveTimer = setTimeout(() => this.enregistrer(), 300);
+  },
+  enregistrer() {
+    clearTimeout(this.saveTimer); this.saveTimer = 0;
+    return Stockage.ecrire(this.db).then(() => { this.saveError = false; }, () => { if (!this.saveError) this.onSaveError?.(); this.saveError = true; });
   },
   /* Reconstruit tous les index de recherche rapide */
   reindex() {

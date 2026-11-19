@@ -53,6 +53,7 @@ function renderShell() {
     <button class="btn icon" data-act="import" data-tip="Importer|Charger un fichier JSON exporté depuis NetCarto">${ico('upload')}</button>
     <button class="btn icon" data-act="export" data-tip="Exporter|Télécharger toute la base au format JSON">${ico('download')}</button>
     <button class="btn icon" data-act="undo" ${Store.undoStack.length ? '' : 'disabled'} data-tip="Annuler (Ctrl+Z)|${esc(Store.undoStack.at(-1)?.text || 'Rien à annuler')}">${ico('undo')}</button>
+    ${Store.mode === 'serveur' ? '' : `<button class="btn icon" data-act="copies" data-tip="Copies de secours|États précédents de la base, gardés dans ce navigateur">${ico('history')}</button>`}
     <button class="btn icon" data-act="reset" data-tip="Réinitialiser|Recharger la démonstration ou repartir d'une base vide">${ico('reset')}</button>`;
 }
 function showTab(id) {

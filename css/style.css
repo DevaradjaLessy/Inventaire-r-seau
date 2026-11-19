@@ -71,6 +71,7 @@ a{color:var(--accent)}
 .u-new{display:grid;grid-template-columns:1fr 1fr 150px 1.4fr auto;gap:8px}
 .u-new input,.u-new select,.u-row select{width:100%}
 .a-row{display:grid;grid-template-columns:118px 90px 190px minmax(0,1fr);gap:10px;align-items:start;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}
+.cp-row{display:grid;grid-template-columns:150px minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
 .sv-row{display:grid;grid-template-columns:130px minmax(0,1fr) 80px auto;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
 .sv-row .nom{font-family:var(--mono);font-size:12px;color:var(--txt2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .a-row>b{overflow:hidden;text-overflow:ellipsis}
@@ -512,7 +513,7 @@ svg.plan,svg.topo{touch-action:none}
   .form-grid .full,.form-grid label[style]{grid-column:auto!important}
   .pg-row{grid-template-columns:1fr 1fr 1fr;padding:8px;border:1px solid var(--line);border-radius:8px}
   .vl-row{grid-template-columns:70px 1fr 46px;padding:8px;border:1px solid var(--line);border-radius:8px}
-  .u-row,.u-new,.a-row,.sv-row{grid-template-columns:1fr}
+  .u-row,.u-new,.a-row,.sv-row,.cp-row{grid-template-columns:1fr}
   .sv-row{gap:4px}
   .tools #user-chip span{display:none}
   /* Cartographie : la vue occupe l'écran, l'arbre et la fiche s'ouvrent en volets */

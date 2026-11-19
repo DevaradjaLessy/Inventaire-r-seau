@@ -29,6 +29,7 @@ import './ui/carto/structure.js';
 import './ui/inventaire.js';
 import './ui/import-csv.js';
 import './ui/sauvegardes.js';
+import './ui/copies.js';
 import './ui/recherche.js';
 import './ui/materiel/catalogue.js';
 import './ui/materiel/installation.js';
@@ -44,7 +45,7 @@ import { addRoom, deleteStructure, deleteVlan } from './services/structure.js';
 const api = document.querySelector('meta[name="netcarto-api"]')?.content;
 try {
   if (api) { Sync.api = api; await ouvrirSession(); await Store.initServeur(api); }
-  else Store.init();
+  else await Store.init();
 }
 catch (e) {
   document.querySelector('main').innerHTML = `<div class="boot-error"><h2>Base inaccessible</h2><p class="muted">${String(e.message).replace(/[<>&]/g, '')}</p><p><button class="btn pri" onclick="location.reload()">Réessayer</button></p></div>`;

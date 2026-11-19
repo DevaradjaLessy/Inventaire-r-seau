@@ -263,6 +263,44 @@ test('Déplacer un équipement câblé : le brassage est signalé, et peut être
   assert.deepStrictEqual(await etat(), { rack: 'BAIE-A2-01', cables: avant.cables }, 'câbles gardés si l\'on décoche');
 });
 
+/* ---------- Sauvegarde locale du mode démonstration ---------- */
+const recharger = async page => { await page.waitForTimeout(600); await page.reload(); await page.waitForFunction(() => window.NetCarto?.Store.db); };
+test('Sauvegarde locale : base gardée dans IndexedDB, anciennes données reprises, grand fond de plan accepté', async page => {
+  // Données laissées par une ancienne version dans localStorage : elles sont reprises puis déplacées
+  await page.evaluate(() => { const d = JSON.parse(JSON.stringify(NetCarto.Store.db)); d.devices[0].hostname = 'ANCIEN-STOCKAGE'; localStorage.setItem('netcarto:db:v1', JSON.stringify(d)); return indexedDB.deleteDatabase('netcarto'); });
+  await page.reload(); await page.waitForFunction(() => window.NetCarto?.Store.db);
+  assert.strictEqual(await page.evaluate(() => NetCarto.Store.db.devices[0].hostname), 'ANCIEN-STOCKAGE');
+  await page.waitForFunction(() => localStorage.getItem('netcarto:db:v1') === null, null, { timeout: 5000 });
+  // Un fond de plan de 7 Mo dépasse ce que localStorage accepte : IndexedDB le garde
+  await page.evaluate(() => NetCarto.Store.commit('edit', 'Grand plan', db => { db.floors[0].planImage = 'data:image/png;base64,' + 'A'.repeat(7e6); }));
+  await recharger(page);
+  assert.deepStrictEqual(await page.evaluate(() => [NetCarto.Store.db.devices[0].hostname, NetCarto.Store.db.floors[0].planImage.length > 7e6]), ['ANCIEN-STOCKAGE', true]);
+  assert.strictEqual(await page.locator('.toast.warn, .toast.err').count(), 0);
+});
+test('Copies de secours locales : une copie à chaque ouverture, restauration annulable, téléchargement', async page => {
+  const nommer = nom => page.evaluate(n => NetCarto.Store.commit('edit', 'Nom ' + n, db => { db.devices[0].hostname = n; }), nom);
+  await nommer('ETAT-UN'); await recharger(page);
+  await nommer('ETAT-DEUX'); await recharger(page);
+  await nommer('ETAT-TROIS');
+  await page.click('[data-act=copies]'); await page.waitForSelector('#copies-list .cp-row');
+  assert.strictEqual(await page.locator('#copies-list .cp-row').count(), 2, 'une copie par ouverture de la page');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.locator('#copies-list .cp-row').first().locator('[data-act=copie-telecharger]').click()]);
+  assert.strictEqual(JSON.parse(fs.readFileSync(await dl.path(), 'utf8')).devices[0].hostname, 'ETAT-DEUX', 'la plus récente en premier');
+  await page.locator('#copies-list .cp-row').last().locator('[data-act=copie-restaurer]').click(); await page.click('[data-act=modal-ok]');
+  await page.waitForFunction(() => NetCarto.Store.db.devices[0].hostname === 'ETAT-UN');
+  await page.keyboard.press('Control+z');
+  assert.strictEqual(await page.evaluate(() => NetCarto.Store.db.devices[0].hostname), 'ETAT-TROIS', 'la restauration s\'annule');
+  // Six ouvertures de plus : seules les cinq copies les plus récentes sont gardées
+  for (let i = 0; i < 6; i++) { await nommer('TOUR-' + i); await recharger(page); }
+  await page.click('[data-act=copies]'); await page.waitForSelector('#copies-list .cp-row');
+  assert.strictEqual(await page.locator('#copies-list .cp-row').count(), 5);
+});
+test('Stockage du navigateur bloqué : l\'application fonctionne et prévient qu\'elle ne garde rien', async page => {
+  assert.ok(await page.evaluate(() => NetCarto.Store.db.devices.length > 50));
+  await page.evaluate(() => NetCarto.Store.commit('edit', 'Essai', db => { db.devices[0].hostname = 'SANS-STOCKAGE'; }));
+  await page.waitForSelector('.toast.warn'); assert.match(await page.locator('.toast.warn').first().innerText(), /Sauvegarde locale impossible/);
+}, { sansStockage: true });
+
 /* ---------- Montée en charge et annulation légère ---------- */
 test('Annulation par écarts : chaque opération se défait à l\'identique, sans copie complète de la base', async page => {
   const etat = () => page.evaluate(() => JSON.stringify(NetCarto.Store.db));
@@ -551,6 +589,7 @@ test('Comptes : session expirée en cours de travail → on se reconnecte sans p
         }
       }
     }
+    if (opts.sansStockage) await page.addInitScript(() => { Object.defineProperty(window, 'indexedDB', { get() { throw new Error('bloqué'); } }); Storage.prototype.setItem = () => { throw new Error('bloqué'); }; });
     page.on('console', m => { if (m.type() === 'error' && !(opts.sansThree && /ERR_FAILED|Failed to load/.test(m.text())) && !(opts.erreursAttendues && opts.erreursAttendues.test(m.text()))) erreurs.push(m.text()); });
     page.on('pageerror', e => erreurs.push(e.message));
     // Aucune sortie vers Internet : toute adresse extérieure est notée, puis coupée (le test « Sans Internet » vérifie qu'il n'y en a pas)

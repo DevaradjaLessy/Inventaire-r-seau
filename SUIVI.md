@@ -131,6 +131,7 @@ js/utils.js  icones.js     utilitaires, icônes SVG
 js/catalogue.js            catalogue par défaut
 js/demo.js                 jeu de données fictif (graine fixe)
 js/store.js                état, index, annulation, sauvegarde
+js/stockage.js             stockage local du mode démonstration (IndexedDB), copies de secours
 js/ecarts.js               écart entre deux états : changements à envoyer, retour en arrière
 js/services/               requetes, cablage, topologie, tracage, connexion, recherche, installation
 js/3d/                     three (chargement), facades, viewer, objets
@@ -542,6 +543,13 @@ Les tables `utilisateurs` et `audit` viendront avec la migration du lot 17.
 
 **Tests :** 41 scénarios de bout en bout (dont « sans Internet » et la politique de sécurité), 50 pour le serveur.
 
+### 3.23 Sauvegarde locale du mode démonstration (fin du lot 9)
+
+- **IndexedDB à la place de localStorage** (`js/stockage.js`) : plus de limite à 5 Mo (un grand fond de plan passe), et la base n'est plus convertie en texte à chaque enregistrement. Les données laissées par une ancienne version dans localStorage sont reprises, puis déplacées. Si IndexedDB est refusée par le navigateur, NetCarto se rabat sur localStorage ; si rien ne peut être écrit, un message le dit.
+- **Copies de secours :** à chaque ouverture de la page, l'état retrouvé est gardé en copie ; les cinq plus récentes sont conservées. Le bouton « Copies de secours » de l'en-tête (mode démonstration seulement) les liste, les restaure (annulable) ou les télécharge. Une réinitialisation ou un import malheureux se rattrape donc même après fermeture de la page.
+- **Écriture avant de quitter :** une modification en attente est enregistrée dès que la page passe en arrière-plan.
+- **Mode serveur :** inchangé, rien n'est gardé dans le navigateur ; ses sauvegardes sont celles de la section 3.18.
+
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
@@ -564,7 +572,7 @@ Les tables `utilisateurs` et `audit` viendront avec la migration du lot 17.
 | 7 | Tableau de bord : indicateurs, graphiques, alertes, historique | Moyen à élevé (medium/high) | ✅ Fait |
 | 8 | Finitions : performances, tests complets, `README.md` (modèle de données, ajout d'un modèle ou d'un plan, sécurité), activation de GitHub Pages | Élevé (high) | ✅ Fait, sauf l'activation de GitHub Pages : elle se fait à la main dans les réglages du dépôt (voir `README.md`) |
 
-| 9 | **Sécuriser le développement :** tests Playwright dans le dépôt (dossier `tests/`), sauvegarde locale plus sûre (IndexedDB et sauvegarde automatique téléchargeable), annulation plus légère | Élevé (high) | 🔄 En cours : tests faits ; annulation légère faite au lot 14 (voir 3.19). Reste la sauvegarde locale plus sûre du mode démonstration (le mode serveur a ses propres sauvegardes, voir 3.18). |
+| 9 | **Sécuriser le développement :** tests Playwright dans le dépôt (dossier `tests/`), sauvegarde locale plus sûre (IndexedDB et sauvegarde automatique téléchargeable), annulation plus légère | Élevé (high) | ✅ Fait : tests, annulation légère (voir 3.19), sauvegarde locale dans IndexedDB et copies de secours (voir 3.23). |
 | 10 | **Saisir un vrai réseau :** démarrage sur base vide ; création, modification et suppression des sites, bâtiments, étages et pièces depuis l'interface (dessin des pièces sur le plan) ; gestion des VLAN | Élevé (high) | ✅ Fait |
 | 11 | **Qualité des données :** import CSV des équipements et des prises ; contrôle des doublons (IP, nom d'hôte, MAC, repère de prise) ; vérification du brassage lors du déplacement d'un équipement | Élevé (high) | ✅ Fait (voir 3.17) |
 | 12 | **Harmonisation visuelle :** appliquer le style du tableau de bord et de l'inventaire à la Cartographie et au Matériel ; sol et baie de la vue 3D adaptés au thème clair | Moyen à élevé | ✅ Fait |
@@ -617,6 +625,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-18 | Peut-on encore peaufiner le design ? | ✅ Fait (lot 12) : typographie et espacements revus, en-tête plus aéré avec onglets en pastilles, boutons et champs arrondis avec transitions, anneau de focus au clavier, fiches de détail en cartes (Cartographie et Matériel), barres d'outils flottantes translucides sur le plan et la 3D, arbre à lignes arrondies, cartes du catalogue avec effet au survol, fenêtres et notifications animées. Vérifié dans les deux thèmes et sur téléphone. |
 | 2026-11-19 | **Nouvelle orientation :** NetCarto devient un logiciel serveur installable sur Linux, avec ou sans Docker, avec sa propre base de données (décisions détaillées, lots 16 à 22, ordre de réalisation, méthode « tests avant le code ») | ✅ Décisions notées en 3.14, lots ajoutés en section 4. **Lot 16 fait** (voir 3.15) : serveur Node dans `serveur/`, base SQLite relationnelle, API `/api/v1`, interface basculée sur l'API, page GitHub Pages inchangée. Prochain lot : 17. |
 | 2026-11-19 | « Continue à tout concevoir, je vais tester à la maison » | ✅ Lots 17, 11, 18, 14, 19, 20 et 22 faits (voir 3.16 à 3.22). Restent, hors de l'ordre fixé : la fin du lot 9, les lots 13 et 15. |
+| 2026-11-19 | « Tu as tout fini ? Si non, fais tout » | 🔄 Fin du lot 9 faite (voir 3.23). Suite : lots 13 et 15, et les vérifications laissées de côté. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---
