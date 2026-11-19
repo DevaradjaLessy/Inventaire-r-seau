@@ -7,8 +7,9 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=u
 const DOSSIERS = ['css', 'js'];
 const ENTETES = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY' };
 
-function creerStatique(racine, prefixeApi) {
+function creerStatique(racine, prefixeApi, { https = false } = {}) {
   racine = path.resolve(racine);
+  if (https) ENTETES['Strict-Transport-Security'] = 'max-age=31536000';
   const refus = (res, code) => { res.writeHead(code, { 'Content-Type': 'text/plain; charset=utf-8', ...ENTETES }); res.end(code === 404 ? 'Introuvable' : 'Interdit'); };
   return function servir(chemin, res) {
     let rel;

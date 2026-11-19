@@ -7,7 +7,9 @@ const fs = require('fs'), path = require('path');
 const { parse } = require('smol-toml');
 
 const DEFAUTS = {
-  serveur: { hote: '127.0.0.1', port: 8080 },
+  serveur: { hote: '127.0.0.1', port: 8443 },
+  https: { actif: true, certificat: '', cle: '' },   // sans fichiers fournis, un certificat auto-signé est créé dans le dossier de données
+  securite: { echecsMax: 5, verrouillageMinutes: 15, sessionHeures: 12, inactiviteMinutes: 120 },
   donnees: { dossier: 'donnees-locales' },
   web: { dossier: '..' },
   supervision: { intervalle: 30, sources: [] },
@@ -29,6 +31,7 @@ function chargerConfig({ env = process.env, args = process.argv.slice(2) } = {})
   }
   cfg.donnees.dossier = path.resolve(base, cfg.donnees.dossier);
   cfg.web.dossier = path.resolve(base, cfg.web.dossier);
+  for (const k of ['certificat', 'cle']) if (cfg.https[k]) cfg.https[k] = path.resolve(base, cfg.https[k]);
   // Variables d'environnement et arguments : chemins relatifs au dossier courant
   const hote = arg(args, 'hote') || env.NETCARTO_HOTE, port = arg(args, 'port') || env.NETCARTO_PORT, donnees = arg(args, 'donnees') || env.NETCARTO_DONNEES;
   if (hote) cfg.serveur.hote = hote;
@@ -40,6 +43,8 @@ function chargerConfig({ env = process.env, args = process.argv.slice(2) } = {})
   if (!Number.isInteger(cfg.serveur.port) || cfg.serveur.port < 0 || cfg.serveur.port > 65535) throw new Error('Réglage « serveur.port » invalide : nombre entier attendu entre 0 et 65535.');
   if (typeof cfg.serveur.hote !== 'string' || !cfg.serveur.hote) throw new Error('Réglage « serveur.hote » invalide.');
   if (!Array.isArray(cfg.supervision.sources)) throw new Error('Réglage « supervision.sources » invalide : liste attendue.');
+  if (args.includes('--http')) cfg.https.actif = false;
+  for (const k of ['echecsMax', 'verrouillageMinutes', 'sessionHeures', 'inactiviteMinutes']) if (!(cfg.securite[k] > 0)) throw new Error(`Réglage « securite.${k} » invalide : nombre positif attendu.`);
   if (!(cfg.limites.corpsMaxMo > 0)) throw new Error('Réglage « limites.corpsMaxMo » invalide.');
   return cfg;
 }

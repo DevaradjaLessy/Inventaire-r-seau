@@ -5,6 +5,7 @@ const { isDeepStrictEqual } = require('util');
 const { ErreurMetier, traduire } = require('./erreurs');
 const { COLLECTIONS, ORDRE, GROUPE, ID, versLigne, versObjet, colonnes, colonneCle } = require('./schema');
 const { verifier } = require('./regles');
+const { creerComptes } = require('./comptes');
 
 const APP = 'NetCarto', SCHEMA_JSON = 1, MAX_CHANGEMENTS = 50000;
 const LIBELLE = { vlans: 'VLAN', sites: 'site', batiments: 'bâtiment', etages: 'étage', pieces: 'pièce', catalogue: 'modèle du catalogue', catalogue_ports: 'groupe de ports', stock: 'ligne de stock', baies: 'baie', equipements: 'équipement', ports: 'port', prises: 'prise murale', cables: 'câble', journal: 'entrée du journal' };
@@ -16,6 +17,9 @@ function creerDepot(pilote, versionSchema) {
   const revision = () => +(meta('revision') || 0);
   const spec = c => { const s = COLLECTIONS[c]; if (!s) throw new ErreurMetier('invalide', `Collection inconnue : « ${c} ».`); return s; };
   const cleValide = (c, cle) => { if (c === 'vlans' ? !Number.isInteger(cle) : typeof cle !== 'string' || !ID.test(cle)) throw new ErreurMetier('invalide', `${c} : identifiant invalide.`); return cle; };
+  const comptes = creerComptes(p);
+  /* Ligne d'audit d'un changement. ctx : { utilisateur: { id, identifiant }, ip } */
+  const tracer = (ctx, action, collection, cle, libelle, avant, apres, lot) => comptes.ajouterAudit({ date: Date.now(), utilisateur_id: ctx?.utilisateur?.id || null, identifiant: ctx?.utilisateur?.identifiant || '', action, collection, cle: String(cle), libelle, avant, apres, lot, ip: ctx?.ip || '' });
   const filles = id => p.tous('SELECT * FROM catalogue_ports WHERE catalogue_id = ? ORDER BY ordre', [id]);
 
   function lire(c, cle) {
@@ -71,11 +75,11 @@ function creerDepot(pilote, versionSchema) {
      Chaque changement : { collection, op: creer | modifier | supprimer, cle, avant, apres }.
      « avant » est la valeur que l'auteur avait sous les yeux : si la base ne lui correspond plus,
      le lot entier est refusé (conflit) au lieu d'écraser le travail de quelqu'un d'autre. */
-  function appliquerLot(lot) {
+  function appliquerLot(lot, ctx = null) {
     if (!lot || typeof lot !== 'object' || !Array.isArray(lot.changements)) throw new ErreurMetier('invalide', 'Lot mal formé : « changements » doit être une liste.');
     if (lot.changements.length > MAX_CHANGEMENTS) throw new ErreurMetier('invalide', `Lot trop volumineux (${MAX_CHANGEMENTS} changements au plus).`);
     return p.transaction(() => {
-      const touchees = new Set();
+      const touchees = new Set(), r = revision() + 1;
       for (const ch of lot.changements) {
         if (!ch || typeof ch !== 'object') throw new ErreurMetier('invalide', 'Changement mal formé.');
         const c = ch.collection, s = spec(c), cle = cleValide(c, ch.cle), qui = `${LIBELLE[s.table]} ${nomDe(c, ch.apres || ch.avant)}`;
@@ -89,19 +93,20 @@ function creerDepot(pilote, versionSchema) {
           if (!courant) throw new ErreurMetier('conflit', `Élément introuvable, il a peut-être été supprimé entre-temps : ${qui}.`);
           if (!ch.avant) throw new ErreurMetier('invalide', `${c} : la valeur « avant » est obligatoire pour ${ch.op}.`);
           const { ligne, filles: fl } = versLigne(c, ch.avant);
-          if (!isDeepStrictEqual(versObjet(c, ligne, fl), courant)) throw new ErreurMetier('conflit', `${qui} a été modifié entre-temps par quelqu'un d'autre. Rechargez les données, puis recommencez.`);
+          if (!isDeepStrictEqual(versObjet(c, ligne, fl), courant)) { const auteur = comptes.dernierAuteur(c, cle); throw new ErreurMetier('conflit', `${qui} a été modifié entre-temps${auteur ? ' par ' + auteur : ' par quelqu\'un d\'autre'}. Les données ont été rechargées : vérifiez, puis recommencez.`); }
           if (ch.op === 'supprimer') ecrire(() => p.lancer(`DELETE FROM ${s.table} WHERE ${colonneCle(c)} = ?`, [cle]), qui);
           else { if (!ch.apres || ch.apres[s.cle] !== cle) throw new ErreurMetier('invalide', `${c} : la clé d'un élément ne se modifie pas.`); ecrire(() => modifier(c, cle, ch.apres), qui); }
         } else throw new ErreurMetier('invalide', `Opération inconnue : « ${ch.op} » (attendu : creer, modifier ou supprimer).`);
+        // Journal d'audit : valeur avant et après (l'historique affiché dans l'interface n'y est pas recopié)
+        if (c !== 'history') tracer(ctx, ch.op, c, cle, String(nomDe(c, ch.apres || ch.avant)), ch.op === 'creer' ? null : courant, ch.op === 'supprimer' ? null : ch.apres, r);
       }
       ecrire(() => controler(touchees));
-      const r = revision() + 1;
       poserMeta('revision', r); poserMeta('maj', Date.now());
       return { revision: r, changements: lot.changements.length };
     });
   }
   /* Remplace toute la base par un document JSON (import, réinitialisation), tout ou rien */
-  function remplacerBase(doc) {
+  function remplacerBase(doc, ctx = null) {
     if (!doc || typeof doc !== 'object' || !doc.meta || doc.meta.app !== APP) throw new ErreurMetier('invalide', 'Ce document n\'est pas une base NetCarto.');
     for (const c of ORDRE) if (!Array.isArray(doc[c])) throw new ErreurMetier('invalide', `Section « ${c} » absente ou invalide.`);
     return p.transaction(() => {
@@ -113,6 +118,7 @@ function creerDepot(pilote, versionSchema) {
       }
       ecrire(() => controler(null));
       const r = revision() + 1;
+      tracer(ctx, 'remplacement', '', '', 'Remplacement de toute la base', null, Object.fromEntries(ORDRE.map(c => [c, doc[c].length])), r);
       poserMeta('revision', r); poserMeta('maj', Date.now()); poserMeta('demo', doc.meta.demo ? 1 : 0); poserMeta('seq', +doc.meta.seq || 0); poserMeta('initialisee', 1);
       return { revision: r };
     });
@@ -127,6 +133,6 @@ function creerDepot(pilote, versionSchema) {
     });
     return true;
   }
-  return { lire, lister, lireBase, appliquerLot, remplacerBase, initialiser, revision, versionSchema: () => versionSchema, estVide: () => !p.un('SELECT 1 AS x FROM sites LIMIT 1'), sain: () => p.un('SELECT 1 AS ok').ok === 1, fermer: () => p.fermer() };
+  return { comptes, lire, lister, lireBase, appliquerLot, remplacerBase, initialiser, revision, versionSchema: () => versionSchema, estVide: () => !p.un('SELECT 1 AS x FROM sites LIMIT 1'), sain: () => p.un('SELECT 1 AS ok').ok === 1, fermer: () => p.fermer() };
 }
 module.exports = { creerDepot };

@@ -6,7 +6,7 @@ const { dossierTemporaire } = require('./aide');
 
 test('valeurs par défaut : écoute locale, aucun chemin propre à un système', () => {
   const c = chargerConfig({ env: {}, args: [] });
-  assert.deepStrictEqual([c.serveur.hote, c.serveur.port], ['127.0.0.1', 8080]);
+  assert.deepStrictEqual([c.serveur.hote, c.serveur.port, c.https.actif], ['127.0.0.1', 8443, true]);
   assert.ok(path.isAbsolute(c.donnees.dossier) && path.isAbsolute(c.web.dossier));
   assert.ok(!JSON.stringify(DEFAUTS).includes('/var/') && !JSON.stringify(DEFAUTS).includes('/etc/'));
 });

@@ -1,9 +1,10 @@
 /* Erreurs attendues de la couche de données. Le code indique la nature du refus :
    invalide (demande mal formée, 400), conflit (la base a changé entre-temps, 409),
-   regle (contrainte ou règle métier non respectée, 422). */
+   regle (contrainte ou règle métier non respectée, 422), acces (connexion requise ou refusée, 401),
+   interdit (rôle insuffisant, 403), verrouille (compte verrouillé, 429). */
 'use strict';
 
-const STATUT = { invalide: 400, conflit: 409, regle: 422 };
+const STATUT = { invalide: 400, acces: 401, interdit: 403, conflit: 409, regle: 422, verrouille: 429 };
 class ErreurMetier extends Error {
   constructor(code, message) { super(message); this.name = 'ErreurMetier'; this.code = code; this.statut = STATUT[code] || 400; }
 }
@@ -16,9 +17,11 @@ const UNICITE = [
   [/ux_baies_nom|baies\.nom/, 'Nom de baie déjà utilisé'],
   [/ux_batiments_code|batiments\.code/, 'Code de bâtiment déjà utilisé sur ce site'],
   [/ux_etages_niveau|etages\.niveau/, 'Ce niveau existe déjà dans le bâtiment'],
+  [/ux_utilisateurs_identifiant|utilisateurs\.identifiant/, 'Identifiant déjà utilisé par un autre compte'],
   [/ux_ports_rang|ux_ports_nom|ports\.(idx|nom)/, 'Deux ports du même équipement ont le même nom ou le même rang'],
 ];
 const CONTROLE = {
+  ck_utilisateur_role: 'Rôle inconnu (attendu : lecture, technicien ou administrateur)', ck_utilisateur_identifiant: 'Identifiant trop court',
   ck_stock_disponible: 'Le stock disponible ne peut pas être négatif', ck_stock_seuil: 'Le seuil d\'alerte du stock ne peut pas être négatif',
   ck_statut: 'Statut inconnu (attendu : active, maintenance, fault ou retired)', ck_vlan_numero: 'Numéro de VLAN attendu entre 1 et 4094',
   ck_port_etat: 'État de port inconnu (attendu : up, down, disabled ou error)', ck_port_type: 'Type de port inconnu (attendu : rj45, sfp, sfp+ ou lc)', ck_port_role: 'Rôle de port inconnu (attendu : access, uplink ou pp)',
