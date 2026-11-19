@@ -341,6 +341,53 @@ history    [{ id, ts, type, text, ref }]                                 // type
 - **Validation :** PRTG et SNMP sont testés contre des simulateurs (`npm test` dans `connecteurs/`), **pas sur du matériel réel**. À vérifier sur site.
 - **À faire ensuite :** API des constructeurs (Cisco, Aruba, UniFi, Meraki) une fois les modèles connus ; table MAC, voisins LLDP et PoE par SNMP ; comparaison automatique entre topologie saisie et topologie mesurée.
 
+### 3.14 Passage en logiciel serveur (décision du 2026-11-19)
+
+NetCarto devient un vrai logiciel serveur, installable sur Linux avec ou sans Docker, avec sa propre base de données. Cette décision remplace la règle « sans backend » pour l'application installée ; la page GitHub Pages reste une démonstration hors ligne.
+
+**1. Serveur**
+- Serveur Node.js (dossier `serveur/`), construit à partir du relais de `connecteurs/`. Il sert à la fois l'interface web et une API.
+- Le relais de supervision (PRTG, SNMP, simulation) devient un module de ce serveur.
+
+**2. Base de données propre à NetCarto**
+- SQLite intégrée par défaut, rien à installer à part.
+- Vrai schéma relationnel : une table par type d'objet (sites, bâtiments, étages, pièces, baies, équipements, ports, prises, câbles, catalogue, stock, vlans, utilisateurs, journal…).
+- Clés étrangères, contraintes d'unicité (IP, MAC, nom d'hôte, repère de prise), transactions pour toute opération en plusieurs étapes (exemple : installer un équipement crée ses ports et décrémente le stock, tout ou rien).
+- Migrations versionnées : une base d'une version précédente est mise à jour automatiquement au démarrage, avec une sauvegarde faite juste avant.
+- Code d'accès aux données isolé dans une couche dédiée, pour pouvoir passer à PostgreSQL plus tard sans réécrire le reste.
+- Le modèle de données de la section 3.2 sert de point de départ ; le schéma est documenté en 3.15.
+
+**3. Comptes et sécurité**
+- Connexion par identifiant et mot de passe (12 caractères minimum, hachage fort, verrouillage après plusieurs échecs).
+- Rôles : lecture, technicien, administrateur.
+- Journal d'audit : qui, quand, quoi, valeur avant et après.
+- Contrôle des modifications concurrentes : si deux personnes modifient le même élément, la seconde est prévenue au lieu d'écraser.
+- HTTPS par défaut (certificat auto-signé généré à l'installation, possibilité de fournir le sien).
+- Aucun mot de passe ni secret dans le dépôt : uniquement des fichiers d'exemple.
+
+**4. Installation (deux modes, même application)**
+- Docker : image NetCarto et `docker-compose.yml`, lancement par `docker compose up -d`.
+- Linux sans Docker : script `installer.sh` pour Debian/Ubuntu, service systemd, compte système dédié sans privilèges.
+- Données dans `/var/lib/netcarto`, réglages dans `/etc/netcarto/netcarto.toml`, dans les deux modes.
+- Scripts de mise à jour et de désinstallation complète (avec garde-fou contre la suppression d'un mauvais dossier).
+- Pas de version Windows pour l'instant.
+
+**5. Portabilité (pour pouvoir ajouter Windows plus tard)**
+- Le code de l'application reste portable (Linux, Windows, macOS).
+- Aucun chemin ni aucune commande propre à Linux dans l'application elle-même : les dossiers de données et de réglages viennent de la configuration.
+- Tout ce qui est propre à Linux reste dans les scripts d'installation et l'image Docker.
+- Une version Windows pourra être ajoutée plus tard comme simple lot d'emballage.
+
+**6. Ce qui ne change pas**
+- L'interface actuelle est conservée (cartographie, 3D, traçage, inventaire, matériel, tableau de bord) ; elle lit et écrit désormais via l'API du serveur au lieu du localStorage.
+- La page GitHub Pages reste une démo hors ligne, avec des données fictives uniquement, sans serveur.
+- Aucune dépendance à NetBox.
+- Interface et commentaires en français, palette et règles de `CLAUDE.md` inchangées.
+
+**Méthode demandée :** tests écrits avant le code, un scénario par nouvelle fonction ; toute la suite lancée avant chaque commit (`tests/`, `connecteurs/`, `serveur/`) ; travail sur une branche dédiée, jamais sur la branche principale.
+
+**Ordre de réalisation :** lots 16, 17, 11, 18, 14, 19, 20, 22.
+
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
@@ -371,7 +418,16 @@ history    [{ id, ts, type, text, ref }]                                 // type
 | 14 | **Montée en charge :** jeu de test de grande taille, mesures, puis réaffichage partiel et affichage limité à la zone visible si nécessaire | Élevé (high) | ⏳ À faire |
 | 15 | **Confort :** impression d'une fiche de baie et d'un plan de brassage, export en image du plan et de la topologie, navigation au clavier, historique filtrable avec retour à un état antérieur | Moyen | ⏳ À faire |
 
-**Hors lots, en attente d'une décision de l'utilisateur** (dépendent du choix d'hébergement, voir section 6) : stockage partagé entre plusieurs personnes, comptes et droits, journal d'audit, remontée automatique de l'état réel des équipements (SNMP, API). À trancher avant le déploiement si plusieurs personnes doivent modifier les données.
+| 16 | **Serveur et base :** serveur Node, API, SQLite, schéma, couche d'accès aux données, bascule de l'interface vers l'API, mode démo conservé | Maximal (max) | 🔄 En cours |
+| 17 | **Comptes et sécurité :** comptes, rôles, journal d'audit, modifications concurrentes, HTTPS | Très élevé (xhigh) | ⏳ À faire |
+| 18 | **Sauvegardes et migrations :** sauvegardes automatiques planifiées, restauration, migrations versionnées | Élevé (high) | ⏳ À faire |
+| 19 | **Docker :** image NetCarto et `docker-compose.yml` | Élevé (high) | ⏳ À faire |
+| 20 | **Installation Linux :** `installer.sh`, systemd, mise à jour, désinstallation | Élevé (high) | ⏳ À faire |
+| 22 | **Three.js hébergé localement**, pour fonctionner sans Internet | Moyen | ⏳ À faire |
+
+**Ordre de réalisation (décision du 2026-11-19) :** 16, 17, 11, 18, 14, 19, 20, 22. Les lots 9 (reste), 13 et 15 viennent ensuite. Il n'y a pas de lot 21.
+
+Le stockage partagé, les comptes, le journal d'audit et la supervision réelle, auparavant « en attente de décision », sont désormais couverts par les lots 16 et 17 et par la section 3.14.
 
 Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 
@@ -405,6 +461,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-18 | Auditer et peaufiner la solution, améliorer encore les visuels 3D | ✅ Fait. **Audit :** faille corrigée à l'import (un fichier JSON pouvait injecter du code par un identifiant ou une couleur : le contenu est maintenant contrôlé élément par élément) ; suite de tests ajoutée au dépôt ; boutons à icône nommés pour les lecteurs d'écran ; message clair si l'on installe sans étage ; états de ports du tableau de bord alignés sur l'affichage ; jeton du relais comparé en temps constant ; code mort retiré. **3D :** ombres portées douces, mur de fond et plinthe, sol et éclairage adaptés au thème clair, passe-câbles verticaux à doigts, bandeaux de prises au fond de la baie, halo lumineux des LEDs, fiches en deux parties (corps clair et manchon à la couleur du cordon), dessus des équipements ajouré, façades légèrement auto-éclairées, bords de scène assombris. |
 | 2026-11-18 | Continuer avec le lot 10 : base vide et création des bâtiments | ✅ Fait. Le bouton Réinitialiser propose « démonstration » ou « base vide » (aucun site, catalogue conservé, stock à zéro). Sites, bâtiments, étages et pièces se créent, se modifient et se suppriment depuis la fiche de droite ; une pièce peut aussi se tracer à la souris sur le plan (alignement tous les 50 cm). Contrôles : pièces sans chevauchement et dans l'étage, codes de bâtiment et niveaux uniques, suppression seulement si l'élément est vide. Gestion des VLAN depuis le tableau de bord ou la fiche d'un port. L'étiquette « Données fictives » ne s'affiche plus que pour la démonstration. Un scénario de test complet a été ajouté (14 tests au total). |
 | 2026-11-18 | Peut-on encore peaufiner le design ? | ✅ Fait (lot 12) : typographie et espacements revus, en-tête plus aéré avec onglets en pastilles, boutons et champs arrondis avec transitions, anneau de focus au clavier, fiches de détail en cartes (Cartographie et Matériel), barres d'outils flottantes translucides sur le plan et la 3D, arbre à lignes arrondies, cartes du catalogue avec effet au survol, fenêtres et notifications animées. Vérifié dans les deux thèmes et sur téléphone. |
+| 2026-11-19 | **Nouvelle orientation :** NetCarto devient un logiciel serveur installable sur Linux, avec ou sans Docker, avec sa propre base de données (décisions détaillées, lots 16 à 22, ordre de réalisation, méthode « tests avant le code ») | 🔄 Décisions notées en 3.14, lots ajoutés en section 4. Lot 16 en cours. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---
