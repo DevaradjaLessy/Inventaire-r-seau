@@ -3,7 +3,7 @@ import { CABLE_TYPES, COL, DEVICE_STATUS, PORT_KIND, PORT_ROLE, U_M } from '../c
 import { clamp, fmtSpeed, mulberry32, shade } from '../utils.js';
 import { Store } from '../store.js';
 import { byId, cablesOf, catOf, portsOf } from '../services/requetes.js';
-import { effStatus, isPassiveNode, otherEnd } from '../services/cablage.js';
+import { effStatus, isPassiveNode, otherEnd, segment } from '../services/cablage.js';
 import { OrbitControls, RoomEnvironment, THREE, threeReady } from './three.js';
 import { drawFacade, facadeLayout, FACE_W, gabarit, labelCanvas, portModeColor, portNames, portTip } from './facades.js';
 import { OBJECTS } from './objets.js';
@@ -54,7 +54,10 @@ class Viewer3D {
     const fr = col => { const m = new T.Mesh(this.frameGeo, new T.MeshBasicMaterial({ color: col, toneMapped: false, depthTest: false, transparent: true })); m.visible = false; m.renderOrder = 10; s.add(m); return m; };
     this.hoverFrame = fr('#ffffff'); this.selFrame = fr(COL.accent);
     this.selBox = new T.LineSegments(new T.EdgesGeometry(this.unitBox), new T.LineBasicMaterial({ color: COL.accent, toneMapped: false })); this.selBox.visible = false; s.add(this.selBox);
-    this.hlCableMat = new T.MeshBasicMaterial({ color: COL.accent, toneMapped: false });
+    this.hlCableMat = new T.MeshBasicMaterial({ color: COL.accent, toneMapped: false }); this.hlCableMat.userData.keep = true;
+    // Cordons « fantômes » : presque effacés quand un port ou un équipement est choisi, pour dégager la vue
+    this.ghostMat = new T.MeshBasicMaterial({ color: '#8a97a6', transparent: true, opacity: 0.07, depthWrite: false, toneMapped: false }); this.ghostMat.userData.keep = true;
+    this.isoler = true;
     // Souris : survol (infobulle) et clic
     const el = r.domElement; let down = null;
     el.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY }; });
@@ -93,7 +96,8 @@ class Viewer3D {
     if (this.anim) this.stepAnim(t);
     this.controls.update();
     if (t - this.lastLed > 100) { this.lastLed = t; if (this.updateLeds(t)) this.dirty = true; if (this.hlMesh) { this.hlMesh.material.opacity = 0.55 + 0.45 * Math.sin(t / 160); this.dirty = true; } }
-    if (this.dirty) { this.dirty = false; this.renderer.render(this.scene, this.camera); }
+    if (this.errMesh && t - this.lastErr > 60) { this.lastErr = t; this.errMesh.material.opacity = 0.45 + 0.55 * Math.abs(Math.sin(t / 380)); this.dirty = true; }
+    if (this.dirty) { this.dirty = false; this.renderer.render(this.scene, this.camera); this.placeLabel(); }
   }
   /* --- Matériaux et textures --- */
   mat(color, metal = 0.5, rough = 0.5, extra = null) {
@@ -120,8 +124,9 @@ class Viewer3D {
       for (const m of [].concat(o.material || [])) if (!m.userData.keep) { m.map?.dispose(); m.dispose(); }
       if (o.isInstancedMesh) o.dispose();
     });
+    for (const m of this.cableMeshes?.values() || []) if (m.userData.base && m.userData.base !== m.material && !m.userData.base.userData.keep) m.userData.base.dispose();
     this.root.clear();
-    Object.assign(this, { ports: [], portIdx: new Map(), devGroups: new Map(), cableMeshes: new Map(), bodies: [], overlay: null, leds: null, glow: null, hlMesh: null, cableGroup: null, ledPorts: [] });
+    Object.assign(this, { errMesh: null, nFantomes: 0, ports: [], portIdx: new Map(), devGroups: new Map(), cableMeshes: new Map(), bodies: [], overlay: null, leds: null, glow: null, hlMesh: null, cableGroup: null, ledPorts: [] });
     this.hoverFrame.visible = this.selFrame.visible = this.selBox.visible = false;
     this.controls.autoRotate = false;
   }
@@ -264,6 +269,7 @@ class Viewer3D {
     }
     this.buildPortMeshes(ledPorts, plugs);
     this.buildCables(plugs);
+    this.buildErrors();
     this.refreshColors(); this.applyHighlight(); this.setSelected(this.selId);
     if (!keepCam) this.frameAll(false);
     this.finishScene();
@@ -325,7 +331,7 @@ class Viewer3D {
         pts.push(new T.Vector3(sx, a.y + 0.02, a.z + zo * 0.5), new T.Vector3(sx, geo.yTop - 0.06, a.z - 0.02));
       }
       const tube = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts, false, 'catmullrom', 0.25), b ? 26 : 16, fib ? 0.0016 : cab.type === 'dac' ? 0.003 : 0.0027, 7), this.mat(cab.color || CABLE_TYPES[cab.type].color, 0.02, 0.55));
-      tube.userData.cabId = cab.id; grp.add(tube); this.cableMeshes.set(cab.id, tube);
+      tube.userData.cabId = cab.id; tube.userData.base = tube.material; grp.add(tube); this.cableMeshes.set(cab.id, tube);
     }
   }
   /* Affiche un objet seul : aperçu d'un modèle du catalogue, ou équipement hors baie */
@@ -390,7 +396,7 @@ class Viewer3D {
   applyHighlight() {
     const T = THREE;
     if (this.hlMesh) { this.root.remove(this.hlMesh); this.hlMesh.material.dispose(); this.hlMesh.dispose(); this.hlMesh = null; }
-    for (const [id, m] of this.cableMeshes) { const on = this.hl?.cableSet.has(id); if (on && !m.userData.orig) { m.userData.orig = m.material; m.material = this.hlCableMat; m.scale.setScalar(1); } else if (!on && m.userData.orig) { m.material = m.userData.orig; m.userData.orig = null; } }
+    this.refreshCables();
     const list = this.hl ? this.ports.filter(e => e.p && this.hl.nodeSet.has(e.p.id)) : [];
     if (list.length) {
       const M = new T.Matrix4(), q = new T.Quaternion();
@@ -400,6 +406,47 @@ class Viewer3D {
     }
     this.dirty = true;
   }
+  /* Cadres rouges sur les ports en erreur : visibles à travers les cordons, dans tous les modes */
+  buildErrors() {
+    const T = THREE, list = this.ports.filter(e => e.p && e.p.role !== 'pp' && effStatus(e.p) === 'error');
+    if (!list.length) return;
+    const M = new T.Matrix4(), q = new T.Quaternion();
+    this.errMesh = new T.InstancedMesh(this.frameGeo, new T.MeshBasicMaterial({ color: COL.crit, toneMapped: false, transparent: true, depthTest: false }), list.length);
+    list.forEach((e, i) => { M.compose(new T.Vector3(e.x, e.y, e.z + 0.003), q, new T.Vector3(e.w * 1.7, e.h * 1.7, 1)); this.errMesh.setMatrixAt(i, M); });
+    this.errMesh.renderOrder = 8; this.errMesh.userData.noShadow = true; this.root.add(this.errMesh); this.lastErr = 0;
+  }
+  /* Cordons à garder pleins quand la sélection isole : ceux du port choisi (jusqu'à l'autre bout) ou de l'équipement choisi */
+  cordonsGardes() {
+    const id = this.selId;
+    if (this.portIdx.has(id)) return new Set(segment(id).cables.map(c => c.id));
+    if (this.devGroups.has(id)) return new Set(portsOf(id).flatMap(p => cablesOf(p.id).map(c => c.id)));
+    return null;
+  }
+  refreshCables() {
+    const garde = this.isoler ? this.cordonsGardes() : null;
+    let n = 0;
+    for (const [id, m] of this.cableMeshes) {
+      const hl = !!this.hl?.cableSet.has(id), fantome = !hl && !!garde && !garde.has(id);
+      m.material = hl ? this.hlCableMat : fantome ? this.ghostMat : m.userData.base;
+      m.castShadow = !fantome; m.renderOrder = fantome ? 1 : 0;
+      if (fantome) n++;
+    }
+    this.nFantomes = n;
+    if (this.renderer) this.renderer.shadowMap.needsUpdate = true;
+    this.dirty = true;
+  }
+  setIsoler(on) { this.isoler = on; this.refreshCables(); }
+  /* État lisible de la vue (pour l'interface et les tests) */
+  etat() { return { fantomes: this.nFantomes || 0, cordons: this.cableMeshes.size, erreurs: this.errMesh ? this.errMesh.count : 0, isoler: this.isoler }; }
+  /* Étiquette HTML accrochée au port choisi : l'interface fournit l'élément et son contenu, la vue le place */
+  setLabel(el) { this.labelEl = el; this.placeLabel(); }
+  placeLabel() {
+    const el = this.labelEl, i = this.portIdx?.get(this.selId);
+    if (!el || i == null) return;
+    const e = this.ports[i], v = new THREE.Vector3(e.x, e.y + e.h * 0.9, e.z + 0.02).project(this.camera), r = this.renderer.domElement;
+    el.classList.toggle('hors', v.z > 1 || Math.abs(v.x) > 1.05 || Math.abs(v.y) > 1.05);
+    el.style.transform = `translate(${Math.round((v.x + 1) / 2 * r.clientWidth)}px, ${Math.round((1 - v.y) / 2 * r.clientHeight)}px) translate(-50%, -100%) translateY(-14px)`;
+  }
   placeFrame(fr, e) { if (!e) { fr.visible = false; return; } fr.position.set(e.x, e.y, e.z + 0.0025); fr.scale.set(e.w, e.h, 1); fr.visible = true; }
   setSelected(id) {
     this.selId = id; if (!this.ok) return;
@@ -407,7 +454,7 @@ class Viewer3D {
     this.placeFrame(this.selFrame, i != null ? this.ports[i] : null);
     this.selBox.visible = !!dg;
     if (dg) { this.selBox.position.set(0, dg.y, this.geo.zF - dg.depth / 2); this.selBox.scale.set(FACE_W + 0.05, dg.H + 0.003, dg.depth + 0.004); }
-    this.dirty = true;
+    this.refreshCables();
   }
   setHover(e) { if (this.hover === e) return; this.hover = e; this.placeFrame(this.hoverFrame, e); this.host.style.cursor = e ? 'pointer' : ''; this.dirty = true; }
   /* --- Souris --- */
@@ -451,6 +498,14 @@ class Viewer3D {
     const g = this.geo; if (!g) return;
     const yc = g.yBase + g.H / 2 - 0.05, dist = (g.H / 2) / Math.tan(this.camera.fov * Math.PI / 360) * 1.12;
     this.flyTo(new THREE.Vector3(dist * 0.3, yc + dist * 0.08, g.zF + dist * 0.95), new THREE.Vector3(0, yc, 0), animate);
+  }
+  /* Vue de face, bien droite : sur le port ou l'équipement choisi, sinon sur toute la baie */
+  face() {
+    const g = this.geo; if (!g) return;
+    const i = this.portIdx.get(this.selId), dg = this.devGroups.get(this.selId), V = (x, y, z) => new THREE.Vector3(x, y, z);
+    if (i != null) { const e = this.ports[i]; this.flyTo(V(0, e.y, g.zF + 0.62), V(0, e.y, g.zF)); }
+    else if (dg) this.flyTo(V(0, dg.y, g.zF + 0.9), V(0, dg.y, g.zF));
+    else { const yc = g.yBase + g.H / 2, dist = (g.H / 2) / Math.tan(this.camera.fov * Math.PI / 360) * 1.1; this.flyTo(V(0, yc, g.zF + dist), V(0, yc, 0)); }
   }
   /* Rapproche la caméra d'un équipement ou d'un port de la baie affichée */
   focus(id) {

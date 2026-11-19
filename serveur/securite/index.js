@@ -105,8 +105,24 @@ function creerSecurite({ depot, config = {}, horloge = () => Date.now() }) {
     codeInitialisation = null;
     return u;
   }
+  /* État de sécurité du serveur, pour l'administrateur : ce qui mérite un coup d'œil, sans aucun secret.
+     options : { sauvegardes (module des sauvegardes), certificat (HTTPS en service, ou null) } */
+  function etat({ sauvegardes = null, certificat = null } = {}) {
+    const t = horloge(), jour = 86400000, comptes = c.lister();
+    const copies = sauvegardes ? sauvegardes.lister() : [], derniere = copies[0] || null, reglages = sauvegardes ? sauvegardes.reglages() : { actif: false };
+    return {
+      echecs24h: c.compterAudit('echec_connexion', t - jour),
+      verrouilles: comptes.filter(u => u.verrouille_jusqu_a && u.verrouille_jusqu_a > t).map(u => u.identifiant),
+      jamaisConnectes: comptes.filter(u => u.actif && !u.derniere_connexion).map(u => u.identifiant),
+      inactifs90j: comptes.filter(u => u.actif && u.derniere_connexion && u.derniere_connexion < t - 90 * jour).map(u => u.identifiant),
+      comptes: { total: comptes.length, actifs: comptes.filter(u => u.actif).length, administrateurs: comptes.filter(u => u.actif && u.role === 'administrateur').length },
+      sessions: c.nombreSessions(t - regle.inactiviteMinutes * 60000),
+      sauvegarde: { automatique: !!reglages.actif, nombre: copies.length, derniere: derniere ? derniere.date : null, ageHeures: derniere ? Math.max(0, Math.round((t - derniere.date) / 360000) / 10) : null },
+      https: certificat ? { actif: true, autoSigne: !!certificat.autoSigne, expire: certificat.expire.getTime(), joursRestants: Math.floor((certificat.expire.getTime() - t) / jour) } : { actif: false },
+    };
+  }
   return {
-    ROLES, creerUtilisateur, connecter, session, deconnecter, changerMotDePasse, modifierUtilisateur, supprimerUtilisateur, initialiser,
+    ROLES, etat, creerUtilisateur, connecter, session, deconnecter, changerMotDePasse, modifierUtilisateur, supprimerUtilisateur, initialiser,
     lister: () => c.lister().map(u => publique(u)), trouver: identifiant => publique(c.parIdentifiant(identifiant)),
     aInitialiser: () => c.nombre() === 0, get codeInitialisation() { return codeInitialisation; },
   };

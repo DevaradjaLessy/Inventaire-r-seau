@@ -339,6 +339,87 @@ test('Déplacer un équipement câblé : le brassage est signalé, et peut être
   assert.deepStrictEqual(await etat(), { rack: 'BAIE-A2-01', cables: avant.cables }, 'câbles gardés si l\'on décoche');
 });
 
+/* ---------- Interventions d'urgence (audit d'usage) ---------- */
+test('Panne d\'un switch : l\'impact est chiffré, détaillé par pièce, exportable', async page => {
+  await choisir(page, 'SW-A1-ACC-01');
+  const attendu = await page.evaluate(() => { const d = NetCarto.Store.db, sw = d.devices.find(x => x.hostname === 'SW-A1-ACC-01'), I = NetCarto.impactOf(sw.id); return { prises: I.outlets.length, terminaux: I.terminals.map(x => x.hostname).sort(), pieces: I.rooms.length, isoles: I.isolated.map(x => x.hostname) }; });
+  assert.ok(attendu.prises >= 25 && attendu.terminaux.includes('AP-A1-01') && attendu.terminaux.includes('TEL-A1-01') && attendu.pieces >= 4, JSON.stringify(attendu));
+  assert.deepStrictEqual(attendu.isoles, [], 'un switch d\'accès n\'isole aucun autre switch');
+  const resume = await page.locator('#detail .impact').innerText();
+  assert.match(resume, new RegExp(`${attendu.prises} prises`)); assert.match(resume, new RegExp(`${attendu.terminaux.length} terminaux`));
+  await page.click('#detail [data-act=impact]'); await page.waitForSelector('#impact-list');
+  const liste = await page.locator('#impact-list').innerText();
+  for (const m of [/Open space Commercial/i, /A1-010/, /AP-A1-01/, /TEL-A1-01/]) assert.match(liste, m);
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-act=impact-csv]')]);
+  const csv = fs.readFileSync(await dl.path(), 'utf8');
+  assert.match(csv, /piece;prise;terminal;port_du_switch;vlan/); assert.ok(csv.split('\n').length > attendu.prises);
+  // Le switch de distribution du bâtiment B isole ses switchs d'accès ; le cœur isole presque tout
+  const b = await page.evaluate(() => { const d = NetCarto.Store.db, f = n => NetCarto.impactOf(d.devices.find(x => x.hostname === n).id); return { dist: f('SW-B0-DIST-01').isolated.map(x => x.hostname).sort(), coeur: f('SW-A0-CORE-01').isolated.length, prisesDist: f('SW-B0-DIST-01').outlets.length }; });
+  assert.deepStrictEqual(b.dist, ['RTR-B1-01', 'SW-B0-ACC-01', 'SW-B1-ACC-01', 'SW-B1-ACC-02']); assert.ok(b.prisesDist > 20, 'les prises des switchs isolés comptent'); assert.ok(b.coeur >= 6);
+});
+test('Remplacer un switch en panne : le nouveau reprend le nom, l\'adresse, la configuration et tout le câblage, en une opération', async page => {
+  const avant = await page.evaluate(() => { const d = NetCarto.Store.db, sw = d.devices.find(x => x.hostname === 'SW-A1-ACC-02'), ids = new Set(d.ports.filter(p => p.deviceId === sw.id).map(p => p.id));
+    NetCarto.select(sw.id); return { id: sw.id, u: sw.u, rack: sw.rackId, ip: sw.ip, cables: d.cables.filter(c => ids.has(c.a) || ids.has(c.b)).length, vlans: d.ports.filter(p => p.deviceId === sw.id).slice(0, 4).map(p => p.vlan), stock: NetCarto.Store.idx.stock.get('cat-c9200l-24p-4g').available, undo: NetCarto.Store.undoStack.length, total: d.cables.length }; });
+  assert.ok(avant.cables >= 5);
+  await page.click('#detail [data-act=dev-replace]'); await page.waitForSelector('#rempl-bilan');
+  assert.match(await page.locator('#rempl-bilan').innerText(), new RegExp(`${avant.cables} câbles? repris`));
+  await page.selectOption('.modal [name=cat]', 'cat-c9200l-24p-4g'); await page.check('.modal [name=sort][value=retire]');
+  await page.click('[data-act=modal-ok]'); await page.waitForTimeout(200);
+  const apres = await page.evaluate(a => { const d = NetCarto.Store.db, nv = d.devices.find(x => x.hostname === 'SW-A1-ACC-02'), old = d.devices.find(x => x.id === a.id), ids = new Set(d.ports.filter(p => p.deviceId === nv.id).map(p => p.id));
+    return { neuf: nv.id !== a.id, u: nv.u, rack: nv.rackId, ip: nv.ip, mac: nv.mac, cables: d.cables.filter(c => ids.has(c.a) || ids.has(c.b)).length, vlans: d.ports.filter(p => p.deviceId === nv.id).slice(0, 4).map(p => p.vlan), ancien: [old.status, old.rackId, old.ip, /ANCIEN/.test(old.hostname)],
+      stock: NetCarto.Store.idx.stock.get('cat-c9200l-24p-4g').available, undo: NetCarto.Store.undoStack.length, total: d.cables.length, sel: NetCarto.Carto.sel === nv.id, notes: nv.notes }; }, avant);
+  assert.deepStrictEqual([apres.neuf, apres.u, apres.rack, apres.ip, apres.cables, apres.vlans, apres.total], [true, avant.u, avant.rack, avant.ip, avant.cables, avant.vlans, avant.total]);
+  assert.strictEqual(apres.mac, '', 'nouveau matériel : adresse MAC à ressaisir'); assert.deepStrictEqual(apres.ancien, ['retired', null, '', true]);
+  assert.strictEqual(apres.stock, avant.stock - 1); assert.strictEqual(apres.undo, avant.undo + 1, 'une seule opération'); assert.ok(apres.sel); assert.match(apres.notes, /Remplace/);
+  await page.keyboard.press('Control+z');
+  assert.strictEqual(await page.evaluate(i => NetCarto.Store.idx.id.get(i).status, avant.id), 'active');
+  // Modèle avec moins de ports : les câbles qui ne trouvent pas de port sont annoncés avant de valider
+  await page.evaluate(() => NetCarto.select(NetCarto.Store.db.devices.find(x => x.hostname === 'SW-A1-ACC-01').id));
+  await page.click('#detail [data-act=dev-replace]'); await page.selectOption('.modal [name=cat]', 'cat-c9200l-24p-4g');
+  assert.match(await page.locator('#rempl-bilan').innerText(), /\d+ câbles? sans port/);
+});
+test('Couper un port en urgence, avec le motif ; retrouver un appareil par son adresse MAC, quel que soit le format', async page => {
+  const port = await page.evaluate(() => { const d = NetCarto.Store.db, sw = d.devices.find(x => x.hostname === 'SW-A1-ACC-01'), p = d.ports.find(x => x.deviceId === sw.id && x.name === 'Gi1/0/2'); p.mac = '02:aa:bb:cc:dd:77'; NetCarto.Store.reindex(); return p.id; });
+  // L'adresse relevée sur le pare-feu est au format Cisco : la recherche la retrouve
+  await page.fill('#gsearch', '02AA.BBCC.DD77'); await page.waitForSelector('#gsearch-res .it');
+  assert.match(await page.locator('#gsearch-res').innerText(), /SW-A1-ACC-01 · Gi1\/0\/2/);
+  await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
+  assert.strictEqual(await page.evaluate(() => NetCarto.Carto.sel), port);
+  await page.click('#detail [data-act=port-couper]'); await page.fill('.modal [name=motif]', 'Poste suspect, ticket 1234'); await page.click('[data-act=modal-ok]');
+  assert.deepStrictEqual(await page.evaluate(i => { const p = NetCarto.Store.idx.id.get(i); return [p.status, /Poste suspect, ticket 1234/.test(p.description), NetCarto.Store.db.history[0].text]; }, port), ['disabled', true, 'Port SW-A1-ACC-01 · Gi1/0/2 désactivé — Poste suspect, ticket 1234']);
+  await page.click('#detail [data-act=port-retablir]');
+  assert.strictEqual(await page.evaluate(i => NetCarto.Store.idx.id.get(i).status, port), 'down');
+});
+test('Vue 3D en intervention : port choisi isolé et étiqueté, pannes signalées, port suivant au clavier, vue de face', async page => {
+  await choisir(page, 'BAIE-A1-01'); await page.waitForSelector('#r3d-canvas canvas'); await page.waitForFunction(() => NetCarto.Views3D.main.ports.length > 50);
+  const V = () => page.evaluate(() => { const v = NetCarto.Views3D.main; return { fantomes: v.etat().fantomes, cordons: v.etat().cordons, etiquette: document.querySelector('#r3d-etiquette')?.innerText || '', visible: !!document.querySelector('#r3d-etiquette:not(.hidden)'), erreurs: v.etat().erreurs, x: v.camera.position.x }; });
+  let e = await V(); assert.strictEqual(e.fantomes, 0); assert.ok(e.cordons > 20); assert.ok(e.erreurs >= 1, 'le port en erreur est marqué'); assert.ok(!e.visible);
+  // Les pannes de la baie sont listées : un clic mène au port
+  await page.click('#r3d-alertes [data-act=r3d-aller]');
+  assert.strictEqual(await page.evaluate(() => NetCarto.Store.idx.id.get(NetCarto.Carto.sel).name), 'Gi1/0/10');
+  e = await V(); assert.ok(e.fantomes >= e.cordons - 2 && e.fantomes > 20, `les autres cordons s'effacent (${e.fantomes}/${e.cordons})`);
+  assert.ok(e.visible); assert.match(e.etiquette, /Gi1\/0\/10/); assert.match(e.etiquette, /AP-A1-01/); assert.match(e.etiquette, /Erreur/);
+  // Flèches : port suivant, port précédent
+  await page.locator('#r3d-canvas').hover(); await page.keyboard.press('ArrowRight');
+  assert.strictEqual(await page.evaluate(() => NetCarto.Store.idx.id.get(NetCarto.Carto.sel).name), 'Gi1/0/11'); assert.match((await V()).etiquette, /Gi1\/0\/11/);
+  await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowLeft');
+  assert.strictEqual(await page.evaluate(() => NetCarto.Store.idx.id.get(NetCarto.Carto.sel).name), 'Gi1/0/9');
+  // Vue de face, bien droite ; bouton « Tous les cordons » pour revoir l'ensemble sans perdre le port
+  await page.click('[data-act=r3d-face]'); await page.waitForTimeout(700); assert.ok(Math.abs((await V()).x) < 0.02, 'caméra dans l\'axe');
+  await page.click('[data-act=r3d-isoler]'); assert.strictEqual((await V()).fantomes, 0);
+  await page.click('[data-act=r3d-isoler]'); assert.ok((await V()).fantomes > 20);
+  // Sélection de la baie : tous les cordons reviennent, l'étiquette disparaît
+  await choisir(page, 'BAIE-A1-01'); e = await V(); assert.strictEqual(e.fantomes, 0); assert.ok(!e.visible);
+});
+test('Hygiène : versions de firmware par modèle, écarts signalés', async page => {
+  await page.evaluate(() => NetCarto.Store.commit('edit', 'Firmware', db => { db.devices.find(x => x.hostname === 'SW-A1-ACC-01').firmware = 'IOS-XE 17.6.1'; }));
+  await page.click('[data-tab=dash]');
+  const carte = page.locator('.dcard', { hasText: 'Firmware' });
+  const ligne = carte.locator('.fw-row', { hasText: 'Catalyst 9200L-48P-4X' });
+  assert.match(await ligne.innerText(), /17\.6\.1/); assert.match(await ligne.innerText(), /17\.9\.5/); assert.strictEqual(await ligne.locator('.chip.warn').count(), 1, 'modèle avec plusieurs versions : signalé');
+  await ligne.click(); assert.strictEqual(await page.$eval('.tab.on', e2 => e2.id), 'tab-inv'); assert.match(await page.inputValue('#inv-q'), /9200L-48P-4X/);
+});
+
 /* ---------- Confort : impression, export en image, clavier, historique ---------- */
 test('Impression : fiche de baie et plan de brassage, seuls à l\'impression', async page => {
   await page.evaluate(() => { window.__impressions = 0; window.print = () => { window.__impressions++; }; });
@@ -712,6 +793,17 @@ test('Sauvegardes : l\'administrateur sauvegarde, puis restaure l\'inventaire ap
   assert.strictEqual((await api(page, '/equipements/' + dev.id)).json.hostname, 'SW-A1-ACC-01');
   await page.waitForSelector('#sv-list .sv-row:has-text("Avant restauration")');
 }, S);
+test('Sécurité : l\'administrateur voit l\'état du serveur et exporte le journal d\'audit', async (page, { app }) => {
+  for (let i = 0; i < 3; i++) await page.evaluate(() => fetch('/api/v1/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identifiant: 'tech', motDePasse: 'mauvais-mot-de-passe' }) }));
+  await page.click('[data-tab=dash]'); await page.evaluate(() => NetCarto.UI.dirty.add('dash')); await page.click('[data-tab=inv]'); await page.click('[data-tab=dash]');
+  const carte = page.locator('.dcard', { hasText: 'Sécurité du serveur' }); await carte.locator('.sec-row').first().waitFor();
+  const t = await carte.innerText();
+  assert.match(t, /3 échecs de connexion/); assert.match(t, /Dernière sauvegarde/); assert.match(t, /HTTPS désactivé/); assert.match(t, /jamais connecté/);
+  await carte.locator('[data-act=compte-audit]').click(); await page.waitForSelector('#audit-list .a-row');   // le journal s'ouvre depuis la carte
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-act=audit-csv]')]);
+  const csv = fs.readFileSync(await dl.path(), 'utf8');
+  assert.match(csv, /date;identifiant;action;objet;libelle;avant;apres;adresse/); assert.match(csv, /echec_connexion/); assert.ok(csv.split('\n').length > 4);
+}, { serveur: true, erreursAttendues: /401/ });
 test('Comptes : session expirée en cours de travail → on se reconnecte sans perdre la page', async page => {
   const dev = await page.evaluate(() => { const x = NetCarto.Store.db.devices.find(d => d.hostname === 'SW-A1-ACC-01'); NetCarto.select(x.id); return x; });
   await api(page, '/session', 'DELETE');

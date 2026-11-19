@@ -34,6 +34,8 @@ import './ui/impression.js';
 import './ui/export-image.js';
 import './ui/historique.js';
 import './ui/clavier.js';
+import './ui/interventions.js';
+import { impactOf } from './services/impact.js';
 import './ui/recherche.js';
 import './ui/materiel/catalogue.js';
 import './ui/materiel/installation.js';
@@ -58,4 +60,4 @@ catch (e) {
 showTab(UI.tab);
 Live.load();
 Live.start();   // relevés de supervision, si une source est configurée
-window.NetCarto = { Sync, addRoom, deleteStructure, deleteVlan, Live, Store, UI, Views, Views3D, Carto, trace, topology, connect, disconnect, installFromStock, removeDevice, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic
+window.NetCarto = { impactOf, Sync, addRoom, deleteStructure, deleteVlan, Live, Store, UI, Views, Views3D, Carto, trace, topology, connect, disconnect, installFromStock, removeDevice, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic

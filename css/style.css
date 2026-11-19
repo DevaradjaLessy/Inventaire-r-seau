@@ -71,6 +71,22 @@ a{color:var(--accent)}
 .u-new{display:grid;grid-template-columns:1fr 1fr 150px 1.4fr auto;gap:8px}
 .u-new input,.u-new select,.u-row select{width:100%}
 .a-row{display:grid;grid-template-columns:118px 90px 190px minmax(0,1fr);gap:10px;align-items:start;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}
+.r3d-alertes{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.r3d-alertes .muted{display:inline-flex;align-items:center;gap:4px;color:var(--danger-txt);font-weight:600;font-size:12px}
+.r3d-alertes .chip{cursor:pointer;border-color:var(--crit);background:var(--glass)}
+#r3d-etiquette{position:absolute;left:0;top:0;z-index:5;pointer-events:none;display:flex;flex-direction:column;gap:2px;padding:7px 10px;border-radius:8px;background:var(--glass);border:1px solid var(--hl);box-shadow:0 6px 18px var(--shadow);font-size:12px;white-space:nowrap}
+#r3d-etiquette.hors{opacity:0}
+#r3d-etiquette span{display:flex;align-items:center;gap:6px;color:var(--txt2)}
+#r3d-etiquette i{width:8px;height:8px;border-radius:50%}
+.fw-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) auto;gap:10px;align-items:center;padding:7px 4px;border-bottom:1px solid var(--line);cursor:pointer}
+.fw-row:hover{background:var(--hover)} .fw-row small{color:var(--txt3)} .fw-row span{color:var(--txt2)}
+.sec-row{display:flex;align-items:center;gap:9px;padding:7px 2px;border-bottom:1px solid var(--line)}
+.sec-row i{width:9px;height:9px;border-radius:50%;flex:none}
+.impact{display:flex;align-items:center;gap:10px;justify-content:space-between}
+.imp-row{display:grid;grid-template-columns:110px minmax(0,1.2fr) 90px minmax(0,1fr) auto;gap:10px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--line);cursor:pointer}
+.imp-row:hover{background:var(--hover)}
+#impact-list{max-height:52vh;overflow:auto}
+.chip.warn{border-color:var(--warn);color:var(--warn)}
 .h-row{display:grid;grid-template-columns:118px 110px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
 .h-row .chip{justify-self:start}
 #hist-list{max-height:52vh;overflow:auto}
@@ -546,6 +562,7 @@ svg.plan,svg.topo{touch-action:none}
   .vl-row{grid-template-columns:70px 1fr 46px;padding:8px;border:1px solid var(--line);border-radius:8px}
   .u-row,.u-new,.a-row,.sv-row,.cp-row,.h-row{grid-template-columns:1fr}
   .h-row{gap:4px}
+  .imp-row{grid-template-columns:1fr 1fr;gap:2px 8px}
   .sv-row{gap:4px}
   .tools #user-chip span{display:none}
   /* Cartographie : la vue occupe l'écran, l'arbre et la fiche s'ouvrent en volets */

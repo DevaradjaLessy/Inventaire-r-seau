@@ -40,7 +40,7 @@ async function demarrer(config, { journal = console.log, horloge = () => Date.no
   const securite = creerSecurite({ depot, config: cfg.securite, horloge });
   // HTTPS par défaut : certificat fourni, ou certificat auto-signé créé dans le dossier de données
   const tls = preparerHttps(cfg.https, cfg.donnees.dossier, { hote: cfg.serveur.hote });
-  const api = creerApi({ depot, sauvegardes, releveur, securite, config: cfg, https: !!tls }), statique = creerStatique(cfg.web.dossier, PREFIXE, { https: !!tls });
+  const api = creerApi({ depot, sauvegardes, releveur, securite, config: cfg, https: !!tls, certificat: tls }), statique = creerStatique(cfg.web.dossier, PREFIXE, { https: !!tls });
   const serveur = (tls ? https.createServer.bind(https, { cert: tls.cert, key: tls.key }) : http.createServer.bind(http))((req, res) => {
     let url;
     try { url = new URL(req.url, 'http://x'); } catch { res.writeHead(400); return res.end(); }

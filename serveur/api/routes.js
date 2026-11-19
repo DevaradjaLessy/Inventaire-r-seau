@@ -14,6 +14,7 @@
    Administrateur
      PUT    /base                       remplace toute la base
      GET|POST /utilisateurs, PUT|DELETE /utilisateurs/{id}
+     GET    /securite                   état de sécurité du serveur (échecs de connexion, comptes, sauvegarde, certificat)
      GET    /audit                      journal d'audit (filtres : cle, collection, identifiant, action, avant, limite)
      GET    /sauvegardes                réglages et liste des sauvegardes
      POST   /sauvegardes                sauvegarde immédiate
@@ -46,7 +47,7 @@ function lireJson(req, maxOctets) {
 }
 const jetonDe = req => (req.headers.cookie || '').split(';').map(x => x.trim().split('=')).find(([k]) => k === COOKIE)?.[1] || '';
 
-function creerApi({ depot, sauvegardes, releveur, securite, config, https }) {
+function creerApi({ depot, sauvegardes, releveur, securite, config, https, certificat = null }) {
   const max = config.limites.corpsMaxMo * 1048576;
   const cookie = (jeton, duree) => `${COOKIE}=${jeton}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${duree}${https ? '; Secure' : ''}`;
   const methode = (req, ...permises) => { if (!permises.includes(req.method)) throw Object.assign(new ErreurHttp(405, `Méthode non permise (attendu : ${permises.join(', ')}).`), { permises }); };
@@ -93,6 +94,7 @@ function creerApi({ depot, sauvegardes, releveur, securite, config, https }) {
       if (req.method === 'DELETE') { securite.supprimerUtilisateur(b, moi); return { ok: true }; }
       return securite.modifierUtilisateur(b, await lireJson(req, max), moi);
     }
+    if (a === 'securite' && !b) { methode(req, 'GET'); exiger(moi, 'administrateur'); return securite.etat({ sauvegardes, certificat }); }
     if (a === 'audit' && !b) { methode(req, 'GET'); exiger(moi, 'administrateur'); return depot.comptes.listerAudit(Object.fromEntries(recherche)); }
     if (a === 'sauvegardes') {
       exiger(moi, 'administrateur');

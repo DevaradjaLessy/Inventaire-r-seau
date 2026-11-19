@@ -5,7 +5,9 @@ import { ico } from '../icones.js';
 import { Cache, Store } from '../store.js';
 import { cablesOf, catOf, computeAlerts, isPassive, locLabel, locOf, poeUsage, portsOf, rackUsage } from '../services/requetes.js';
 import { effStatus, isNetDev, outletInfo } from '../services/cablage.js';
-import { levelColor, Views } from './socle.js';
+import { Sync } from '../sync.js';
+import { Actions, levelColor, showTab, UI, Views } from './socle.js';
+import { Inv } from './inventaire.js';
 
 /* Statistiques globales (hors équipements hors service) */
 function computeStats() {
@@ -41,6 +43,42 @@ function donut(parts, total, center, sub) {
   let off = 0;
   const segs = parts.filter(x => x.n).map(x => { const len = c * x.n / total, d = Math.max(1, len - gap), seg = `<circle cx="70" cy="70" r="${r}" fill="none" stroke="${x.color}" stroke-width="15" stroke-dasharray="${d.toFixed(1)} ${(c - d).toFixed(1)}" stroke-dashoffset="${(-off).toFixed(1)}" transform="rotate(-90 70 70)" data-tip="${esc(x.label)}|${plural(x.n, 'port')} (${pct(x.n, total)} %)"/>`; off += len; return seg; }).join('');
   return `<div class="donut"><svg viewBox="0 0 140 140">${segs}</svg><div class="c"><b>${center}</b><span>${sub}</span></div></div>`;
+}
+/* En-tête d'une carte : icône, titre, et un élément à droite */
+const titre = (icon, t, right = '') => `<div class="dt"><span class="ti">${ico(icon)}</span><h3>${t}</h3><span class="grow"></span>${right}</div>`;
+/* Versions de firmware par modèle : plusieurs versions pour un même modèle signalent un parc à mettre à niveau */
+function firmwareCard() {
+  const parModele = new Map();
+  for (const d of Store.db.devices) {
+    const c = catOf(d);
+    if (!c || d.status === 'retired' || c.category === 'passive' || !d.firmware) continue;
+    const m = parModele.get(c.id) || parModele.set(c.id, { c, v: new Map() }).get(c.id);
+    m.v.set(d.firmware, (m.v.get(d.firmware) || 0) + 1);
+  }
+  const lignes = [...parModele.values()].sort((a, b) => b.v.size - a.v.size || `${a.c.brand} ${a.c.model}`.localeCompare(`${b.c.brand} ${b.c.model}`));
+  const ecarts = lignes.filter(l => l.v.size > 1).length;
+  return `<div class="dcard c5">${titre('gauge', 'Firmware par modèle', `<span class="muted">${ecarts ? `${plural(ecarts, 'modèle')} avec plusieurs versions` : 'parc homogène'}</span>`)}
+    <div class="scroll">${lignes.map(l => `<div class="fw-row" data-act="fw-inv" data-q="${esc(l.c.model)}" data-tip="${esc(l.c.brand)} ${esc(l.c.model)}|Clic : voir ces équipements dans l'Inventaire">
+      <b>${esc(l.c.model)}</b><span>${[...l.v].sort((a, b) => b[1] - a[1]).map(([v, n]) => `${esc(v)} <small>× ${n}</small>`).join(' · ')}</span>${l.v.size > 1 ? `<span class="chip warn">${l.v.size} versions</span>` : '<span></span>'}</div>`).join('') || '<div class="empty">Aucune version de firmware saisie</div>'}</div></div>`;
+}
+Actions['fw-inv'] = el => { Object.assign(Inv, { q: el.dataset.q, group: '', type: '', bld: '', status: '', brand: '', page: 0 }); UI.dirty.add('inv'); showTab('inv'); };
+/* État de sécurité du serveur (mode serveur, administrateur) : la carte se remplit dès que le serveur a répondu */
+function securiteCard() {
+  if (Store.mode !== 'serveur' || Sync.utilisateur?.role !== 'administrateur') return '';
+  Sync.appel('GET', '/securite').then(e => {
+    const hote = $('#sec-etat'); if (!hote) return;
+    const l = (niveau, texte) => `<div class="sec-row"><i style="background:${{ ok: COL.up, warn: COL.warn, crit: COL.crit }[niveau]}"></i><span>${texte}</span></div>`;
+    const liste = a => a.map(esc).join(', '), s = e.sauvegarde;
+    hote.innerHTML = [
+      l(e.echecs24h >= 10 ? 'crit' : e.echecs24h ? 'warn' : 'ok', `${plural(e.echecs24h, 'échec')} de connexion en 24 h${e.verrouilles.length ? ` — ${plural(e.verrouilles.length, 'compte')} verrouillé${e.verrouilles.length > 1 ? 's' : ''} : ${liste(e.verrouilles)}` : ''}`),
+      l(s.derniere == null || s.ageHeures > 48 ? 'crit' : s.ageHeures > 26 ? 'warn' : 'ok', s.derniere == null ? 'Dernière sauvegarde : aucune' : `Dernière sauvegarde : il y a ${s.ageHeures < 1 ? 'moins d\'une heure' : `${Math.round(s.ageHeures)} h`}${s.automatique ? '' : ' — sauvegarde automatique désactivée'}`),
+      e.https.actif ? l(e.https.joursRestants < 30 ? 'warn' : 'ok', `HTTPS actif — certificat ${e.https.autoSigne ? 'auto-signé' : 'fourni'}, valable encore ${e.https.joursRestants} jours`) : l('crit', 'HTTPS désactivé : les mots de passe circulent en clair'),
+      l(e.comptes.administrateurs < 2 ? 'warn' : 'ok', `${plural(e.comptes.actifs, 'compte')} actif${e.comptes.actifs > 1 ? 's' : ''}, dont ${plural(e.comptes.administrateurs, 'administrateur')}${e.comptes.administrateurs < 2 ? ' — prévoyez un second administrateur de secours' : ''} · ${plural(e.sessions, 'session')} ouverte${e.sessions > 1 ? 's' : ''}`),
+      e.jamaisConnectes.length ? l('warn', `Comptes jamais connectés : ${liste(e.jamaisConnectes)}`) : '',
+      e.inactifs90j.length ? l('warn', `Comptes inactifs depuis 90 jours : ${liste(e.inactifs90j)}`) : '',
+    ].join('');
+  }).catch(err => { const hote = $('#sec-etat'); if (hote) hote.innerHTML = `<div class="empty">${esc(err.message)}</div>`; });
+  return `<div class="dcard c7">${titre('alert', 'Sécurité du serveur', `<button class="btn sm" data-act="compte-audit">${ico('history')}Journal d'audit</button>`)}<div id="sec-etat"><div class="empty">Chargement…</div></div></div>`;
 }
 Views.dash = {
   render() {
@@ -82,6 +120,7 @@ Views.dash = {
         <div class="dnote">${racks.some(x => x.pct >= RACK_FULL_PCT) ? `<span style="color:${COL.serious}">${ico('alert')}</span>En orange : baie remplie à ${RACK_FULL_PCT} % ou plus` : 'Aucune baie proche de la saturation'}</div></div>
       <div class="dcard c4">${title('bolt', 'Budget PoE par switch')}<div class="scroll">${hbars(poeRows, 100, r => `${r.raw.used}/${r.raw.budget} W`)}</div></div>
       <div class="dcard c5">${title('building', 'Type × bâtiment')}${matrix}</div>
+      ${firmwareCard()}${securiteCard()}
       <div class="dcard c7">${title('history', 'Dernières actions', `<button class="btn sm" data-act="historique" data-tip="Historique|Filtrer toutes les actions, revenir à un état antérieur">${ico('list')}Tout voir (${d.history.length})</button>`)}
         <div class="scroll tline">${d.history.slice(0, 40).map(h => `<div class="tli"><span class="td">${ico(HIST_ICON[h.type] || 'edit')}</span><div><b>${esc(h.text)}</b><small>${HISTORY_TYPES[h.type] || h.type} · ${fmtDateTime(h.ts)}</small></div></div>`).join('') || '<div class="empty">Aucune action</div>'}</div></div>
     </div>`;

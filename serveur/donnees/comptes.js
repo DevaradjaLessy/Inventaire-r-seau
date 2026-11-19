@@ -40,6 +40,9 @@ function creerComptes(p) {
       return p.tous(`SELECT * FROM audit${ou.length ? ' WHERE ' + ou.join(' AND ') : ''} ORDER BY id DESC LIMIT ${limite}`, params)
         .map(l => ({ id: l.id, date: l.date, identifiant: l.identifiant, action: l.action, collection: l.collection, cle: l.cle, libelle: l.libelle, avant: objet(l.avant), apres: objet(l.apres), lot: l.lot, ip: l.ip }));
     },
+    /* Nombre d'entrées d'une action donnée depuis une date, et nombre de sessions vues depuis une date */
+    compterAudit: (action, depuis) => p.un('SELECT COUNT(*) AS n FROM audit WHERE action = ? AND date >= ?', [action, depuis]).n,
+    nombreSessions: depuis => p.un('SELECT COUNT(*) AS n FROM sessions WHERE vue_le >= ?', [depuis]).n,
     /* Identifiant de la dernière personne à avoir modifié un élément (pour expliquer un conflit) */
     dernierAuteur: (collection, cle) => p.un('SELECT identifiant FROM audit WHERE collection = ? AND cle = ? AND identifiant <> \'\' ORDER BY id DESC LIMIT 1', [collection, String(cle)])?.identifiant || null,
   };

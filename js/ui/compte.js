@@ -1,6 +1,6 @@
 /* Interface — comptes (mode serveur) : écran de connexion et de première initialisation,
    menu du compte, gestion des utilisateurs et consultation du journal d'audit. */
-import { $, esc, fmtDateTime } from '../utils.js';
+import { $, download, esc, fmtDateTime, today } from '../utils.js';
 import { ico } from '../icones.js';
 import { Store } from '../store.js';
 import { Sync } from '../sync.js';
@@ -136,13 +136,19 @@ async function chargerAudit(suite = false) {
 Actions['compte-audit'] = () => {
   Audit.identifiant = ''; Audit.lignes = [];
   Modal.open({ title: 'Journal d\'audit', wide: true, ok: false, cancel: 'Fermer',
-    body: `<div class="row" style="margin-bottom:12px"><input type="search" id="audit-filtre" data-inp="audit-filtre" placeholder="Filtrer par identifiant" style="flex:1"><span class="muted">Qui, quand, quoi, valeur avant → après. Ce journal ne se modifie pas.</span></div>
+    body: `<div class="row" style="margin-bottom:12px"><input type="search" id="audit-filtre" data-inp="audit-filtre" placeholder="Filtrer par identifiant" style="flex:1"><button class="btn" data-act="audit-csv" data-tip="Exporter|Télécharger les entrées affichées (CSV)">${ico('download')}CSV</button><span class="muted">Qui, quand, quoi, valeur avant → après. Ce journal ne se modifie pas.</span></div>
       <div id="audit-list"><div class="empty">Chargement…</div></div><div style="text-align:center;margin-top:10px"><button class="btn hidden" id="audit-suite" data-act="audit-suite">Entrées plus anciennes</button></div>` });
   chargerAudit().catch(e => toast(e.message, 'err'));
 };
 /* Le filtre s'applique pendant la saisie, après une courte pause */
 let minuterieFiltre = 0;
 Inputs['audit-filtre'] = el => { clearTimeout(minuterieFiltre); minuterieFiltre = setTimeout(() => { Audit.identifiant = el.value.trim(); chargerAudit().catch(e => toast(e.message, 'err')); }, 250); };
+/* Export des entrées affichées, pour un rapport ou une enquête */
+Actions['audit-csv'] = () => {
+  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`, j = v => (v == null ? '' : JSON.stringify(v));
+  const lignes = Audit.lignes.map(a => [new Date(a.date).toISOString(), a.identifiant, a.action, a.collection, a.libelle, j(a.avant), j(a.apres), a.ip].map(q).join(';'));
+  download(`netcarto-audit-${today()}.csv`, '\ufeff' + ['date;identifiant;action;objet;libelle;avant;apres;adresse', ...lignes].join('\r\n'), 'text/csv');
+};
 Actions['audit-suite'] = () => chargerAudit(true).catch(e => toast(e.message, 'err'));
 
 export { ouvrirSession, ROLES };

@@ -1,14 +1,16 @@
 /* Navigation au clavier : onglets (1 à 4), arbre (flèches), résultats de recherche (flèches, Entrée),
    éléments cliquables (Entrée, Espace), fenêtres (Tab reste dedans), aide (?). */
-import { $, $$ } from '../utils.js';
-import { Actions, Modal, showTab, TABS } from './socle.js';
+import { $, $$, typeOf } from '../utils.js';
+import { Actions, Modal, showTab, TABS, UI } from './socle.js';
+import { byId, portsOf } from '../services/requetes.js';
 import { Carto, select } from './carto/carto.js';
+import { View3D } from './carto/baie.js';
 
 const RACCOURCIS = [
   ['1 à 4', 'Changer d\'onglet : Cartographie, Inventaire, Matériel, Tableau de bord'],
   ['/', 'Aller à la recherche'],
   ['↑ ↓', 'Parcourir l\'arbre, ou les résultats de la recherche'],
-  ['→ ←', 'Dans l\'arbre : ouvrir ; refermer ou remonter au niveau supérieur'],
+  ['→ ←', 'Dans l\'arbre : ouvrir ; refermer ou remonter au niveau supérieur. Dans la vue Baie 3D : port suivant, port précédent'],
   ['Entrée', 'Choisir l\'élément sous le curseur ; valider une fenêtre'],
   ['Tab', 'Passer au bouton ou au champ suivant'],
   ['Ctrl + Z', 'Annuler la dernière modification'],
@@ -66,6 +68,13 @@ document.addEventListener('keydown', e => {
   const saisie = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable;
   if (fenetre(e) || recherche(e) || (!saisie && arbre(e))) { e.preventDefault(); return; }
   if (saisie || $('#modal-root').classList.contains('on')) return;
+  // Vue « Baie 3D » : flèches gauche et droite pour passer au port voisin du même équipement
+  if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && UI.tab === 'carto' && Carto.view === 'rack' && typeOf(Carto.sel || '') === 'port') {
+    const p = byId(Carto.sel), liste = [...portsOf(p.deviceId)].sort((a, b) => a.idx - b.idx), voisin = liste[liste.indexOf(p) + (e.key === 'ArrowRight' ? 1 : -1)];
+    e.preventDefault();
+    if (voisin) { View3D.focusReq = true; select(voisin.id, { keep: true }); }
+    return;
+  }
   // Élément cliquable qui n'est pas un bouton (ligne de tableau, carte) : Entrée ou Espace
   const el = e.target.closest?.('[data-act][tabindex]');
   if (el && (e.key === 'Enter' || e.key === ' ') && !/^(BUTTON|A)$/.test(el.tagName)) { e.preventDefault(); el.click(); return; }

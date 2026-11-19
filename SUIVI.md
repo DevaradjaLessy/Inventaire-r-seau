@@ -133,7 +133,7 @@ js/demo.js                 jeu de données fictif (graine fixe)
 js/store.js                état, index, annulation, sauvegarde
 js/stockage.js             stockage local du mode démonstration (IndexedDB), copies de secours
 js/ecarts.js               écart entre deux états : changements à envoyer, retour en arrière
-js/services/               requetes, cablage, topologie, tracage, connexion, recherche, installation
+js/services/               requetes, cablage, topologie, tracage, connexion, recherche, installation, impact, remplacement, doublons, import-csv
 js/3d/                     three (chargement), facades, viewer, objets
 js/ui/socle.js             onglets, fenêtres, infobulles, notifications
 js/ui/carto/               carto, plan, fiches, baie, tracage, connexion, topologie
@@ -571,6 +571,24 @@ Les tables `utilisateurs` et `audit` viendront avec la migration du lot 17.
 - **Limite du retour en arrière :** il porte sur les actions de la visite en cours, 25 au plus (la pile d'annulation). Pour revenir plus loin : les copies de secours en mode démonstration (3.23), les sauvegardes en mode serveur (3.18).
 - **Non fait :** impression du plan d'un étage (l'export en image y répond) ; choix du format de papier.
 
+### 3.26 Audit d'usage et interventions d'urgence
+
+Le rapport complet est dans `AUDIT.md` : scénarios déroulés sur un vrai serveur, constats par fonction, améliorations faites, reste à faire classé par priorité.
+
+**Constat principal :** l'outil répondait bien à « où est quoi », mal à « ce switch est mort, qui est touché et comment je le remplace », et la 3D devenait illisible dès qu'on cherchait un port précis.
+
+**Améliorations faites :**
+
+- **Impact d'une panne** (`js/services/impact.js`) : prises, terminaux et pièces qui dépendent d'un équipement réseau, y compris ceux des équipements qu'il isole du cœur (parcours du graphe de la topologie sans lui). Résumé dans la fiche, détail par pièce, export CSV.
+- **Remplacement d'un équipement** (`js/services/remplacement.js`) : le modèle du stock reprend le nom, l'adresse IP, l'emplacement, la configuration des ports et les câbles, port par port (même rang si le type est compatible, sinon premier port équivalent libre). Les câbles sans port équivalent sont annoncés avant de valider. L'ancien passe hors service (renommé `…-ANCIEN`) ou retourne en stock. Une opération, annulable.
+- **Vue 3D** (`js/3d/viewer.js`, `js/ui/carto/baie.js`) : cordons des autres ports effacés quand un port ou un équipement est choisi (bouton « Isoler ») ; étiquette accrochée au port choisi ; ports en erreur encadrés en rouge à travers les cordons et listés dans la barre d'outils ; vue de face ; flèches gauche et droite pour passer au port voisin.
+- **Couper un port** avec un motif, noté dans la description et l'historique ; réactivation. NetCarto note l'état, il ne pilote pas le switch.
+- **Recherche par adresse MAC** dans tous les formats.
+- **Sécurité du serveur** : route `GET /securite` (administrateur) et carte du tableau de bord — échecs de connexion sur 24 h, comptes verrouillés, jamais connectés ou inactifs depuis 90 jours, âge de la dernière sauvegarde, validité du certificat, nombre d'administrateurs. Export CSV du journal d'audit.
+- **Firmware par modèle** : carte du tableau de bord, modèles à plusieurs versions signalés.
+
+**Reste, par priorité** (détail dans `AUDIT.md`, section 5) : essais en conditions réelles ; sauvegardes hors de la machine et chiffrées ; alertes envoyées ; double authentification ; plan d'adressage ; dates de garantie ; étiquettes ; face arrière des baies et alimentation électrique.
+
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
@@ -659,6 +677,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-19 | « Fusionne tout sur la branche principale » | ✅ La branche par défaut du dépôt (`claude/serene-johnson-wll23d`) a été avancée jusqu'au dernier commit de la branche de travail, sans réécriture d'historique. Les deux branches sont identiques. |
 | 2026-11-19 | « Pourquoi deux branches ? » puis « Mets en rappel à faire » | ✅ Rangement des branches noté dans les rappels de la section 4, avec les essais qui restent à faire par l'utilisateur. |
 | 2026-11-19 | « Fais-le, prends la main » | ✅ Branche `main` créée et poussée. Le changement de branche par défaut et la suppression des anciennes branches se font dans les réglages GitHub : voir les rappels de la section 4. |
+| 2026-11-19 | « Prends le rôle d'un administrateur système, réseau et cyber : simule l'usage (ajouts, interventions d'urgence), fais un rapport complet d'utilisation et d'audit, puis améliore chaque fonction, dont la praticité de la 3D » | ✅ Rapport `AUDIT.md` ; sept améliorations faites (voir 3.26) ; reste à faire classé par priorité dans le rapport. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---
