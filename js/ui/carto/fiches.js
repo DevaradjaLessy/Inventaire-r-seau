@@ -2,6 +2,7 @@
 import { CATEGORIES, COL, DEVICE_STATUS, OUTLET_USAGE, POE_WARN_PCT, PORT_KIND, PORT_ROLE, PORT_STATUS, RACK_FULL_PCT, ROOM_TYPES } from '../../config.js';
 import { $, clamp, esc, fmtDate, fmtSpeed, groupBy, plural, typeOf } from '../../utils.js';
 import { ico } from '../../icones.js';
+import { ipValide, normMac, verifierUnicite } from '../../services/doublons.js';
 import { Store } from '../../store.js';
 import { DEV_STATE, measuredDev, measuredPort } from '../../services/mesures.js';
 import { byId, cablesOf, catOf, labelOf, locLabel, poeColor, poeUsage, portsOf, rackUsage, vlanOf } from '../../services/requetes.js';
@@ -153,7 +154,7 @@ Changes['outlet-f'] = el => {
   const o = byId(el.dataset.id), f = el.dataset.f, v = el.value.trim();
   if (f === 'label') {
     if (!v) { renderDetail(); throw new Error('Le repère de la prise ne peut pas être vide.'); }
-    if (Store.db.outlets.some(x => x.id !== o.id && x.label === v)) { renderDetail(); throw new Error(`Le repère ${v} est déjà utilisé.`); }
+    try { verifierUnicite({ label: v }, o.id); } catch (e) { renderDetail(); throw e; }
   }
   Store.commit('edit', `Prise ${o.label} : ${f === 'label' ? 'repère' : 'usage'} → ${f === 'label' ? v : OUTLET_USAGE[v]}`, () => { o[f] = v; }, o.id);
 };
@@ -174,7 +175,9 @@ Actions['dev-edit'] = el => {
     ok: 'Enregistrer',
     onOk(v) {
       if (!v.hostname) throw new Error('Le nom d\'hôte est obligatoire.');
-      if (v.ip && !/^(\d{1,3}\.){3}\d{1,3}$/.test(v.ip)) throw new Error('Adresse IP invalide.');
+      if (v.ip && !ipValide(v.ip)) throw new Error('Adresse IP invalide.');
+      if (v.mac) { const mac = normMac(v.mac); if (!mac) throw new Error('Adresse MAC invalide (attendu : aa:bb:cc:dd:ee:ff).'); v.mac = mac; }
+      verifierUnicite({ hostname: v.hostname, ip: v.ip, mac: v.mac }, d.id);
       Store.commit('edit', `Modification de ${v.hostname}`, () => Object.assign(d, v), d.id);
       toast('Équipement modifié', 'ok', undoAction);
       return true;
@@ -189,7 +192,7 @@ Actions['rack-edit'] = el => {
       <label class="f"><span>N° de série</span><input type="text" name="serial" class="mono" value="${esc(r.serial)}"></label>
       <label class="f"><span>Date d'installation</span><input type="date" name="installDate" value="${esc(r.installDate)}"></label></div>`,
     ok: 'Enregistrer',
-    onOk(v) { if (!v.name) throw new Error('Le nom est obligatoire.'); Store.commit('edit', `Modification de la baie ${v.name}`, () => Object.assign(r, v), r.id); return true; },
+    onOk(v) { if (!v.name) throw new Error('Le nom est obligatoire.'); verifierUnicite({ rackName: v.name }, r.id); Store.commit('edit', `Modification de la baie ${v.name}`, () => Object.assign(r, v), r.id); return true; },
   });
 };
 /* --- Fond de plan importé --- */

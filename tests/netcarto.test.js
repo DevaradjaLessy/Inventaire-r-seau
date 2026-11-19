@@ -195,6 +195,68 @@ test('Téléphone : pas de débordement, arbre et fiche en volets', async page =
   for (const t of ['inv', 'mat', 'dash']) { await page.tap(`[data-tab=${t}]`); assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, t); }
 }, { mobile: true });
 
+/* ---------- Qualité des données : import CSV, doublons, déplacement ---------- */
+const fichierCsv = (nom, texte) => ({ name: nom, mimeType: 'text/csv', buffer: Buffer.from('\ufeff' + texte, 'utf8') });
+test('Import CSV d\'équipements : aperçu, lignes refusées expliquées, import d\'un bloc, annulable', async page => {
+  await page.click('[data-tab=inv]'); await page.click('[data-act=csv-import]'); await page.waitForSelector('#csv-file');
+  await page.setInputFiles('#csv-file', fichierCsv('equipements.csv', [
+    'Nom;Modèle;Bâtiment;Étage;Pièce;Baie;U;IP;MAC;N° de série;Statut',
+    'SW-IMP-01;Catalyst 9200L-24P-4G;;;;BAIE-A2-01;30;10.10.99.210;02:AA:BB:CC:DD:01;DMO-IMP00001;En service',
+    'AP-IMP-01;U6-Pro;A;R+2;Bureaux DSI;;;10.10.30.210;;DMO-IMP00002;',
+    'SW-IMP-02;Catalyst 9200L-24P-4G;;;;BAIE-A2-01;;10.10.99.11;;;',
+    'SW-IMP-03;Modèle Inconnu 9000;;;;BAIE-A2-01;;;;;',
+    'SW-A1-ACC-01;Catalyst 9200L-24P-4G;;;;BAIE-A2-01;;;;;',
+    'SW-IMP-04;Catalyst 9200L-24P-4G;;;;BAIE-A2-01;38;;;;',
+    'SW-IMP-01;Catalyst 9200L-24P-4G;;;;BAIE-A2-01;;;;;'].join('\r\n')));
+  await page.waitForSelector('#csv-rapport .csv-l');
+  assert.deepStrictEqual([await page.locator('#csv-rapport .csv-l.ok').count(), await page.locator('#csv-rapport .csv-l.ko').count()], [2, 5]);
+  const refus = await page.locator('#csv-rapport').innerText();
+  for (const motif of [/Adresse IP déjà utilisée/, /Modèle introuvable/, /Nom d'hôte déjà utilisé/, /U38/, /en double dans le fichier/]) assert.match(refus, motif);
+  assert.match(await page.locator('[data-act=modal-ok]').innerText(), /Importer 2/);
+  const avant = await page.evaluate(() => [NetCarto.Store.db.devices.length, NetCarto.Store.undoStack.length]);
+  await page.click('[data-act=modal-ok]'); await page.waitForTimeout(200);
+  const r = await page.evaluate(() => { const d = NetCarto.Store.db, sw = d.devices.find(x => x.hostname === 'SW-IMP-01'), ap = d.devices.find(x => x.hostname === 'AP-IMP-01');
+    return { n: d.devices.length, sw: [sw.u, sw.ip, sw.mac, sw.serial, sw.status, d.ports.filter(p => p.deviceId === sw.id).length, NetCarto.Store.idx.id.get(sw.rackId).name], ap: [NetCarto.Store.idx.id.get(ap.roomId).name, ap.rackId, d.ports.filter(p => p.deviceId === ap.id).length], h: d.history[0].text, undo: NetCarto.Store.undoStack.length }; });
+  assert.strictEqual(r.n, avant[0] + 2); assert.deepStrictEqual(r.sw, [30, '10.10.99.210', '02:aa:bb:cc:dd:01', 'DMO-IMP00001', 'active', 28, 'BAIE-A2-01']);
+  assert.deepStrictEqual(r.ap, ['Bureaux DSI', null, 1]); assert.match(r.h, /Import CSV : 2 équipements/); assert.strictEqual(r.undo, avant[1] + 1, 'un seul pas d\'annulation');
+  await page.keyboard.press('Control+z');
+  assert.strictEqual(await page.evaluate(() => NetCarto.Store.db.devices.length), avant[0]);
+});
+test('Import CSV de prises murales, séparateur virgule, et modèle de fichier téléchargeable', async page => {
+  await page.click('[data-tab=inv]'); await page.click('[data-act=csv-import]'); await page.selectOption('#csv-type', 'prises');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-act=csv-modele]')]);
+  assert.match(fs.readFileSync(await dl.path(), 'utf8'), /repere;batiment;etage;piece;x;y;usage/);
+  await page.setInputFiles('#csv-file', fichierCsv('prises.csv', ['repere,batiment,etage,piece,x,y,usage', 'A2-900,A,R+2,Bureaux DSI,25,15,données', 'A2-001,A,R+2,Bureaux DSI,,,voix', 'A2-901,A,R+2,Salle absente,,,data', 'A2-902,A,R+2,"Bureaux DSI",999,1,data'].join('\n')));
+  await page.waitForSelector('#csv-rapport .csv-l');
+  assert.deepStrictEqual([await page.locator('#csv-rapport .csv-l.ok').count(), await page.locator('#csv-rapport .csv-l.ko').count()], [1, 3]);
+  const refus = await page.locator('#csv-rapport').innerText();
+  for (const motif of [/Repère de prise déjà utilisé/, /Pièce introuvable/, /hors de la pièce/]) assert.match(refus, motif);
+  await page.click('[data-act=modal-ok]'); await page.waitForTimeout(150);
+  assert.deepStrictEqual(await page.evaluate(() => { const o = NetCarto.Store.db.outlets.find(x => x.label === 'A2-900'); return [o.x, o.y, o.usage, NetCarto.Store.idx.id.get(o.roomId).name]; }), [25, 15, 'data', 'Bureaux DSI']);
+});
+test('Doublons refusés dès la saisie : adresse IP, nom d\'hôte, adresse MAC, nom de baie', async page => {
+  const [a, b] = await page.evaluate(() => { const d = NetCarto.Store.db.devices.filter(x => x.ip && x.mac); NetCarto.select(d[0].id); return [d[0], d[1]]; });
+  const essai = async (champ, valeur, motif) => { await page.click('#detail [data-act=dev-edit]'); await page.fill(`.modal [name=${champ}]`, valeur); await page.click('[data-act=modal-ok]'); await page.waitForSelector('.toast.err'); assert.match(await page.locator('.toast.err').last().innerText(), motif); await page.click('[data-act=modal-close]'); await page.evaluate(() => document.querySelectorAll('.toast').forEach(t => t.remove())); };
+  await essai('ip', b.ip, /Adresse IP déjà utilisée.*/); await essai('hostname', b.hostname.toLowerCase(), /Nom d'hôte déjà utilisé/); await essai('mac', b.mac.toUpperCase(), /Adresse MAC déjà utilisée/);
+  assert.deepStrictEqual(await page.evaluate(i => { const x = NetCarto.Store.idx.id.get(i); return [x.ip, x.hostname, x.mac]; }, a.id), [a.ip, a.hostname, a.mac]);
+  assert.match(await page.evaluate(() => { try { NetCarto.installFromStock('cat-c9200l-24p-4g', { rackId: NetCarto.Store.db.racks.find(r => r.name === 'BAIE-A2-01').id, u: 20, name: 'sw-a1-acc-01' }); return ''; } catch (e) { return e.message; } }), /Nom d'hôte déjà utilisé/);
+  const racks = await page.evaluate(() => { const r = NetCarto.Store.db.racks; NetCarto.select(r[0].id); return r.map(x => x.name); });
+  await page.click('#detail [data-act=rack-edit]'); await page.fill('.modal [name=name]', racks[1]); await page.click('[data-act=modal-ok]'); await page.waitForSelector('.toast.err');
+  assert.match(await page.locator('.toast.err').last().innerText(), /Nom de baie déjà utilisé/);
+});
+test('Déplacer un équipement câblé : le brassage est signalé, et peut être débranché d\'un coup', async page => {
+  const etat = () => page.evaluate(() => { const d = NetCarto.Store.db, sw = d.devices.find(x => x.hostname === 'SW-A1-ACC-02'), ids = new Set(d.ports.filter(p => p.deviceId === sw.id).map(p => p.id)); return { rack: NetCarto.Store.idx.id.get(sw.rackId).name, cables: d.cables.filter(c => ids.has(c.a) || ids.has(c.b)).length }; });
+  const deplacer = async (decocher) => { await page.evaluate(() => NetCarto.select(NetCarto.Store.db.devices.find(x => x.hostname === 'SW-A1-ACC-02').id)); await page.click('#detail [data-act=dev-move]'); await page.waitForSelector('#inst-body'); await page.selectOption('#inst-body [name=floor]', { label: 'R+2' }); if (decocher) await page.uncheck('#inst-body [name=debrancher]'); };
+  const avant = await etat(); assert.ok(avant.cables > 5 && avant.rack === 'BAIE-A1-01');
+  await deplacer(false);
+  assert.match(await page.locator('#inst-body').innerText(), new RegExp(`${avant.cables} câbles`)); assert.ok(await page.isChecked('#inst-body [name=debrancher]'), 'changement de baie : débranchement proposé d\'office');
+  await page.click('[data-act=modal-ok]'); await page.waitForTimeout(150);
+  assert.deepStrictEqual(await etat(), { rack: 'BAIE-A2-01', cables: 0 });
+  await page.keyboard.press('Control+z'); assert.deepStrictEqual(await etat(), avant);
+  await deplacer(true); await page.click('[data-act=modal-ok]'); await page.waitForTimeout(150);
+  assert.deepStrictEqual(await etat(), { rack: 'BAIE-A2-01', cables: avant.cables }, 'câbles gardés si l\'on décoche');
+});
+
 /* ---------- Mode serveur : l'interface lit et écrit par l'API, la base est sur le serveur ---------- */
 const api = (page, chemin, methode = 'GET', corps) => page.evaluate(async ([c, m, b]) => { const r = await fetch('/api/v1' + c, { method: m, headers: b ? { 'Content-Type': 'application/json' } : {}, body: b ? JSON.stringify(b) : undefined }); return { code: r.status, json: await r.json() }; }, [chemin, methode, corps]);
 const synchro = page => page.waitForFunction(() => NetCarto.Sync.enAttente === 0 && NetCarto.Sync.etat !== 'envoi', null, { timeout: 8000 });
@@ -229,9 +291,27 @@ test('Serveur : installer un équipement crée l\'équipement, ses ports et déc
   assert.strictEqual((await api(page, '/equipements?hostname=SW-A2-01')).json.length, 0);
   assert.strictEqual((await api(page, '/stock/cat-c9200l-24p-4g')).json.available, 3);
 }, S);
-test('Serveur : un doublon d\'adresse IP est refusé, l\'écran revient à l\'état précédent', async page => {
+test('Serveur : import CSV et déplacement avec débranchement, chacun en une seule transaction', async page => {
+  const rev = (await api(page, '/revision')).json.revision;
+  await page.click('[data-tab=inv]'); await page.click('[data-act=csv-import]');
+  await page.setInputFiles('#csv-file', fichierCsv('equipements.csv', ['nom;modele;baie;ip;mac', 'SW-IMP-01;Catalyst 9200L-24P-4G;BAIE-A2-01;10.10.99.210;02-AA-BB-CC-DD-01', 'SW-IMP-02;Catalyst 9200L-24P-4G;BAIE-A2-01;10.10.99.211;', 'SW-IMP-03;Catalyst 9200L-24P-4G;BAIE-A2-01;10.10.99.11;'].join('\n')));
+  await page.waitForSelector('#csv-rapport .csv-l'); await page.click('[data-act=modal-ok]'); await synchro(page);
+  const lus = (await api(page, '/equipements')).json.filter(d => /^SW-IMP/.test(d.hostname));
+  assert.deepStrictEqual(lus.map(d => [d.hostname, d.mac]).sort(), [['SW-IMP-01', '02:aa:bb:cc:dd:01'], ['SW-IMP-02', '']]);
+  assert.strictEqual((await api(page, '/ports?deviceId=' + lus[0].id)).json.length, 28);
+  assert.strictEqual((await api(page, '/revision')).json.revision, rev + 1, 'l\'import est une seule transaction');
+  const sw = (await api(page, '/equipements?hostname=SW-A1-ACC-02')).json[0];
+  const nb = async () => { const ids = new Set((await api(page, '/ports?deviceId=' + sw.id)).json.map(p => p.id)); return (await api(page, '/cables')).json.filter(c => ids.has(c.a) || ids.has(c.b)).length; };
+  assert.ok(await nb() > 5);
+  await page.evaluate(i => NetCarto.select(i), sw.id); await page.click('#detail [data-act=dev-move]'); await page.waitForSelector('#inst-body');
+  await page.selectOption('#inst-body [name=floor]', { label: 'R+2' }); await page.click('[data-act=modal-ok]'); await synchro(page);
+  assert.strictEqual(await nb(), 0); assert.strictEqual((await api(page, '/revision')).json.revision, rev + 2);
+  assert.notStrictEqual((await api(page, '/equipements/' + sw.id)).json.rackId, sw.rackId);
+}, S);
+test('Serveur : un doublon d\'adresse IP qui échappe à l\'interface est refusé par la base, l\'écran revient en arrière', async page => {
   const [a, b] = await page.evaluate(() => { const d = NetCarto.Store.db.devices.filter(x => x.ip); NetCarto.select(d[0].id); return [d[0], d[1]]; });
-  await page.click('#detail [data-act=dev-edit]'); await page.fill('.modal [name=ip]', b.ip); await page.click('[data-act=modal-ok]');
+  // Écriture directe dans le store, sans passer par les contrôles de l'interface (comme le ferait un autre outil)
+  await page.evaluate(([i, ip]) => NetCarto.Store.commit('edit', 'Test', () => { NetCarto.Store.idx.id.get(i).ip = ip; }), [a.id, b.ip]);
   await page.waitForSelector('.toast.err'); await synchro(page);
   assert.match(await page.locator('.toast.err').first().innerText(), /Adresse IP déjà utilisée/);
   assert.strictEqual(await page.evaluate(i => NetCarto.Store.idx.id.get(i).ip, a.id), a.ip, 'l\'interface doit revenir à l\'ancienne adresse');

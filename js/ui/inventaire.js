@@ -74,6 +74,7 @@ Views.inv = {
       ${sel('brand', 'Marque', brands.map(b => opt(b, b, Inv.brand)).join(''))}
       <button class="btn ghost" data-act="inv-reset" data-tip="Effacer tous les filtres">${ico('x')}Effacer</button>
       <span class="grow"></span><span id="inv-pager" class="row"></span>
+      <button class="btn" data-act="csv-import" data-tip="Import CSV|Ajouter des équipements ou des prises murales depuis un fichier, avec contrôle ligne par ligne">${ico('upload')}Importer</button>
       <button class="btn" data-act="inv-csv" data-tip="Export CSV|Télécharger la vue filtrée (séparateur point-virgule, compatible Excel)">${ico('download')}CSV</button>
       <button class="btn" data-act="inv-json" data-tip="Export JSON|Télécharger la vue filtrée">${ico('download')}JSON</button>`;
     renderInvTable();

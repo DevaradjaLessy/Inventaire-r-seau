@@ -137,6 +137,14 @@ table.t td{padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowr
 table.t tbody tr:hover{background:var(--hover)}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:7px 14px;font-size:13px}
 .kv dt{color:var(--txt2)} .kv dd{margin:0;text-align:right;overflow-wrap:anywhere;font-weight:500}
+.avert{display:flex;flex-direction:column;gap:6px;margin-top:12px;padding:10px 12px;border:1px solid var(--warn);border-radius:var(--r);background:var(--panel2)}
+.csv-bilan{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px}
+#csv-rapport{max-height:42vh;overflow:auto}
+#csv-rapport .sec-t{margin:10px 0 4px}
+.csv-l{display:grid;grid-template-columns:70px minmax(110px,180px) 1fr;gap:10px;padding:5px 8px;border-left:3px solid var(--up);border-bottom:1px solid var(--line)}
+.csv-l.ko{border-left-color:var(--crit)}
+.csv-l .n{color:var(--txt3)} .csv-l .m{color:var(--txt2)} .csv-l.ko .m{color:var(--danger-txt)}
+.csv-l b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .empty{padding:28px;text-align:center;color:var(--txt3)}
 .bar{height:8px;border-radius:4px;background:var(--input);overflow:hidden;border:1px solid var(--line)}
 .bar>i{display:block;height:100%;border-radius:3px;background:var(--accent)}
@@ -559,5 +567,6 @@ svg.plan,svg.topo{touch-action:none}
   .hb{grid-template-columns:minmax(70px,110px) minmax(0,1fr) auto;gap:10px 8px}
   .rg .tube{width:24px;height:90px}
   .mx td{min-width:44px}
+  .csv-l{grid-template-columns:1fr;gap:2px}
 }
 @media (max-width:420px){.demo-tag,.srv-tag{display:none}}

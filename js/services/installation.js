@@ -1,10 +1,11 @@
 /* Services — installation, déplacement, retrait et mouvements de stock. */
-import { fmtDate, nextId, pad2, today } from '../utils.js';
+import { fmtDate, nextId, pad2, plural, today } from '../utils.js';
 import { mkDevice } from '../demo.js';
 import { Store } from '../store.js';
-import { byId, catOf, locLabel, locOf, portsOf, rackMap } from './requetes.js';
+import { byId, cablesOf, catOf, locLabel, locOf, portsOf, rackMap } from './requetes.js';
 import { farEnd, outletInfo } from './cablage.js';
 import { canAccept } from './connexion.js';
+import { ipValide, verifierUnicite } from './doublons.js';
 
 /* --- Installation, déplacement et retrait --- */
 const HOST_PREFIX = { switch: 'SW', router: 'RTR', firewall: 'FW', ap: 'AP', ups: 'OND', server: 'SRV', phone: 'TEL', camera: 'CAM', rack: 'BAIE' };
@@ -43,12 +44,15 @@ function installFromStock(catId, o) {
   if (st.available < 1) throw new Error(`Stock épuisé pour ${cat.brand} ${cat.model}.`);
   checkPlace(cat, o);
   const name = (o.name || '').trim() || suggestName(cat, o.roomId || byId(o.rackId).roomId);
+  const ip = (o.ip || '').trim();
+  if (ip && !ipValide(ip)) throw new Error('Adresse IP invalide.');
+  verifierUnicite(cat.category === 'rack' ? { rackName: name } : cat.template === 'outlet' ? { label: name } : { hostname: name, ip });
   const where = cat.mount === 'rack' ? `${byId(o.rackId).name}, U${o.u}` : byId(o.roomId).name;
   return Store.commit('add', `Installation de ${name} — ${cat.brand} ${cat.model} (${where})`, db => {
     db.stock.find(s => s.catalogId === catId).available--;
     if (cat.category === 'rack') { const r = { id: nextId(db, 'rack'), roomId: o.roomId, catalogId: catId, name, heightU: cat.heightU, x: o.x, y: o.y, serial: '', installDate: today(), status: 'active' }; db.racks.push(r); return r.id; }
     if (cat.template === 'outlet') { const ot = { id: nextId(db, 'o'), roomId: o.roomId, label: name, x: o.x, y: o.y, usage: o.usage || 'data' }; db.outlets.push(ot); return ot.id; }
-    const { dev, ports } = mkDevice(db, cat, { hostname: name, ip: o.ip || '', ...(cat.mount === 'rack' ? { rackId: o.rackId, u: +o.u } : { roomId: o.roomId, x: o.x, y: o.y }) });
+    const { dev, ports } = mkDevice(db, cat, { hostname: name, ip, ...(cat.mount === 'rack' ? { rackId: o.rackId, u: +o.u } : { roomId: o.roomId, x: o.x, y: o.y }) });
     if (o.outletId && ports[0] && canAccept(o.outletId, ports[0].id)) {
       db.cables.push({ id: nextId(db, 'cab'), a: ports[0].id, b: o.outletId, type: 'patch', length: 2, color: '#8b9bb0', label: '' });
       const net = outletInfo(o.outletId).net;
@@ -57,11 +61,29 @@ function installFromStock(catId, o) {
     return dev.id;
   });
 }
-function moveDevice(id, o) {
+/* Câbles branchés sur les ports d'un équipement */
+function cablesOfDevice(id) {
+  const pids = new Set(portsOf(id).map(p => p.id));
+  return Store.db.cables.filter(c => pids.has(c.a) || pids.has(c.b));
+}
+/* Débranche tous les câbles d'un équipement : les ports d'en face retombent (à appeler dans une opération) */
+function unplugAll(db, id) {
+  const pids = new Set(portsOf(id).map(p => p.id));
+  for (const p of portsOf(id)) {
+    const far = p.role !== 'pp' ? farEnd(p.id) : null;
+    if (far && far.status === 'up') { far.status = 'down'; far.poe.watts = 0; }
+    if (p.role !== 'pp' && cablesOf(p.id).length) { if (p.status === 'up') p.status = 'down'; p.poe.watts = 0; }
+  }
+  db.cables = db.cables.filter(c => !pids.has(c.a) && !pids.has(c.b));
+}
+/* Déplace un équipement. opt.debrancher : retire aussi ses câbles, qui ne correspondent plus au brassage réel */
+function moveDevice(id, o, opt = {}) {
   const dev = byId(id), cat = catOf(dev);
   checkPlace(cat, o, id);
   const where = cat.mount === 'rack' ? `${byId(o.rackId).name}, U${o.u}` : byId(o.roomId).name;
-  Store.commit('move', `Déplacement de ${dev.hostname} vers ${where}`, () => {
+  const n = opt.debrancher ? cablesOfDevice(id).length : 0;
+  Store.commit('move', `Déplacement de ${dev.hostname} vers ${where}${n ? ` (${plural(n, 'câble')} débranché${n > 1 ? 's' : ''})` : ''}`, db => {
+    if (n) unplugAll(db, id);
     if (cat.mount === 'rack') Object.assign(dev, { rackId: o.rackId, u: +o.u, roomId: null, x: null, y: null });
     else Object.assign(dev, { roomId: o.roomId, x: o.x, y: o.y, rackId: null, u: null });
   }, id);
@@ -99,4 +121,4 @@ function stockMove(catId, qty, reason = '') {
   }, catId);
 }
 
-export { freeSlots, installedCount, installFromStock, moveDevice, removeDevice, removeRack, stockMove, stockOf, suggestName };
+export { cablesOfDevice, freeSlots, installedCount, installFromStock, moveDevice, removeDevice, removeRack, stockMove, stockOf, suggestName };

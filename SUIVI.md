@@ -135,7 +135,7 @@ js/services/               requetes, cablage, topologie, tracage, connexion, rec
 js/3d/                     three (chargement), facades, viewer, objets
 js/ui/socle.js             onglets, fenêtres, infobulles, notifications
 js/ui/carto/               carto, plan, fiches, baie, tracage, connexion, topologie
-js/ui/inventaire.js  recherche.js  tableau-de-bord.js
+js/ui/inventaire.js  import-csv.js  recherche.js  tableau-de-bord.js
 js/ui/materiel/            catalogue, installation, palette, modele
 ```
 - **Sens des dépendances :** config → utils → store → services → 3d → ui. Les couches basses n'importent jamais l'interface (le store prévient l'interface par `Store.onSaveError` et `Store.on`). Les fichiers de `js/ui/` peuvent s'importer entre eux, mais n'utilisent ces imports que dans des fonctions, jamais au chargement.
@@ -446,6 +446,19 @@ Les tables `utilisateurs` et `audit` viendront avec la migration du lot 17.
 
 **Tests :** 33 scénarios pour le serveur, 30 de bout en bout (dont 16 en mode serveur).
 
+### 3.17 Qualité des données (lot 11)
+
+- **Import CSV** (onglet Inventaire, bouton « Importer ») : équipements ou prises murales. Séparateur `;` ou `,` détecté ; fichiers UTF-8 ou Windows-1252 (Excel). Un modèle de fichier se télécharge depuis la fenêtre.
+- **Analyse avant import :** chaque ligne est acceptée ou refusée avec ses motifs (modèle absent du catalogue, baie ou pièce introuvable, emplacement U occupé, position hors de la pièce, doublon avec la base ou dans le fichier, IP, MAC, date ou statut invalide). Rien n'est écrit pendant l'analyse.
+- **Import d'un bloc :** les lignes acceptées sont enregistrées en une seule opération (un pas d'annulation, une transaction côté serveur). Les lignes refusées sont laissées de côté. 5 000 lignes au plus par fichier.
+- **Le stock n'est pas modifié par l'import :** il décrit du matériel déjà en place. Les ports de chaque équipement sont créés d'après le modèle du catalogue.
+- **Emplacement :** un équipement en baie se désigne par le nom de la baie (U facultatif : première place libre en partant du haut) ; les autres par la pièce, précisée par le bâtiment et l'étage si le nom n'est pas unique. Sans position, l'équipement est posé au centre de la pièce et les prises sont réparties le long d'un mur.
+- **Doublons :** `js/services/doublons.js` contrôle le nom d'hôte, l'adresse IP, l'adresse MAC, le nom de baie et le repère de prise, sans tenir compte de la casse, à la modification, à l'installation et à l'import. Les messages sont ceux du serveur, qui garde ses propres contraintes d'unicité en dernier rempart. Les adresses MAC sont ramenées à la forme `aa:bb:cc:dd:ee:ff`.
+- **Déplacement d'un équipement câblé :** la fenêtre indique le nombre de câbles branchés et propose de les débrancher. La case est cochée d'office si l'équipement change de baie (ou de pièce), décochée s'il reste dans la même. Le déplacement et le débranchement forment une seule opération.
+- **Fichiers :** `js/services/import-csv.js`, `js/services/doublons.js`, `js/ui/import-csv.js`.
+
+**Tests :** 35 scénarios de bout en bout (dont 17 en mode serveur), 33 pour le serveur, 6 pour les connecteurs.
+
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
@@ -470,7 +483,7 @@ Les tables `utilisateurs` et `audit` viendront avec la migration du lot 17.
 
 | 9 | **Sécuriser le développement :** tests Playwright dans le dépôt (dossier `tests/`), sauvegarde locale plus sûre (IndexedDB et sauvegarde automatique téléchargeable), annulation plus légère | Élevé (high) | 🔄 En cours : tests faits (13 scénarios, `npm test` dans `tests/`). Restent la sauvegarde et l'annulation. |
 | 10 | **Saisir un vrai réseau :** démarrage sur base vide ; création, modification et suppression des sites, bâtiments, étages et pièces depuis l'interface (dessin des pièces sur le plan) ; gestion des VLAN | Élevé (high) | ✅ Fait |
-| 11 | **Qualité des données :** import CSV des équipements et des prises ; contrôle des doublons (IP, nom d'hôte, MAC, repère de prise) ; vérification du brassage lors du déplacement d'un équipement | Élevé (high) | ⏳ À faire |
+| 11 | **Qualité des données :** import CSV des équipements et des prises ; contrôle des doublons (IP, nom d'hôte, MAC, repère de prise) ; vérification du brassage lors du déplacement d'un équipement | Élevé (high) | ✅ Fait (voir 3.17) |
 | 12 | **Harmonisation visuelle :** appliquer le style du tableau de bord et de l'inventaire à la Cartographie et au Matériel ; sol et baie de la vue 3D adaptés au thème clair | Moyen à élevé | ✅ Fait |
 | 13 | **Téléphone :** zoom du plan par pincement, élévation de baie accessible, glisser-déposer au doigt, vérification sur un vrai appareil | Moyen à élevé | ⏳ À faire |
 | 14 | **Montée en charge :** jeu de test de grande taille, mesures, puis réaffichage partiel et affichage limité à la zone visible si nécessaire | Élevé (high) | ⏳ À faire |
@@ -520,7 +533,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-18 | Continuer avec le lot 10 : base vide et création des bâtiments | ✅ Fait. Le bouton Réinitialiser propose « démonstration » ou « base vide » (aucun site, catalogue conservé, stock à zéro). Sites, bâtiments, étages et pièces se créent, se modifient et se suppriment depuis la fiche de droite ; une pièce peut aussi se tracer à la souris sur le plan (alignement tous les 50 cm). Contrôles : pièces sans chevauchement et dans l'étage, codes de bâtiment et niveaux uniques, suppression seulement si l'élément est vide. Gestion des VLAN depuis le tableau de bord ou la fiche d'un port. L'étiquette « Données fictives » ne s'affiche plus que pour la démonstration. Un scénario de test complet a été ajouté (14 tests au total). |
 | 2026-11-18 | Peut-on encore peaufiner le design ? | ✅ Fait (lot 12) : typographie et espacements revus, en-tête plus aéré avec onglets en pastilles, boutons et champs arrondis avec transitions, anneau de focus au clavier, fiches de détail en cartes (Cartographie et Matériel), barres d'outils flottantes translucides sur le plan et la 3D, arbre à lignes arrondies, cartes du catalogue avec effet au survol, fenêtres et notifications animées. Vérifié dans les deux thèmes et sur téléphone. |
 | 2026-11-19 | **Nouvelle orientation :** NetCarto devient un logiciel serveur installable sur Linux, avec ou sans Docker, avec sa propre base de données (décisions détaillées, lots 16 à 22, ordre de réalisation, méthode « tests avant le code ») | ✅ Décisions notées en 3.14, lots ajoutés en section 4. **Lot 16 fait** (voir 3.15) : serveur Node dans `serveur/`, base SQLite relationnelle, API `/api/v1`, interface basculée sur l'API, page GitHub Pages inchangée. Prochain lot : 17. |
-| 2026-11-19 | « Continue à tout concevoir, je vais tester à la maison » | 🔄 Lot 17 fait (voir 3.16) : comptes, rôles, journal d'audit, HTTPS. Suite dans l'ordre prévu : 11, 18, 14, 19, 20, 22. |
+| 2026-11-19 | « Continue à tout concevoir, je vais tester à la maison » | 🔄 Lots 17 (voir 3.16) et 11 (voir 3.17) faits. Suite dans l'ordre prévu : 18, 14, 19, 20, 22. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---

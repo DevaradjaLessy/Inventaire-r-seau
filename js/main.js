@@ -27,6 +27,7 @@ import './ui/carto/connexion.js';
 import './ui/carto/topologie.js';
 import './ui/carto/structure.js';
 import './ui/inventaire.js';
+import './ui/import-csv.js';
 import './ui/recherche.js';
 import './ui/materiel/catalogue.js';
 import './ui/materiel/installation.js';
