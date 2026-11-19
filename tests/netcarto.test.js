@@ -199,6 +199,7 @@ test('Téléphone : pas de débordement, arbre et fiche en volets', async page =
 const api = (page, chemin, methode = 'GET', corps) => page.evaluate(async ([c, m, b]) => { const r = await fetch('/api/v1' + c, { method: m, headers: b ? { 'Content-Type': 'application/json' } : {}, body: b ? JSON.stringify(b) : undefined }); return { code: r.status, json: await r.json() }; }, [chemin, methode, corps]);
 const synchro = page => page.waitForFunction(() => NetCarto.Sync.enAttente === 0 && NetCarto.Sync.etat !== 'envoi', null, { timeout: 8000 });
 const S = { serveur: true };
+const MDP = 'Mot-de-passe-de-test-1';   // mot de passe fictif des comptes de test
 
 test('Serveur : l\'interface charge la base par l\'API, rien dans le stockage du navigateur', async page => {
   assert.deepStrictEqual(await page.evaluate(() => [NetCarto.Store.mode, NetCarto.Store.db.devices.length, localStorage.getItem('netcarto:db:v1'), document.querySelector('meta[name=netcarto-api]').content]), ['serveur', 102, null, '/api/v1']);
@@ -271,11 +272,86 @@ test('Serveur injoignable : la modification est annulée à l\'écran et l\'util
   const dev = await page.evaluate(() => { const x = NetCarto.Store.db.devices.find(d => d.hostname === 'SW-A1-ACC-01'); NetCarto.select(x.id); return x; });
   await ctx.app.arreter();
   await page.click('#detail [data-act=dev-edit]'); await page.fill('.modal [name=notes]', 'perdu ?'); await page.click('[data-act=modal-ok]');
-  await page.waitForSelector('.toast.err'); await synchro(page);
+  await page.waitForSelector('.toast.err');
   assert.match(await page.locator('.toast.err').first().innerText(), /Serveur injoignable/);
+  await synchro(page);
   assert.strictEqual(await page.evaluate(i => NetCarto.Store.idx.id.get(i).notes, dev.id), dev.notes);
   assert.match(await page.locator('#srv-tag').innerText(), /Hors ligne/);
 }, { serveur: true, erreursAttendues: /ERR_CONNECTION_REFUSED|Failed to fetch|Failed to load/ });
+
+/* ---------- Comptes, rôles et journal d'audit ---------- */
+test('Comptes : première ouverture, création de l\'administrateur avec le code du serveur', async (page, ctx) => {
+  await page.waitForSelector('#auth form[data-mode=initialisation]');
+  assert.strictEqual(await page.evaluate(() => !!window.NetCarto?.Store.db), false, 'aucune donnée n\'est chargée avant la connexion');
+  await page.fill('#auth [name=code]', 'AAAA-BBBB-CCCC'); await page.fill('#auth [name=identifiant]', 'chef'); await page.fill('#auth [name=nom]', 'Chef de projet');
+  await page.fill('#auth [name=motDePasse]', MDP); await page.fill('#auth [name=confirmation]', MDP); await page.click('#auth button[type=submit]');
+  await page.waitForSelector('#auth .auth-err:not(:empty)'); assert.match(await page.locator('#auth .auth-err').innerText(), /Code d'initialisation incorrect/);
+  await page.fill('#auth [name=code]', ctx.app.codeInitialisation); await page.fill('#auth [name=confirmation]', 'autre chose'); await page.click('#auth button[type=submit]');
+  assert.match(await page.locator('#auth .auth-err').innerText(), /ne sont pas identiques/);
+  await page.fill('#auth [name=confirmation]', MDP); await page.click('#auth button[type=submit]');
+  await page.waitForFunction(() => window.NetCarto?.Store.db && !document.querySelector('#auth'));
+  assert.match(await page.locator('#user-chip').innerText(), /chef/);
+  assert.strictEqual(await page.evaluate(() => NetCarto.Store.utilisateur.role), 'administrateur');
+}, { serveur: true, sansComptes: true, erreursAttendues: /403|401/ });
+test('Comptes : connexion, erreur de mot de passe, déconnexion', async page => {
+  await page.waitForSelector('#auth form[data-mode=connexion]');
+  await page.fill('#auth [name=identifiant]', 'tech'); await page.fill('#auth [name=motDePasse]', 'Mauvais-mot-de-passe'); await page.click('#auth button[type=submit]');
+  await page.waitForSelector('#auth .auth-err:not(:empty)'); assert.match(await page.locator('#auth .auth-err').innerText(), /Identifiant ou mot de passe incorrect/);
+  await page.fill('#auth [name=motDePasse]', MDP); await page.click('#auth button[type=submit]');
+  await page.waitForFunction(() => window.NetCarto?.Store.db && !document.querySelector('#auth'));
+  assert.deepStrictEqual(await page.evaluate(() => [NetCarto.Store.utilisateur.identifiant, NetCarto.Store.db.devices.length]), ['tech', 102]);
+  await page.click('#user-chip'); await page.click('[data-act=compte-deconnexion]');
+  await page.waitForSelector('#auth form[data-mode=connexion]');
+  assert.strictEqual((await api(page, '/base')).code, 401);
+}, { serveur: true, compte: null, erreursAttendues: /401/ });
+test('Comptes : un compte en lecture seule consulte tout mais ne modifie rien', async page => {
+  assert.match(await page.locator('#user-chip').innerText(), /lecteur/);
+  const pid = await page.evaluate(() => { const d = NetCarto.Store.db, sw = d.devices.find(x => x.hostname === 'SW-A1-ACC-01'), p = d.ports.find(p => p.deviceId === sw.id && p.idx === 2); NetCarto.select(p.id); return p.id; });
+  const avant = (await api(page, '/ports/' + pid)).json.vlan;
+  await page.selectOption('#detail select[data-f=vlan]', '200'); await page.waitForSelector('.toast.err');
+  assert.match(await page.locator('.toast.err').first().innerText(), /lecture seule/);
+  assert.strictEqual(await page.evaluate(i => NetCarto.Store.idx.id.get(i).vlan, pid), avant);
+  assert.strictEqual((await api(page, '/ports/' + pid)).json.vlan, avant);
+  await page.click('#user-chip'); assert.strictEqual(await page.locator('[data-act=compte-utilisateurs]').count(), 0, 'la gestion des comptes est réservée aux administrateurs');
+}, { serveur: true, compte: 'lecteur' });
+test('Comptes : un technicien modifie, mais ne remplace pas la base', async page => {
+  await page.click('[data-act=reset]'); await page.check('input[value=vide]'); await page.click('[data-act=modal-ok]'); await page.waitForSelector('.toast.err');
+  assert.match(await page.locator('.toast.err').first().innerText(), /administrateurs/);
+  assert.strictEqual((await api(page, '/equipements')).json.length, 102);
+}, { serveur: true, compte: 'tech' });
+test('Comptes : l\'administrateur crée un utilisateur, le verrou et le rôle se gèrent depuis la fenêtre', async page => {
+  await page.click('#user-chip'); await page.click('[data-act=compte-utilisateurs]'); await page.waitForSelector('#users-list .u-row');
+  assert.strictEqual(await page.locator('#users-list .u-row').count(), 3);
+  await page.fill('#user-new [name=u-identifiant]', 'alice'); await page.fill('#user-new [name=u-nom]', 'Alice Martin'); await page.selectOption('#user-new [name=u-role]', 'technicien'); await page.fill('#user-new [name=u-mdp]', 'court');
+  await page.click('[data-act=user-add]'); await page.waitForSelector('.toast.err'); assert.match(await page.locator('.toast.err').first().innerText(), /12 caractères/);
+  await page.fill('#user-new [name=u-mdp]', MDP); await page.click('[data-act=user-add]');
+  await page.waitForFunction(() => document.querySelectorAll('#users-list .u-row').length === 4);
+  const alice = (await api(page, '/utilisateurs')).json.find(u => u.identifiant === 'alice');
+  assert.deepStrictEqual([alice.nom, alice.role, alice.actif], ['Alice Martin', 'technicien', true]);
+  await page.selectOption(`#users-list .u-row[data-id="${alice.id}"] select`, 'lecture');
+  await page.waitForFunction(async id => (await (await fetch('/api/v1/utilisateurs')).json()).find(u => u.id === id).role === 'lecture', alice.id);
+}, { serveur: true, erreursAttendues: /422/ });
+test('Comptes : le journal d\'audit montre qui a fait quoi, avec la valeur avant et après', async page => {
+  const dev = await page.evaluate(() => { const x = NetCarto.Store.db.devices.find(d => d.hostname === 'SW-A1-ACC-01'); NetCarto.select(x.id); return x; });
+  await page.click('#detail [data-act=dev-edit]'); await page.fill('.modal [name=notes]', 'baie réorganisée'); await page.click('[data-act=modal-ok]'); await synchro(page);
+  await page.click('#user-chip'); await page.click('[data-act=compte-audit]'); await page.waitForSelector('#audit-list .a-row');
+  const ligne = page.locator('#audit-list .a-row', { hasText: 'SW-A1-ACC-01' }).first();
+  const texte = await ligne.innerText();
+  assert.match(texte, /admin/); assert.match(texte, /Modification/); assert.match(texte, /notes/); assert.match(texte, /baie réorganisée/);
+  await page.fill('#audit-filtre', 'tech'); await page.waitForFunction(() => !document.querySelector('#audit-list .a-row') || [...document.querySelectorAll('#audit-list .a-row')].every(r => /tech/.test(r.textContent)), null, { timeout: 4000 });
+  assert.strictEqual(await page.locator('#audit-list .a-row', { hasText: 'SW-A1-ACC-01' }).count(), 0, 'le filtre par personne s\'applique');
+}, S);
+test('Comptes : session expirée en cours de travail → on se reconnecte sans perdre la page', async page => {
+  const dev = await page.evaluate(() => { const x = NetCarto.Store.db.devices.find(d => d.hostname === 'SW-A1-ACC-01'); NetCarto.select(x.id); return x; });
+  await api(page, '/session', 'DELETE');
+  await page.click('#detail [data-act=dev-edit]'); await page.fill('.modal [name=notes]', 'après expiration'); await page.click('[data-act=modal-ok]');
+  await page.waitForSelector('#auth form[data-mode=connexion]');
+  assert.match(await page.locator('#auth').innerText(), /session a expiré/i);
+  await page.fill('#auth [name=identifiant]', 'admin'); await page.fill('#auth [name=motDePasse]', MDP); await page.click('#auth button[type=submit]');
+  await page.waitForFunction(() => !document.querySelector('#auth'));
+  assert.strictEqual(await page.evaluate(i => NetCarto.Store.idx.id.get(i).notes, dev.id), dev.notes, 'la modification refusée n\'est pas restée à l\'écran');
+  assert.strictEqual((await api(page, '/equipements/' + dev.id)).json.notes, dev.notes);
+}, { serveur: true, erreursAttendues: /401/ });
 
 (async () => {
   const srv = await serveur(), base = `http://127.0.0.1:${srv.address().port}/`;
@@ -290,8 +366,16 @@ test('Serveur injoignable : la modification est annulée à l\'écran et l\'util
     let app = null, dossier = null, adresse = base;
     if (opts.serveur) {
       dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'netcarto-e2e-'));
-      app = await demarrer({ serveur: { hote: '127.0.0.1', port: 0 }, donnees: { dossier }, web: { dossier: RACINE }, supervision: { intervalle: 30, sources: opts.supervision || [] }, demo: true }, { journal: () => {} });
+      app = await demarrer({ serveur: { hote: '127.0.0.1', port: 0 }, donnees: { dossier }, web: { dossier: RACINE }, https: { actif: false }, supervision: { intervalle: 30, sources: opts.supervision || [] }, demo: true }, { journal: () => {} });
       adresse = `http://127.0.0.1:${app.port}/`;
+      // Trois comptes de test ; la page s'ouvre déjà connectée (administrateur par défaut), sauf demande contraire
+      if (!opts.sansComptes) {
+        for (const [identifiant, role] of [['admin', 'administrateur'], ['tech', 'technicien'], ['lecteur', 'lecture']]) await app.securite.creerUtilisateur({ identifiant, nom: 'Compte ' + identifiant, role, motDePasse: MDP });
+        if (opts.compte !== null) {
+          const r = await fetch(adresse + 'api/v1/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identifiant: opts.compte || 'admin', motDePasse: MDP }) });
+          await ctx.addCookies([{ name: 'netcarto_session', value: r.headers.getSetCookie()[0].split(';')[0].split('=')[1], url: adresse }]);
+        }
+      }
     }
     page.on('console', m => { if (m.type() === 'error' && !(opts.sansCdn && /ERR_FAILED|Failed to load/.test(m.text())) && !(opts.erreursAttendues && opts.erreursAttendues.test(m.text()))) erreurs.push(m.text()); });
     page.on('pageerror', e => erreurs.push(e.message));
@@ -299,7 +383,7 @@ test('Serveur injoignable : la modification est annulée à l\'écran et l\'util
     else if (THREE) await page.route('https://cdn.jsdelivr.net/npm/three@0.160.0/**', r => r.fulfill({ contentType: 'text/javascript', body: fs.readFileSync(path.join(THREE, r.request().url().split('three@0.160.0/')[1])) }));
     faits++;
     try {
-      await page.goto(adresse); await page.waitForFunction(() => window.NetCarto?.Store.db, null, { timeout: 15000 });
+      await page.goto(adresse); await page.waitForFunction(() => window.NetCarto?.Store.db || document.querySelector('#auth form'), null, { timeout: 15000 });
       await fn(page, { app });
       assert.deepStrictEqual(erreurs, [], 'erreurs dans la console du navigateur');
       console.log('  ok    ' + nom);

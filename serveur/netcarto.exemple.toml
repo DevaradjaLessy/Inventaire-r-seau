@@ -4,8 +4,19 @@
 # Ne mettez aucun mot de passe ici : une valeur "env:NOM" est lue dans la variable d'environnement NOM.
 
 [serveur]
-hote = "127.0.0.1"      # 127.0.0.1 = ce poste seulement. N'ouvrez pas au réseau avant le lot 17 (comptes, HTTPS).
-port = 8080
+hote = "127.0.0.1"      # 127.0.0.1 = ce poste seulement. Mettez l'adresse du serveur pour l'ouvrir à vos collègues.
+port = 8443
+
+[https]
+actif = true            # HTTPS par défaut. Sans fichiers ci-dessous, un certificat auto-signé est créé dans le dossier de données.
+# certificat = "certificats/netcarto.crt"
+# cle = "certificats/netcarto.key"
+
+[securite]
+echecsMax = 5           # échecs de connexion avant verrouillage du compte
+verrouillageMinutes = 15
+sessionHeures = 12      # durée maximale d'une session
+inactiviteMinutes = 120 # une session inactive est fermée
 
 [donnees]
 dossier = "donnees"     # dossier de la base ; un chemin relatif part du dossier de ce fichier

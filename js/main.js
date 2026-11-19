@@ -34,12 +34,16 @@ import './ui/materiel/palette.js';
 import './ui/materiel/modele.js';
 import './ui/tableau-de-bord.js';
 import './ui/sources.js';
+import { ouvrirSession } from './ui/compte.js';
 import { Live } from './services/mesures.js';
 import { addRoom, deleteStructure, deleteVlan } from './services/structure.js';
 
 // Mode serveur si la page est servie par le serveur NetCarto (il y inscrit l'adresse de son API) ; sinon démonstration locale
 const api = document.querySelector('meta[name="netcarto-api"]')?.content;
-try { if (api) await Store.initServeur(api); else Store.init(); }
+try {
+  if (api) { Sync.api = api; await ouvrirSession(); await Store.initServeur(api); }
+  else Store.init();
+}
 catch (e) {
   document.querySelector('main').innerHTML = `<div class="boot-error"><h2>Base inaccessible</h2><p class="muted">${String(e.message).replace(/[<>&]/g, '')}</p><p><button class="btn pri" onclick="location.reload()">Réessayer</button></p></div>`;
   throw e;

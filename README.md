@@ -11,7 +11,7 @@ L'application fonctionne entièrement dans le navigateur, sans backend ni instal
 | Données | Base SQLite sur le serveur | Fictives, gardées dans le navigateur |
 | Comment | Voir [`serveur/README.md`](serveur/README.md) | Page GitHub Pages, ou la section ci-dessous |
 
-Le serveur est en cours de construction : la base et l'API sont faites, les comptes, le HTTPS et l'installation Linux ou Docker arrivent ensuite. Le suivi est dans `SUIVI.md`.
+Le serveur est en cours de construction : la base, l'API, les comptes, le journal d'audit et le HTTPS sont faits ; les sauvegardes automatiques et l'installation Linux ou Docker arrivent ensuite. Le suivi est dans `SUIVI.md`.
 
 ## Ouvrir la démonstration
 

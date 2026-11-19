@@ -47,6 +47,7 @@ function renderShell() {
   const nAlerts = computeAlerts().filter(a => a.level !== 'warn' || a.kind === 'stock').length;
   $('#tabs').innerHTML = TABS.map(t => `<button data-act="tab" data-tab="${t.id}" class="${UI.tab === t.id ? 'on' : ''}">${ico(t.icon)}<span class="lg">${t.label}</span><span class="sh">${t.short || t.label}</span>${t.id === 'dash' && nAlerts ? `<span class="badge" data-tip="${plural(nAlerts, 'alerte')} à traiter">${nAlerts}</span>` : ''}</button>`).join('');
   $('#tools').innerHTML = `
+    ${Store.mode === 'serveur' && Sync.utilisateur ? `<button class="btn" id="user-chip" data-act="compte-menu" data-tip="${esc(Sync.utilisateur.nom || Sync.utilisateur.identifiant)}|${{ lecture: 'Lecture seule', technicien: 'Technicien', administrateur: 'Administrateur' }[Sync.utilisateur.role]}|Clic : mon compte, déconnexion">${ico('user')}<span>${esc(Sync.utilisateur.identifiant)}</span></button>` : ''}
     <button class="btn icon" data-act="theme" data-tip="${Theme.get() === 'dark' ? 'Passer au thème clair' : 'Passer au thème sombre'}|Le choix est mémorisé dans ce navigateur">${ico(Theme.get() === 'dark' ? 'sun' : 'moon')}</button>
     <button class="btn icon" data-act="sources" data-tip="Sources de données|${Live.state === 'ok' ? `Supervision active (${Live.source})` : Live.state === 'error' ? 'Source en erreur : ' + esc(Live.error) : 'Aucune source de supervision : état saisi à la main'}" style="position:relative">${ico('gauge')}<i class="live-dot ${Live.state}"></i></button>
     <button class="btn icon" data-act="import" data-tip="Importer|Charger un fichier JSON exporté depuis NetCarto">${ico('upload')}</button>
@@ -160,7 +161,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { if ($('#modal-root').classList.contains('on')) Modal.close(); else { $('#gsearch-res').classList.add('hidden'); if (typing) e.target.blur(); } }
   else if (e.key === '/' && !typing) { e.preventDefault(); $('#gsearch').focus(); $('#gsearch').select(); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing) { e.preventDefault(); Actions.undo(); }
-  else if (e.key === 'Enter' && $('#modal-root').classList.contains('on') && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON') { e.preventDefault(); Actions['modal-ok'](); }
+  else if (e.key === 'Enter' && Modal.onOk && $('#modal-root').classList.contains('on') && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON') { e.preventDefault(); Actions['modal-ok'](); }
 });
 
 /* --- Actions de l'en-tête --- */

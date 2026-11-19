@@ -306,7 +306,7 @@ history    [{ id, ts, type, text, ref }]                                 // type
   - mention « Données fictives »
 
 ### 3.9 Note technique pour les tests
-- **Les tests sont dans le dépôt :** `tests/netcarto.test.js` (interface, 23 scénarios dont 9 en mode serveur), `serveur/tests/` (serveur et base, 19 scénarios) et `connecteurs/tests/test.js` (supervision, 6 scénarios). Les lancer tous avant chaque commit (`npm test` dans chacun des trois dossiers). Si le CDN est bloqué, indiquer le dossier de Three.js par la variable `NETCARTO_THREE`, ou faire `npm install` dans `tests/`.
+- **Les tests sont dans le dépôt :** `tests/netcarto.test.js` (interface, 30 scénarios dont 16 en mode serveur), `serveur/tests/` (serveur et base, 33 scénarios) et `connecteurs/tests/test.js` (supervision, 6 scénarios). Les lancer tous avant chaque commit (`npm test` dans chacun des trois dossiers). Si le CDN est bloqué, indiquer le dossier de Three.js par la variable `NETCARTO_THREE`, ou faire `npm install` dans `tests/`.
 - Dans l'environnement cloud de Claude, le CDN jsDelivr peut être bloqué (erreur 403 du proxy). Le registre npm, lui, est accessible.
 - Pour tester :
   1. installer `three@0.160.0` avec npm dans un dossier temporaire (pas dans le dépôt) ;
@@ -420,13 +420,31 @@ Les tables `utilisateurs` et `audit` viendront avec la migration du lot 17.
 - **Modèle de départ et démonstration :** le serveur les lit dans les modules de l'interface (`js/config.js`, `js/catalogue.js`, `js/demo.js`), pour n'avoir qu'une définition.
 - **Supervision :** `connecteurs/lib/releveur.js` est partagé par le relais autonome et par le serveur (`/api/v1/supervision/…`).
 - **Règles vérifiées par le serveur** en plus des contraintes SQL : chevauchement en baie, nombre de câbles par port ou prise, pièce dans son étage. Les autres règles restent contrôlées par l'interface ; les déplacer côté serveur est à prévoir avant d'ouvrir l'API à d'autres outils.
-- **Sécurité provisoire :** écoute sur `127.0.0.1` seulement ; une écriture venue d'une page d'un autre site est refusée. Pas de comptes ni de HTTPS avant le lot 17.
+- **Sécurité :** écoute sur `127.0.0.1` par défaut ; une écriture venue d'une page d'un autre site est refusée. Comptes et HTTPS : voir 3.16.
 - **Migrations :** le moteur de migrations existe déjà (une transaction par fichier). La sauvegarde automatique avant migration est prévue au lot 18.
 - **Branche :** le travail reste sur `claude/upbeat-ptolemy-lq3vu6`, déjà distincte de la branche principale ; la session n'était pas autorisée à en pousser une autre.
 
 **API :** liste des routes dans `serveur/README.md`.
 
 **Tests :** `serveur/tests/` (19 scénarios, écrits avant le code) et 9 scénarios de bout en bout en mode serveur dans `tests/netcarto.test.js` (23 au total).
+
+### 3.16 Comptes, rôles, audit et HTTPS (lot 17)
+
+- **Migration 002 :** tables `utilisateurs`, `sessions`, `audit`. Deux déclencheurs SQL empêchent toute modification ou suppression dans `audit`.
+- **Mots de passe :** 12 caractères au moins ; empreinte scrypt salée (fonction intégrée à Node, aucune dépendance) ; comparaison en temps constant. Le message d'échec est le même que le compte existe ou non.
+- **Verrouillage :** 5 échecs de suite verrouillent le compte 15 minutes (réglable). Un administrateur peut déverrouiller.
+- **Sessions :** jeton aléatoire dans un cookie `HttpOnly`, `SameSite=Strict`, `Secure` en HTTPS. Seule l'empreinte du jeton est en base. Expiration après 2 heures d'inactivité et 12 heures au plus (réglable).
+- **Rôles :** lecture (consultation), technicien (lots de modifications), administrateur (comptes, audit, remplacement de la base). Le contrôle est fait par le serveur à chaque route ; l'interface refuse aussi d'emblée ce que le rôle ne permet pas.
+- **Premier administrateur :** tant qu'aucun compte n'existe, le serveur affiche au démarrage un code à usage unique ; la page le demande pour créer le compte. Aucun mot de passe par défaut n'existe.
+- **Récupération :** commande `node netcarto.js compte <identifiant>` (crée le compte, ou change son mot de passe et le déverrouille).
+- **Journal d'audit :** une ligne par objet créé, modifié ou supprimé, avec l'auteur, la date, l'adresse, la valeur avant et la valeur après ; les changements d'un même lot portent le même numéro. Y figurent aussi les connexions, les échecs et la gestion des comptes. L'historique affiché dans l'interface (`journal`) reste distinct.
+- **Modifications concurrentes :** le refus (409) nomme la personne qui a modifié l'élément, d'après le journal d'audit ; l'interface recharge les données.
+- **HTTPS par défaut :** certificat fourni par l'administrateur, sinon certificat auto-signé créé au premier démarrage dans le dossier de données. Le certificat est construit par NetCarto lui-même (structure X.509 écrite dans `securite/certificat.js`), sans programme extérieur, pour rester portable. L'option `--http` existe pour les essais sur le poste.
+- **Port par défaut :** 8443.
+- **Interface :** écran de connexion et de première initialisation, bouton du compte dans l'en-tête, fenêtres « Utilisateurs » et « Journal d'audit » (`js/ui/compte.js`). Une session expirée en cours de travail redemande la connexion sans perdre la page.
+- **Non fait dans ce lot :** politique de sécurité du contenu (CSP), à poser quand Three.js sera hébergé localement (lot 22) ; limitation du nombre de tentatives par adresse (seul le verrouillage par compte existe) ; double authentification.
+
+**Tests :** 33 scénarios pour le serveur, 30 de bout en bout (dont 16 en mode serveur).
 
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
@@ -459,7 +477,7 @@ Les tables `utilisateurs` et `audit` viendront avec la migration du lot 17.
 | 15 | **Confort :** impression d'une fiche de baie et d'un plan de brassage, export en image du plan et de la topologie, navigation au clavier, historique filtrable avec retour à un état antérieur | Moyen | ⏳ À faire |
 
 | 16 | **Serveur et base :** serveur Node, API, SQLite, schéma, couche d'accès aux données, bascule de l'interface vers l'API, mode démo conservé | Maximal (max) | ✅ Fait |
-| 17 | **Comptes et sécurité :** comptes, rôles, journal d'audit, modifications concurrentes, HTTPS | Très élevé (xhigh) | ⏳ À faire |
+| 17 | **Comptes et sécurité :** comptes, rôles, journal d'audit, modifications concurrentes, HTTPS | Très élevé (xhigh) | ✅ Fait |
 | 18 | **Sauvegardes et migrations :** sauvegardes automatiques planifiées, restauration, migrations versionnées | Élevé (high) | ⏳ À faire |
 | 19 | **Docker :** image NetCarto et `docker-compose.yml` | Élevé (high) | ⏳ À faire |
 | 20 | **Installation Linux :** `installer.sh`, systemd, mise à jour, désinstallation | Élevé (high) | ⏳ À faire |
@@ -502,6 +520,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-18 | Continuer avec le lot 10 : base vide et création des bâtiments | ✅ Fait. Le bouton Réinitialiser propose « démonstration » ou « base vide » (aucun site, catalogue conservé, stock à zéro). Sites, bâtiments, étages et pièces se créent, se modifient et se suppriment depuis la fiche de droite ; une pièce peut aussi se tracer à la souris sur le plan (alignement tous les 50 cm). Contrôles : pièces sans chevauchement et dans l'étage, codes de bâtiment et niveaux uniques, suppression seulement si l'élément est vide. Gestion des VLAN depuis le tableau de bord ou la fiche d'un port. L'étiquette « Données fictives » ne s'affiche plus que pour la démonstration. Un scénario de test complet a été ajouté (14 tests au total). |
 | 2026-11-18 | Peut-on encore peaufiner le design ? | ✅ Fait (lot 12) : typographie et espacements revus, en-tête plus aéré avec onglets en pastilles, boutons et champs arrondis avec transitions, anneau de focus au clavier, fiches de détail en cartes (Cartographie et Matériel), barres d'outils flottantes translucides sur le plan et la 3D, arbre à lignes arrondies, cartes du catalogue avec effet au survol, fenêtres et notifications animées. Vérifié dans les deux thèmes et sur téléphone. |
 | 2026-11-19 | **Nouvelle orientation :** NetCarto devient un logiciel serveur installable sur Linux, avec ou sans Docker, avec sa propre base de données (décisions détaillées, lots 16 à 22, ordre de réalisation, méthode « tests avant le code ») | ✅ Décisions notées en 3.14, lots ajoutés en section 4. **Lot 16 fait** (voir 3.15) : serveur Node dans `serveur/`, base SQLite relationnelle, API `/api/v1`, interface basculée sur l'API, page GitHub Pages inchangée. Prochain lot : 17. |
+| 2026-11-19 | « Continue à tout concevoir, je vais tester à la maison » | 🔄 Lot 17 fait (voir 3.16) : comptes, rôles, journal d'audit, HTTPS. Suite dans l'ordre prévu : 11, 18, 14, 19, 20, 22. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---

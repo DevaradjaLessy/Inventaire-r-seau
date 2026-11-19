@@ -56,6 +56,25 @@ a{color:var(--accent)}
 .srv-tag{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--txt2);border:1px solid var(--line2);background:var(--panel2);padding:2px 9px;border-radius:20px;white-space:nowrap}
 .srv-tag i{width:7px;height:7px;border-radius:50%;background:var(--up)}
 .srv-tag.envoi i{background:var(--warn)} .srv-tag.horsligne i{background:var(--crit)} .srv-tag.horsligne{color:var(--danger-txt)}
+/* --- Comptes : écran de connexion, utilisateurs, journal d'audit --- */
+#auth{position:fixed;inset:0;z-index:400;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:18px;overflow:auto}
+.auth-card{width:400px;max-width:100%;background:var(--panel);border:1px solid var(--line2);border-radius:16px;padding:26px;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 60px var(--shadow)}
+.auth-card h2{font-size:18px;text-align:center}
+.auth-card p{margin:0 0 4px;text-align:center}
+.auth-card .btn{height:38px;justify-content:center;margin-top:4px}
+.auth-err{color:var(--danger-txt);font-weight:600;min-height:20px;text-align:center}
+.tools #user-chip{width:auto;padding:0 10px;gap:6px;color:var(--txt);max-width:160px}
+.tools #user-chip span{overflow:hidden;text-overflow:ellipsis}
+.compte-actions{display:flex;flex-direction:column;gap:8px}
+.compte-actions .btn{justify-content:flex-start;height:36px}
+.u-row{display:grid;grid-template-columns:minmax(0,1fr) 150px auto auto;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.u-new{display:grid;grid-template-columns:1fr 1fr 150px 1.4fr auto;gap:8px}
+.u-new input,.u-new select,.u-row select{width:100%}
+.a-row{display:grid;grid-template-columns:118px 90px 190px minmax(0,1fr);gap:10px;align-items:start;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}
+.a-row>b{overflow:hidden;text-overflow:ellipsis}
+.a-row .chip{justify-self:start}
+.a-detail{display:flex;flex-direction:column;gap:2px;margin-top:4px;color:var(--txt2);overflow-wrap:anywhere}
+#audit-list,#users-list{max-height:52vh;overflow:auto}
 .boot-error{margin:auto;max-width:520px;padding:28px;text-align:center}
 .boot-error h2{margin-bottom:10px}
 #tabs{display:flex;gap:4px;height:100%;align-items:center}
@@ -93,7 +112,7 @@ a{color:var(--accent)}
 .seg button{background:transparent;border:0;height:28px;padding:0 11px;color:var(--txt2);cursor:pointer;display:flex;align-items:center;gap:6px;font-weight:550;border-radius:7px;transition:background .12s,color .12s}
 .seg button:hover{color:var(--txt)}
 .seg button.on{background:var(--panel);color:var(--accent);box-shadow:0 1px 2px var(--shadow)}
-input[type=text],input[type=search],input[type=number],input[type=date],select,textarea{background:var(--input);border:1px solid var(--line2);border-radius:var(--r);height:32px;padding:0 10px;outline:none;min-width:0;transition:border-color .12s,box-shadow .12s}
+input[type=text],input[type=password],input[type=search],input[type=number],input[type=date],select,textarea{background:var(--input);border:1px solid var(--line2);border-radius:var(--r);height:32px;padding:0 10px;outline:none;min-width:0;transition:border-color .12s,box-shadow .12s}
 textarea{height:auto;padding:7px 9px;resize:vertical}
 input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg);outline:none}
 select{padding-right:4px}
@@ -483,6 +502,8 @@ svg.plan,svg.topo{touch-action:none}
   .form-grid .full,.form-grid label[style]{grid-column:auto!important}
   .pg-row{grid-template-columns:1fr 1fr 1fr;padding:8px;border:1px solid var(--line);border-radius:8px}
   .vl-row{grid-template-columns:70px 1fr 46px;padding:8px;border:1px solid var(--line);border-radius:8px}
+  .u-row,.u-new,.a-row{grid-template-columns:1fr}
+  .tools #user-chip span{display:none}
   /* Cartographie : la vue occupe l'écran, l'arbre et la fiche s'ouvrent en volets */
   .carto{display:block;position:relative}
   .c-main{height:100%}

@@ -3,7 +3,7 @@
 Le serveur sert l'interface web, expose une API et range les données dans sa propre base SQLite.
 Il n'y a rien d'autre à installer : le moteur SQLite est intégré à Node.js.
 
-> **État actuel (lot 16).** Pas encore de comptes, de HTTPS, de sauvegardes automatiques ni de paquet d'installation : ils arrivent avec les lots 17 à 20. D'ici là, le serveur n'écoute que sur ce poste (`127.0.0.1`). Ne l'ouvrez pas au réseau.
+> **État actuel (lots 16 et 17).** Base, API, comptes, rôles, journal d'audit et HTTPS sont faits. Restent les sauvegardes automatiques (lot 18) et les paquets d'installation Docker et Linux (lots 19 et 20). Les connecteurs de supervision n'ont pas encore été validés sur du matériel réel.
 
 ## Lancer le serveur
 
@@ -29,11 +29,54 @@ Ou sur une base vide, pour saisir un vrai réseau :
 npm start
 ```
 
-Ouvrez ensuite `http://127.0.0.1:8080`. L'en-tête affiche « Serveur · enregistré » : chaque modification est écrite dans la base.
+Ouvrez ensuite `https://127.0.0.1:8443`.
+
+**Deux choses se passent à la première visite :**
+
+1. **Le navigateur affiche un avertissement de sécurité.** C'est attendu : NetCarto a créé son propre certificat (auto-signé), que votre navigateur ne connaît pas. Choisissez « Avancé », puis « Continuer ». Pour ne plus voir l'avertissement, fournissez votre propre certificat (voir *HTTPS*).
+2. **La page demande de créer le compte administrateur.** Le serveur a affiché dans sa console un *code d'initialisation* de la forme `XXXX-XXXX-XXXX` : recopiez-le, puis choisissez votre identifiant et votre mot de passe (12 caractères au moins). Ce code ne sert qu'une fois.
+
+## Comptes et rôles
+
+| Rôle | Peut |
+|---|---|
+| Lecture seule | tout consulter |
+| Technicien | modifier les données (équipements, câblage, stock, structure) |
+| Administrateur | en plus : gérer les comptes, lire le journal d'audit, importer ou réinitialiser la base |
+
+Dans l'interface, le bouton à votre nom (en haut à droite) ouvre : *Changer mon mot de passe*, *Utilisateurs*, *Journal d'audit*, *Se déconnecter*.
+
+- **Mots de passe** : 12 caractères au moins, jamais enregistrés en clair (empreinte scrypt salée).
+- **Verrouillage** : 5 échecs de suite verrouillent le compte 15 minutes. Un administrateur peut le déverrouiller.
+- **Sessions** : fermées après 2 heures d'inactivité, et au bout de 12 heures dans tous les cas.
+- **Journal d'audit** : chaque modification y est notée avec son auteur, la date, la valeur avant et la valeur après. Il ne peut être ni modifié ni effacé.
+- **Modifications concurrentes** : si un collègue a modifié le même élément entre-temps, votre modification est refusée, son nom s'affiche et les données sont rechargées.
+
+### Accès perdu, ou compte à créer sans passer par la page
+
+```bash
+node --disable-warning=ExperimentalWarning netcarto.js compte alice --role administrateur
+```
+
+La commande crée le compte ; s'il existe déjà, elle change son mot de passe et le déverrouille. Le mot de passe est demandé au clavier, sans s'afficher. Ajoutez `--config` ou `--donnees` si vous n'utilisez pas les réglages par défaut.
+
+## HTTPS
+
+Le HTTPS est actif par défaut. Sans réglage, NetCarto crée au premier démarrage un certificat auto-signé dans `certificats/`, à l'intérieur du dossier de données, valable pour `localhost`, le nom du poste et ses adresses.
+
+Pour utiliser votre propre certificat (autorité interne de l'entreprise, par exemple) :
+
+```toml
+[https]
+certificat = "/chemin/vers/netcarto.crt"
+cle = "/chemin/vers/netcarto.key"
+```
+
+Pour un essai sur votre seul poste, `--http` (ou `actif = false`) désactive le HTTPS. Ne le faites jamais sur un serveur joignable depuis le réseau : les mots de passe circuleraient en clair.
 
 ## Réglages
 
-Sans fichier, le serveur écoute sur `127.0.0.1:8080` et range sa base dans `serveur/donnees-locales/`.
+Sans fichier, le serveur écoute sur `127.0.0.1:8443` (ce poste seulement) et range sa base dans `serveur/donnees-locales/`. Pour le rendre joignable par vos collègues, indiquez l'adresse du serveur dans `serveur.hote`.
 
 Pour changer cela, copiez `netcarto.exemple.toml`, adaptez-le, puis :
 
@@ -49,6 +92,8 @@ node --disable-warning=ExperimentalWarning netcarto.js --config netcarto.toml
 | Dossier de la base | `donnees.dossier` | `NETCARTO_DONNEES` | `--donnees` |
 | Dossier de l'interface | `web.dossier` | | |
 | Taille maximale d'une requête | `limites.corpsMaxMo` | | |
+| HTTPS | `https.actif`, `https.certificat`, `https.cle` | | `--http` |
+| Sécurité | `securite.echecsMax`, `securite.verrouillageMinutes`, `securite.sessionHeures`, `securite.inactiviteMinutes` | | |
 | Supervision | `supervision.intervalle`, `[[supervision.sources]]` | | |
 
 Priorité : argument, puis variable, puis fichier, puis valeur par défaut. Un chemin relatif écrit dans le fichier part du dossier de ce fichier.
@@ -59,7 +104,7 @@ Aucun secret dans le fichier : une valeur `"env:NOM"` est lue dans la variable d
 
 Un seul fichier, `netcarto.sqlite`, dans le dossier de données. Pour une sauvegarde manuelle, arrêtez le serveur puis copiez ce fichier (les sauvegardes automatiques sont prévues au lot 18).
 
-Une table par type d'objet : `sites`, `batiments`, `etages`, `pieces`, `baies`, `equipements`, `ports`, `prises`, `cables`, `catalogue`, `catalogue_ports`, `stock`, `vlans`, `journal`, `meta`. Le schéma complet est dans `donnees/migrations/sqlite/001_initial.sql`.
+Une table par type d'objet : `sites`, `batiments`, `etages`, `pieces`, `baies`, `equipements`, `ports`, `prises`, `cables`, `catalogue`, `catalogue_ports`, `stock`, `vlans`, `journal`, `meta`, puis `utilisateurs`, `sessions` et `audit`. Le schéma complet est dans `donnees/migrations/sqlite/`.
 
 Ce que la base garantit :
 
@@ -73,24 +118,34 @@ Ce que la base garantit :
 
 Préfixe : `/api/v1`. Tout est en JSON.
 
-| Route | Rôle |
-|---|---|
-| `GET /info` | version, mode, révision de la base |
-| `GET /sante` | état du serveur et de la base |
-| `GET /revision` | numéro de révision (il augmente à chaque écriture) |
-| `GET /base` | toute la base, au format des exports |
-| `PUT /base` | remplace toute la base (import, réinitialisation), en une transaction |
-| `POST /lots` | applique un lot de modifications, tout ou rien |
-| `GET /{ressource}` | liste, avec filtres simples : `?champ=valeur` |
-| `GET /{ressource}/{id}` | un élément |
-| `GET /supervision/etat`, `/supervision/sante` | module de supervision (PRTG, SNMP, simulation) |
+| Route | Accès | Rôle |
+|---|---|---|
+| `GET /info`, `GET /sante` | libre | version, état du serveur |
+| `GET /session` | libre | connecté ou non |
+| `POST /session` | libre | connexion `{ identifiant, motDePasse }` |
+| `POST /initialisation` | libre, une seule fois | création du premier administrateur |
+| `DELETE /session` | connecté | déconnexion |
+| `PUT /session/mot-de-passe` | connecté | changer son mot de passe |
+| `GET /revision`, `GET /base` | connecté | révision, base complète |
+| `GET /{ressource}`, `GET /{ressource}/{id}` | connecté | lecture, filtres `?champ=valeur` |
+| `GET /supervision/etat`, `/supervision/sante` | connecté | module de supervision |
+| `POST /lots` | technicien, administrateur | lot de modifications, tout ou rien |
+| `PUT /base` | administrateur | remplace toute la base |
+| `GET`, `POST /utilisateurs` ; `PUT`, `DELETE /utilisateurs/{id}` | administrateur | gestion des comptes |
+| `GET /audit` | administrateur | journal d'audit (filtres : `cle`, `collection`, `identifiant`, `action`, `avant`, `limite`) |
+
+La session tient dans un cookie `HttpOnly`, `SameSite=Strict` (et `Secure` en HTTPS).
 
 Ressources : `sites`, `batiments`, `etages`, `pieces`, `baies`, `equipements`, `ports`, `prises`, `cables`, `catalogue`, `stock`, `vlans`, `journal`.
 
 Exemple :
 
 ```bash
-curl "http://127.0.0.1:8080/api/v1/equipements?hostname=SW-A0-CORE-01"
+curl -k -c cookies.txt -H "Content-Type: application/json" -d '{"identifiant":"alice","motDePasse":"…"}' https://127.0.0.1:8443/api/v1/session
+```
+
+```bash
+curl -k -b cookies.txt "https://127.0.0.1:8443/api/v1/equipements?hostname=SW-A0-CORE-01"
 ```
 
 ### Écrire : le lot de modifications
@@ -110,7 +165,8 @@ curl "http://127.0.0.1:8080/api/v1/equipements?hostname=SW-A0-CORE-01"
 |---|---|
 | `200` | lot appliqué ; la réponse donne la nouvelle révision |
 | `400` | demande mal formée |
-| `403` | écriture demandée par une page d'un autre site |
+| `401` | connexion requise |
+| `403` | rôle insuffisant, ou écriture demandée par une page d'un autre site |
 | `409` | conflit : l'élément a changé entre-temps |
 | `422` | contrainte ou règle non respectée ; le message dit laquelle |
 
@@ -128,7 +184,9 @@ donnees/             couche d'accès aux données, la seule à connaître la bas
   schema.js          correspondance entre le modèle JSON et les tables
   depot.js           lectures et écritures
   regles.js          règles vérifiées avant de valider une transaction
+  comptes.js         utilisateurs, sessions, journal d'audit
   erreurs.js         refus de la base traduits en messages clairs
+securite/            comptes, sessions, mots de passe, certificat HTTPS
 tests/               tests (node:test)
 ```
 

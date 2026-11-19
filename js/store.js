@@ -34,6 +34,14 @@ const Store = {
     if (!changements.length) return;
     Sync.envoyerLot({ type, texte: text || '', changements }).catch(e => this.surRefus(e, jeton));
   },
+  /* Refuse une modification que le rôle du compte ne permet pas (le serveur la refuserait de toute façon) */
+  autoriser(admin = false) {
+    if (this.mode !== 'serveur') return;
+    const role = Sync.utilisateur?.role;
+    if (role === 'lecture') throw new Error('Votre compte est en lecture seule : aucune modification n\'est possible.');
+    if (admin && role !== 'administrateur') throw new Error('Remplacer toute la base est réservé aux administrateurs.');
+  },
+  get utilisateur() { return Sync.utilisateur; },
   async surRefus(e, jeton) {
     if (e.code === 'abandon') return;
     const i = this.undoStack.findIndex(u => u.jeton === jeton);
@@ -46,7 +54,7 @@ const Store = {
       this.reindex(); this.emit();
     }
     if (e.code === 'reseau') Sync.poser('horsligne');
-    this.onSyncError?.(e);
+    if (e.code !== 'acces') this.onSyncError?.(e);   // session expirée : l'écran de connexion s'affiche déjà
   },
 
   init() {
@@ -123,6 +131,7 @@ const Store = {
   },
   /* Applique une modification : instantané pour l'annulation, mutation, historique, index, sauvegarde, notification */
   commit(type, text, fn, ref = null) {
+    this.autoriser();
     const snap = JSON.stringify(this.db);
     let res;
     try { res = fn(this.db); }
@@ -141,8 +150,9 @@ const Store = {
   },
   /* Annule la dernière modification */
   undo() {
+    if (!this.undoStack.length) return null;
+    this.autoriser();
     const u = this.undoStack.pop();
-    if (!u) return null;
     const avant = this.db;
     this.db = JSON.parse(u.snap);
     this.reindex(); this.save(); this.emit();
@@ -151,6 +161,7 @@ const Store = {
   },
   /* Remplace toute la base (import, réinitialisation). L'ancienne base reste annulable. */
   replace(db, text) {
+    this.autoriser(true);
     this.undoStack.push({ snap: JSON.stringify(this.db), text });
     if (this.undoStack.length > this.MAX_UNDO) this.undoStack.shift();
     this.db = db;

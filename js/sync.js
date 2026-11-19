@@ -33,6 +33,8 @@ const Sync = {
   revision: 0,          // dernière révision de la base connue de cette page
   intervalle: 20000,    // délai entre deux vérifications de changements faits ailleurs (ms)
   file: Promise.resolve(), generation: 0, minuterie: 0,
+  utilisateur: null,    // compte connecté : { id, identifiant, nom, role }
+  surDeconnexion: null, // appelé quand le serveur signale que la session n'est plus valable
   surEtat: null,        // appelé à chaque changement d'état (branché par l'interface)
   surChangementExterne: null,   // appelé quand un autre poste a modifié la base
 
@@ -43,6 +45,8 @@ const Sync = {
     catch { throw new ErreurServeur('reseau', 'Serveur injoignable : la modification n\'a pas été enregistrée.'); }
     let json = null;
     try { json = await r.json(); } catch { /* réponse sans JSON */ }
+    // Session expirée ou fermée : l'interface demande une nouvelle connexion
+    if (r.status === 401 && !chemin.startsWith('/session') && chemin !== '/initialisation') this.surDeconnexion?.();
     if (!r.ok) throw new ErreurServeur(json?.code || 'http', json?.erreur || `Le serveur a répondu ${r.status}.`, r.status);
     return json;
   },
