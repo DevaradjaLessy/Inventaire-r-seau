@@ -204,5 +204,5 @@ Les mêmes options valent pour `mettre-a-jour.sh`.
 Les essais construisent un vrai conteneur : l'image Docker d'une part, une Debian 12 avec systemd d'autre part, où l'installation, la mise à jour, le retour arrière et la désinstallation sont déroulés pour de bon. Ils sont ignorés si Docker n'est pas disponible.
 
 ```bash
-node --test installation/tests/
+node --test --test-concurrency=1 "installation/tests/*.test.js"
 ```
