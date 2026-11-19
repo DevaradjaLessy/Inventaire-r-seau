@@ -3,28 +3,8 @@
    des lignes créées, modifiées ou supprimées. Le serveur applique ce lot en une transaction :
    tout ou rien. Les lots partent un par un, dans l'ordre. */
 
-/* Collections envoyées au serveur, avec le nom de leur clé */
-const CLES = { vlans: 'id', sites: 'id', buildings: 'id', floors: 'id', rooms: 'id', catalog: 'id', stock: 'catalogId', racks: 'id', devices: 'id', ports: 'id', outlets: 'id', cables: 'id', history: 'id' };
-
 /* Erreur renvoyée par le serveur : code = conflit | regle | invalide | http | reseau */
 class ErreurServeur extends Error { constructor(code, message, statut = 0) { super(message); this.code = code; this.statut = statut; } }
-
-/* Compare deux états de la base et renvoie la liste des changements : { collection, op, cle, avant, apres }.
-   Les suppressions passent en premier (elles libèrent les valeurs uniques), puis les modifications, puis les créations. */
-function diff(avant, apres) {
-  const supp = [], modif = [], crea = [];
-  for (const [c, cle] of Object.entries(CLES)) {
-    const anciens = new Map((avant[c] || []).map(o => [o[cle], o])), vus = new Set();
-    for (const o of apres[c] || []) {
-      const k = o[cle], a = anciens.get(k);
-      vus.add(k);
-      if (!a) crea.push({ collection: c, op: 'creer', cle: k, apres: o });
-      else if (JSON.stringify(a) !== JSON.stringify(o)) modif.push({ collection: c, op: 'modifier', cle: k, avant: a, apres: o });
-    }
-    for (const [k, a] of anciens) if (!vus.has(k)) supp.push({ collection: c, op: 'supprimer', cle: k, avant: a });
-  }
-  return [...supp, ...modif, ...crea];
-}
 
 const Sync = {
   api: null,            // préfixe de l'API (« /api/v1 »), ou null en mode démonstration
@@ -41,7 +21,7 @@ const Sync = {
   poser(etat) { if (this.etat !== etat) { this.etat = etat; this.surEtat?.(etat); } },
   async appel(methode, chemin, corps) {
     let r;
-    try { r = await fetch(this.api + chemin, { method: methode, headers: corps === undefined ? {} : { 'Content-Type': 'application/json' }, body: corps === undefined ? undefined : JSON.stringify(corps) }); }
+    try { r = await fetch(this.api + chemin, { method: methode, headers: corps === undefined ? {} : { 'Content-Type': 'application/json' }, body: corps === undefined ? undefined : typeof corps === 'string' ? corps : JSON.stringify(corps) }); }
     catch { throw new ErreurServeur('reseau', 'Serveur injoignable : la modification n\'a pas été enregistrée.'); }
     let json = null;
     try { json = await r.json(); } catch { /* réponse sans JSON */ }
@@ -71,7 +51,8 @@ const Sync = {
     this.file = p.then(() => {}, e => { if (e.code !== 'abandon') this.generation++; });
     return p.finally(() => { this.enAttente--; if (!this.enAttente && this.etat === 'envoi') this.poser('ok'); });
   },
-  envoyerLot(lot) { return this.enfiler(() => this.appel('POST', '/lots', lot)); },
+  /* Le lot est mis en texte tout de suite : il décrit la base à cet instant, même s'il part plus tard (file d'attente) */
+  envoyerLot(lot) { const texte = JSON.stringify(lot); return this.enfiler(() => this.appel('POST', '/lots', texte)); },
   remplacer(base) { return this.enfiler(() => this.appel('PUT', '/base', base)); },
   /* Vérifie régulièrement si un autre poste a modifié la base */
   surveiller() {
@@ -87,4 +68,4 @@ const Sync = {
   },
 };
 
-export { diff, ErreurServeur, Sync };
+export { ErreurServeur, Sync };

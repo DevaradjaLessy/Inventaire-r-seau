@@ -47,7 +47,7 @@ async function demarrer(config, { journal = console.log, horloge = () => Date.no
     if (url.pathname === PREFIXE || url.pathname.startsWith(PREFIXE + '/')) return api(req, res, url.pathname.slice(PREFIXE.length), url.searchParams);
     if (url.pathname.startsWith('/api/')) { res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify({ erreur: `Adresse inconnue. L'API est sous ${PREFIXE}.`, code: 'http' })); }
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { Allow: 'GET, HEAD' }); return res.end(); }
-    statique(url.pathname, res);
+    statique(url.pathname, res, req.headers['accept-encoding'] || '');
   });
   await new Promise((ok, ko) => { serveur.once('error', ko); serveur.listen(cfg.serveur.port, cfg.serveur.hote, ok); });
   let arrete = false;

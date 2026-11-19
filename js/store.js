@@ -2,7 +2,8 @@
 import { APP, CATEGORIES, DEVICE_STATUS, OUTLET_USAGE, PORT_KIND, PORT_ROLE, PORT_STATUS } from './config.js';
 import { nextId, setRandomIds } from './utils.js';
 import { buildDemo, emptyDb } from './demo.js';
-import { diff, Sync } from './sync.js';
+import { defaire, diff, ecartEntre, lotInverse } from './ecarts.js';
+import { Sync } from './sync.js';
 
 const Store = {
   db: null, idx: null, undoStack: [], subs: new Set(), saveTimer: 0, saveError: false,
@@ -50,7 +51,7 @@ const Store = {
       try { await this.recharger(); } catch { /* serveur injoignable : l'état local est gardé, le prochain envoi le signalera */ }
     } else {
       // Retour à l'état d'avant la modification refusée ; les modifications suivantes, bâties dessus, sont abandonnées
-      this.db = JSON.parse(this.undoStack[i].snap); this.undoStack.length = i;
+      while (this.undoStack.length > i) this.revenir(this.undoStack.pop());
       this.reindex(); this.emit();
     }
     if (e.code === 'reseau') Sync.poser('horsligne');
@@ -137,28 +138,33 @@ const Store = {
     try { res = fn(this.db); }
     catch (e) { this.db = JSON.parse(snap); this.reindex(); throw e; }
     const jeton = ++this.jetons;
-    this.undoStack.push({ snap, text, jeton });
-    if (this.undoStack.length > this.MAX_UNDO) this.undoStack.shift();
     if (text) {
       this.db.history.unshift({ id: nextId(this.db, 'h'), ts: Date.now(), type, text, ref });
       if (this.db.history.length > this.MAX_HISTORY) this.db.history.length = this.MAX_HISTORY;
     }
     this.db.meta.updatedAt = Date.now();
+    // L'annulation garde l'écart avec l'état d'avant, pas une copie de toute la base
+    const { changements, retour } = ecartEntre(JSON.parse(snap), this.db);
+    this.undoStack.push({ retour, text, jeton });
+    if (this.undoStack.length > this.MAX_UNDO) this.undoStack.shift();
     this.reindex(); this.save(); this.emit();
-    if (this.mode === 'serveur') this.pousser(JSON.parse(snap), type, text, jeton);
+    if (this.mode === 'serveur' && changements.length) Sync.envoyerLot({ type, texte: text || '', changements }).catch(e => this.surRefus(e, jeton));
     return res;
   },
   /* Annule la dernière modification */
   undo() {
     if (!this.undoStack.length) return null;
     this.autoriser();
-    const u = this.undoStack.pop();
-    const avant = this.db;
-    this.db = JSON.parse(u.snap);
+    const u = this.undoStack.pop(), avant = this.db, texte = `Annulation : ${u.text || 'modification'}`;
+    const lot = this.mode === 'serveur' && u.retour ? lotInverse(this.db, u.retour) : null;
+    this.revenir(u);
     this.reindex(); this.save(); this.emit();
-    if (this.mode === 'serveur') this.pousser(avant, 'annulation', `Annulation : ${u.text || 'modification'}`, -1);
+    if (lot && lot.length) Sync.envoyerLot({ type: 'annulation', texte, changements: lot }).catch(e => this.surRefus(e, -1));
+    else if (this.mode === 'serveur' && u.snap) this.pousser(avant, 'annulation', texte, -1);
     return u.text || 'modification';
   },
+  /* Remet la base dans l'état d'avant une entrée de la pile d'annulation : écart (cas courant) ou copie complète (remplacement de la base) */
+  revenir(u) { if (u.snap) this.db = JSON.parse(u.snap); else defaire(this.db, u.retour); },
   /* Remplace toute la base (import, réinitialisation). L'ancienne base reste annulable. */
   replace(db, text) {
     this.autoriser(true);

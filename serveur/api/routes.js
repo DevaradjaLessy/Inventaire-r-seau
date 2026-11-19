@@ -20,10 +20,10 @@
      GET|DELETE /sauvegardes/{nom}      télécharger ou supprimer une sauvegarde
      POST   /sauvegardes/restauration   { nom } : remet les données d'inventaire dans l'état de la sauvegarde */
 'use strict';
-const fs = require('fs');
+const fs = require('fs'), zlib = require('zlib');
 const { ErreurMetier, RESSOURCES } = require('../donnees');
 
-const VERSION = require('../package.json').version, COOKIE = 'netcarto_session';
+const VERSION = require('../package.json').version, COOKIE = 'netcarto_session', SEUIL_COMPRESSION = 2048;
 
 class ErreurHttp extends Error { constructor(statut, message) { super(message); this.statut = statut; } }
 /* Réponse qui porte aussi des en-têtes (cookie de session) */
@@ -122,7 +122,16 @@ function creerApi({ depot, sauvegardes, releveur, securite, config, https }) {
     return o;
   }
   return async function api(req, res, chemin, recherche) {
-    const repondre = (statut, corps, entetes = {}) => { res.writeHead(statut, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...(https ? { 'Strict-Transport-Security': 'max-age=31536000' } : {}), ...entetes }); res.end(JSON.stringify(corps)); };
+    const repondre = (statut, corps, entetes = {}) => {
+      const tete = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...(https ? { 'Strict-Transport-Security': 'max-age=31536000' } : {}), ...entetes };
+      const texte = JSON.stringify(corps);
+      // Une réponse volumineuse (la base entière, par exemple) voyage compressée si le navigateur l'accepte
+      if (texte.length < SEUIL_COMPRESSION || !/\bgzip\b/.test(req.headers['accept-encoding'] || '')) { res.writeHead(statut, tete); return res.end(texte); }
+      zlib.gzip(texte, { level: 4 }, (err, compresse) => {
+        if (err) { res.writeHead(statut, tete); return res.end(texte); }
+        res.writeHead(statut, { ...tete, 'Content-Encoding': 'gzip', Vary: 'Accept-Encoding' }); res.end(compresse);
+      });
+    };
     // Une écriture demandée par une page d'un autre site est refusée (la page de NetCarto a la même origine que l'API)
     const origine = req.headers.origin;
     if (origine && req.method !== 'GET' && req.method !== 'HEAD') { let hote = ''; try { hote = new URL(origine).host; } catch { /* origine illisible */ } if (hote !== req.headers.host) { req.resume(); return repondre(403, { erreur: 'Écriture refusée : la requête vient d\'un autre site.', code: 'http' }); } }

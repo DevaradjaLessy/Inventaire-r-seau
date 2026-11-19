@@ -257,6 +257,54 @@ test('Déplacer un équipement câblé : le brassage est signalé, et peut être
   assert.deepStrictEqual(await etat(), { rack: 'BAIE-A2-01', cables: avant.cables }, 'câbles gardés si l\'on décoche');
 });
 
+/* ---------- Montée en charge et annulation légère ---------- */
+test('Annulation par écarts : chaque opération se défait à l\'identique, sans copie complète de la base', async page => {
+  const etat = () => page.evaluate(() => JSON.stringify(NetCarto.Store.db));
+  const etats = [await etat()];
+  const ops = [
+    () => page.evaluate(() => { NetCarto.installFromStock('cat-c9200l-24p-4g', { rackId: NetCarto.Store.db.racks.find(r => r.name === 'BAIE-A2-01').id, u: 20, name: 'SW-ECART-01', ip: '10.10.99.240' }); }),
+    () => page.evaluate(() => { const d = NetCarto.Store.db; NetCarto.disconnect(d.cables.find(c => c.type === 'patch').id); }),
+    () => page.evaluate(() => { const d = NetCarto.Store.db; NetCarto.Store.commit('edit', 'Renommage', () => { d.devices[3].hostname = 'RENOMME'; d.devices[3].notes = 'é → ü'; }); }),
+    () => page.evaluate(() => { const d = NetCarto.Store.db; NetCarto.removeDevice(d.devices.find(x => x.hostname === 'SW-A1-ACC-02').id, 'stock'); }),
+    () => page.evaluate(() => { const d = NetCarto.Store.db; NetCarto.Store.commit('edit', 'Ordre et suppression', () => { d.outlets.reverse(); d.cables.splice(5, 3); d.vlans.push({ ...d.vlans[0], id: 999, name: 'Essai' }); }); }),
+    () => page.evaluate(() => { const d = NetCarto.Store.db; NetCarto.removeDevice(d.devices.find(x => x.hostname === 'AP-A1-01' || x.hostname.startsWith('AP-')).id, 'retire'); }),
+  ];
+  for (const op of ops) { await op(); etats.push(await etat()); }
+  const pile = await page.evaluate(() => ({ n: NetCarto.Store.undoStack.length, copies: NetCarto.Store.undoStack.filter(u => u.snap).length, poids: JSON.stringify(NetCarto.Store.undoStack).length, base: JSON.stringify(NetCarto.Store.db).length }));
+  assert.strictEqual(pile.n, ops.length); assert.strictEqual(pile.copies, 0, 'aucune copie complète gardée');
+  assert.ok(pile.poids < pile.base / 2, `pile d'annulation trop lourde : ${pile.poids} octets pour une base de ${pile.base}`);
+  for (let i = ops.length - 1; i >= 0; i--) {
+    await page.evaluate(() => NetCarto.Store.undo());
+    assert.ok(await etat() === etats[i], `après annulation de l'opération ${i + 1}, la base doit être identique à l'état d'avant`);
+  }
+  assert.strictEqual(await page.evaluate(() => NetCarto.Store.undoStack.length), 0);
+  // Les index suivent : l'équipement installé puis annulé n'existe plus, celui retiré est revenu
+  assert.deepStrictEqual(await page.evaluate(() => [NetCarto.Store.db.devices.some(x => x.hostname === 'SW-ECART-01'), !!NetCarto.Store.idx.id.get(NetCarto.Store.db.devices.find(x => x.hostname === 'SW-A1-ACC-02').id)]), [false, true]);
+});
+test('Grande base (3 000 équipements, 34 000 ports) : chaque action reste rapide et l\'annulation légère', async page => {
+  const { grandeBase } = await import('./grande-base.mjs'), doc = await grandeBase();
+  assert.ok(doc.devices.length > 3000 && doc.ports.length > 30000 && doc.cables.length > 15000);
+  await page.route('**/charge.json', r => r.fulfill({ contentType: 'application/json', body: JSON.stringify(doc) }));
+  assert.strictEqual(await page.evaluate(async () => { const d = await (await fetch('/charge.json')).json(), S = NetCarto.Store, err = S.validate(d); if (err) return err; S.save = () => {}; S.db = d; S.undoStack = []; S.reindex(); S.emit(); return null; }), null, 'la grande base doit être valide');
+  // Durée d'une action, rendu compris (une image affichée)
+  const duree = code => page.evaluate(`(async () => { const d = performance.now(); ${code}; await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0))); return performance.now() - d; })()`);
+  const mesures = {
+    plan: await duree(`document.querySelector('[data-tab=carto]').click(); NetCarto.select(NetCarto.Store.db.floors[40].id)`),
+    inventaire: await duree(`document.querySelector('[data-tab=inv]').click()`),
+    tableau: await duree(`document.querySelector('[data-tab=dash]').click()`),
+    recherche: await duree(`const i = document.querySelector('#gsearch'); i.value = 'ACC-03'; i.dispatchEvent(new Event('input'))`),
+    modification: await duree(`document.querySelector('[data-tab=carto]').click(); const x = NetCarto.Store.db.devices[50]; NetCarto.Store.commit('edit', 'Essai', () => { x.notes = 'charge'; })`),
+    tracage: await duree(`NetCarto.trace(NetCarto.Store.db.outlets[4000].id)`),
+    annulation: await duree(`NetCarto.Store.undo()`),
+  };
+  // Seuils larges (machine de test lente) : ils signalent une régression nette, pas un écart de quelques millisecondes
+  for (const [nom, ms] of Object.entries(mesures)) assert.ok(ms < 1500, `${nom} : ${Math.round(ms)} ms (${JSON.stringify(Object.fromEntries(Object.entries(mesures).map(([k, v]) => [k, Math.round(v)])))})`);
+  await page.evaluate(() => { for (let i = 0; i < 25; i++) { const x = NetCarto.Store.db.devices[100 + i]; NetCarto.Store.commit('edit', 'Essai ' + i, () => { x.notes = 'n' + i; }); } });
+  const poids = await page.evaluate(() => JSON.stringify(NetCarto.Store.undoStack).length);
+  assert.ok(poids < 200000, `25 annulations doivent tenir en moins de 200 Ko (mesuré : ${Math.round(poids / 1024)} Ko)`);
+  assert.strictEqual(await page.locator('#gsearch-res .it').count() > 0, true);
+});
+
 /* ---------- Mode serveur : l'interface lit et écrit par l'API, la base est sur le serveur ---------- */
 const api = (page, chemin, methode = 'GET', corps) => page.evaluate(async ([c, m, b]) => { const r = await fetch('/api/v1' + c, { method: m, headers: b ? { 'Content-Type': 'application/json' } : {}, body: b ? JSON.stringify(b) : undefined }); return { code: r.status, json: await r.json() }; }, [chemin, methode, corps]);
 const synchro = page => page.waitForFunction(() => NetCarto.Sync.enAttente === 0 && NetCarto.Sync.etat !== 'envoi', null, { timeout: 8000 });
@@ -319,6 +367,18 @@ test('Serveur : un doublon d\'adresse IP qui échappe à l\'interface est refus�
   assert.strictEqual((await api(page, '/equipements/' + a.id)).json.ip, a.ip);
   assert.strictEqual(await page.evaluate(() => NetCarto.Store.undoStack.length), 0);
 }, { serveur: true, erreursAttendues: /422/ });
+test('Serveur : deux modifications coup sur coup du même élément sont enregistrées toutes les deux, sans faux conflit', async page => {
+  const id = await page.evaluate(() => { const x = NetCarto.Store.db.devices.find(d => d.hostname === 'SW-A1-ACC-01'), S = NetCarto.Store;
+    S.commit('edit', 'Première', () => { x.notes = 'première'; }); S.commit('edit', 'Seconde', () => { x.notes = 'seconde'; x.firmware = '1.2.3'; }); return x.id; });
+  await synchro(page);
+  const lu = (await api(page, '/equipements/' + id)).json;
+  assert.deepStrictEqual([lu.notes, lu.firmware], ['seconde', '1.2.3']); assert.strictEqual(await page.locator('.toast.err').count(), 0);
+  const audit = (await api(page, '/audit?cle=' + id)).json.filter(a => a.action === 'modifier');
+  assert.deepStrictEqual(audit.map(a => a.apres.notes), ['seconde', 'première'], 'le journal d\'audit garde les deux étapes');
+  // Annuler deux fois : le serveur revient à l'état de départ, étape par étape
+  await page.evaluate(() => { NetCarto.Store.undo(); NetCarto.Store.undo(); }); await synchro(page);
+  assert.strictEqual((await api(page, '/equipements/' + id)).json.notes, ''); assert.strictEqual(await page.locator('.toast.err').count(), 0);
+}, S);
 test('Serveur : modification faite ailleurs entre-temps → prévenu, données rechargées, rien n\'est écrasé', async page => {
   const dev = await page.evaluate(() => { const x = NetCarto.Store.db.devices.find(d => d.hostname === 'SW-A1-ACC-01'); NetCarto.select(x.id); return x; });
   const autre = await api(page, '/lots', 'POST', { changements: [{ collection: 'devices', op: 'modifier', cle: dev.id, avant: dev, apres: { ...dev, notes: 'changé par un collègue' } }] });

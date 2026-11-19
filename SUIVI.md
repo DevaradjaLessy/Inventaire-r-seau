@@ -131,6 +131,7 @@ js/utils.js  icones.js     utilitaires, icônes SVG
 js/catalogue.js            catalogue par défaut
 js/demo.js                 jeu de données fictif (graine fixe)
 js/store.js                état, index, annulation, sauvegarde
+js/ecarts.js               écart entre deux états : changements à envoyer, retour en arrière
 js/services/               requetes, cablage, topologie, tracage, connexion, recherche, installation
 js/3d/                     three (chargement), facades, viewer, objets
 js/ui/socle.js             onglets, fenêtres, infobulles, notifications
@@ -477,6 +478,37 @@ Les tables `utilisateurs` et `audit` viendront avec la migration du lot 17.
 
 **Tests :** 42 scénarios pour le serveur (dont 9 pour les sauvegardes), 36 de bout en bout.
 
+### 3.19 Montée en charge (lot 14)
+
+**Jeu de test :** `tests/grande-base.mjs` fabrique une base fictive de 20 bâtiments de 5 étages : 3 222 équipements, 33 992 ports, 8 000 prises, 18 421 câbles, 1 100 pièces, 200 baies (10 Mo en JSON). Les tailles sont réglables.
+
+**Mesures** (Chromium sans carte graphique, machine de test ; durées avec affichage) :
+
+| Action | Durée |
+|---|---|
+| Serveur : charger toute la base (`PUT /base`) | 0,96 s |
+| Serveur : lire toute la base | 0,32 s |
+| Serveur : appliquer un lot d'une modification, règles comprises | 20 ms |
+| Serveur : sauvegarde | 0,14 s (fichier de 7,7 Mo) |
+| Page : chargement complet en mode serveur | 1,4 s |
+| Page : plan d'un étage, traçage, recherche globale | 20 à 35 ms |
+| Page : onglet Inventaire, Tableau de bord, vue Topologie | 110 à 180 ms |
+| Page : enregistrer une modification | 130 ms |
+| Page : annuler | 37 ms |
+
+**Ce que les mesures ont montré, et ce qui a été fait :**
+
+- **Annulation :** chaque étape gardait une copie complète de la base, soit 253 Mo pour 25 étapes sur la grande base. Elle garde maintenant l'écart avec l'état d'avant (`js/ecarts.js`) : 13 Ko pour 25 étapes. La base revient à l'identique, ordre des listes compris. Seul le remplacement de toute la base (import, réinitialisation) garde encore une copie complète.
+- **Envoi au serveur :** le lot de modifications est mis en texte au moment de la modification, et non au moment de l'envoi. Deux modifications rapprochées du même élément ne provoquent plus de faux conflit.
+- **Comparaison des états :** faite valeur par valeur, sans passer par du texte (environ trois fois plus rapide).
+- **Réseau :** les réponses de plus de 2 Ko et les fichiers de l'interface sont compressés (gzip). La base de 10 Mo voyage en 0,7 Mo.
+- **Réaffichage partiel et affichage limité à la zone visible :** non faits. Les mesures ne les justifient pas à cette taille : l'Inventaire est déjà paginé, l'arbre ne déplie que ce qui est ouvert, le plan ne dessine qu'un étage.
+- **3D :** les durées longues relevées (1 à 2 s à la première ouverture d'une vue 3D) viennent de la préparation du rendu graphique sur une machine sans carte graphique, pas du volume de données.
+
+**Limites connues :** au-delà d'environ 15 000 équipements, enregistrer une modification demanderait une demi-seconde : il faudrait alors suivre les changements au fil de l'eau au lieu de comparer deux états. L'arbre entièrement déplié (12 000 lignes) reste fluide mais lourd. La vue Topologie devient peu lisible au-delà de quelques centaines d'équipements.
+
+**Tests :** 39 scénarios de bout en bout (dont une grande base et l'annulation à l'identique), 44 pour le serveur (dont la grande base et la compression).
+
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
@@ -499,12 +531,12 @@ Les tables `utilisateurs` et `audit` viendront avec la migration du lot 17.
 | 7 | Tableau de bord : indicateurs, graphiques, alertes, historique | Moyen à élevé (medium/high) | ✅ Fait |
 | 8 | Finitions : performances, tests complets, `README.md` (modèle de données, ajout d'un modèle ou d'un plan, sécurité), activation de GitHub Pages | Élevé (high) | ✅ Fait, sauf l'activation de GitHub Pages : elle se fait à la main dans les réglages du dépôt (voir `README.md`) |
 
-| 9 | **Sécuriser le développement :** tests Playwright dans le dépôt (dossier `tests/`), sauvegarde locale plus sûre (IndexedDB et sauvegarde automatique téléchargeable), annulation plus légère | Élevé (high) | 🔄 En cours : tests faits (13 scénarios, `npm test` dans `tests/`). Restent la sauvegarde et l'annulation. |
+| 9 | **Sécuriser le développement :** tests Playwright dans le dépôt (dossier `tests/`), sauvegarde locale plus sûre (IndexedDB et sauvegarde automatique téléchargeable), annulation plus légère | Élevé (high) | 🔄 En cours : tests faits ; annulation légère faite au lot 14 (voir 3.19). Reste la sauvegarde locale plus sûre du mode démonstration (le mode serveur a ses propres sauvegardes, voir 3.18). |
 | 10 | **Saisir un vrai réseau :** démarrage sur base vide ; création, modification et suppression des sites, bâtiments, étages et pièces depuis l'interface (dessin des pièces sur le plan) ; gestion des VLAN | Élevé (high) | ✅ Fait |
 | 11 | **Qualité des données :** import CSV des équipements et des prises ; contrôle des doublons (IP, nom d'hôte, MAC, repère de prise) ; vérification du brassage lors du déplacement d'un équipement | Élevé (high) | ✅ Fait (voir 3.17) |
 | 12 | **Harmonisation visuelle :** appliquer le style du tableau de bord et de l'inventaire à la Cartographie et au Matériel ; sol et baie de la vue 3D adaptés au thème clair | Moyen à élevé | ✅ Fait |
 | 13 | **Téléphone :** zoom du plan par pincement, élévation de baie accessible, glisser-déposer au doigt, vérification sur un vrai appareil | Moyen à élevé | ⏳ À faire |
-| 14 | **Montée en charge :** jeu de test de grande taille, mesures, puis réaffichage partiel et affichage limité à la zone visible si nécessaire | Élevé (high) | ⏳ À faire |
+| 14 | **Montée en charge :** jeu de test de grande taille, mesures, puis réaffichage partiel et affichage limité à la zone visible si nécessaire | Élevé (high) | ✅ Fait (voir 3.19). Réaffichage partiel jugé inutile à cette taille, d'après les mesures. |
 | 15 | **Confort :** impression d'une fiche de baie et d'un plan de brassage, export en image du plan et de la topologie, navigation au clavier, historique filtrable avec retour à un état antérieur | Moyen | ⏳ À faire |
 
 | 16 | **Serveur et base :** serveur Node, API, SQLite, schéma, couche d'accès aux données, bascule de l'interface vers l'API, mode démo conservé | Maximal (max) | ✅ Fait |
@@ -551,7 +583,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-18 | Continuer avec le lot 10 : base vide et création des bâtiments | ✅ Fait. Le bouton Réinitialiser propose « démonstration » ou « base vide » (aucun site, catalogue conservé, stock à zéro). Sites, bâtiments, étages et pièces se créent, se modifient et se suppriment depuis la fiche de droite ; une pièce peut aussi se tracer à la souris sur le plan (alignement tous les 50 cm). Contrôles : pièces sans chevauchement et dans l'étage, codes de bâtiment et niveaux uniques, suppression seulement si l'élément est vide. Gestion des VLAN depuis le tableau de bord ou la fiche d'un port. L'étiquette « Données fictives » ne s'affiche plus que pour la démonstration. Un scénario de test complet a été ajouté (14 tests au total). |
 | 2026-11-18 | Peut-on encore peaufiner le design ? | ✅ Fait (lot 12) : typographie et espacements revus, en-tête plus aéré avec onglets en pastilles, boutons et champs arrondis avec transitions, anneau de focus au clavier, fiches de détail en cartes (Cartographie et Matériel), barres d'outils flottantes translucides sur le plan et la 3D, arbre à lignes arrondies, cartes du catalogue avec effet au survol, fenêtres et notifications animées. Vérifié dans les deux thèmes et sur téléphone. |
 | 2026-11-19 | **Nouvelle orientation :** NetCarto devient un logiciel serveur installable sur Linux, avec ou sans Docker, avec sa propre base de données (décisions détaillées, lots 16 à 22, ordre de réalisation, méthode « tests avant le code ») | ✅ Décisions notées en 3.14, lots ajoutés en section 4. **Lot 16 fait** (voir 3.15) : serveur Node dans `serveur/`, base SQLite relationnelle, API `/api/v1`, interface basculée sur l'API, page GitHub Pages inchangée. Prochain lot : 17. |
-| 2026-11-19 | « Continue à tout concevoir, je vais tester à la maison » | 🔄 Lots 17 (voir 3.16), 11 (voir 3.17) et 18 (voir 3.18) faits. Suite dans l'ordre prévu : 14, 19, 20, 22. |
+| 2026-11-19 | « Continue à tout concevoir, je vais tester à la maison » | 🔄 Lots 17 (voir 3.16), 11 (voir 3.17), 18 (voir 3.18) et 14 (voir 3.19) faits. Suite dans l'ordre prévu : 19, 20, 22. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---
