@@ -339,6 +339,89 @@ test('Déplacer un équipement câblé : le brassage est signalé, et peut être
   assert.deepStrictEqual(await etat(), { rack: 'BAIE-A2-01', cables: avant.cables }, 'câbles gardés si l\'on décoche');
 });
 
+/* ---------- Confort : impression, export en image, clavier, historique ---------- */
+test('Impression : fiche de baie et plan de brassage, seuls à l\'impression', async page => {
+  await page.evaluate(() => { window.__impressions = 0; window.print = () => { window.__impressions++; }; });
+  await choisir(page, 'BAIE-A1-01'); await page.click('#detail [data-act=rack-print]');
+  assert.strictEqual(await page.evaluate(() => window.__impressions), 1);
+  const doc = page.locator('#print-root');
+  assert.match(await doc.locator('h1').first().innerText(), /BAIE-A1-01/);
+  // Fiche de baie : une ligne par équipement, avec sa position
+  const fiche = await doc.locator('.pr-elev tbody tr').allInnerTexts();
+  assert.ok(fiche.some(l => /SW-A1-ACC-01/.test(l) && /U38/.test(l) && /Catalyst/.test(l)), fiche.join(' | '));
+  assert.ok(fiche.length >= 8);
+  // Plan de brassage : pour chaque port câblé, ce qui est au bout
+  const brassage = await doc.locator('.pr-brassage').innerText();
+  assert.match(brassage, /Plan de brassage/); assert.match(brassage, /SW-A1-ACC-01/); assert.match(brassage, /Prise A1-\d{3}/); assert.match(brassage, /VLAN|Vl|\b10\b/);
+  const n = await page.evaluate(() => { const d = NetCarto.Store.db, r = d.racks.find(x => x.name === 'BAIE-A1-01'), ports = new Set(d.ports.filter(p => d.devices.some(x => x.rackId === r.id && x.id === p.deviceId) && p.role !== 'pp').map(p => p.id)); return d.cables.filter(c => ports.has(c.a) || ports.has(c.b)).length; });
+  assert.ok(await doc.locator('.pr-brassage tbody tr').count() >= n, 'une ligne par port actif câblé');
+  // À l'impression : le document seul, sur fond clair ; à l'écran, il est invisible
+  assert.strictEqual(await doc.isVisible(), false);
+  await page.emulateMedia({ media: 'print' });
+  assert.strictEqual(await doc.isVisible(), true); assert.strictEqual(await page.isVisible('#topbar'), false); assert.strictEqual(await page.isVisible('main'), false);
+  await page.emulateMedia({ media: 'screen' });
+});
+const png = f => { const b = fs.readFileSync(f); return { ok: b.subarray(1, 4).toString() === 'PNG', w: b.readUInt32BE(16), h: b.readUInt32BE(20), taille: b.length }; };
+test('Export en image : plan de l\'étage et topologie en PNG', async page => {
+  await page.evaluate(() => NetCarto.select(NetCarto.Store.db.floors[1].id));
+  const [plan] = await Promise.all([page.waitForEvent('download'), page.click('[data-act=plan-image]')]);
+  assert.match(plan.suggestedFilename(), /^netcarto-plan-.*\.png$/);
+  const p = png(await plan.path()); assert.ok(p.ok && p.w >= 1200 && p.h >= 500 && p.taille > 20000, JSON.stringify(p));
+  await page.click('[data-act=c-view][data-v=topo]');
+  const [topo] = await Promise.all([page.waitForEvent('download'), page.click('[data-act=topo-image]')]);
+  assert.match(topo.suggestedFilename(), /^netcarto-topologie-.*\.png$/);
+  const t = png(await topo.path()); assert.ok(t.ok && t.w >= 1200 && t.taille > 20000, JSON.stringify(t));
+  // L'image n'est pas vide : elle contient bien les couleurs du dessin (plusieurs milliers de pixels non uniformes)
+  assert.ok(await page.evaluate(() => window.__dernierExport?.couleurs > 8), 'image uniforme');
+});
+test('Clavier : onglets, arbre, résultats de recherche, aide', async page => {
+  await page.keyboard.press('2'); assert.strictEqual(await page.$eval('.tab.on', e => e.id), 'tab-inv');
+  await page.keyboard.press('1'); assert.strictEqual(await page.$eval('.tab.on', e => e.id), 'tab-carto');
+  // Arbre : flèches pour parcourir, droite pour ouvrir, gauche pour refermer ou remonter, Entrée pour choisir
+  await page.focus('#tree .tn.sel');
+  const sel = () => page.evaluate(() => NetCarto.Carto.sel), focus = () => page.evaluate(() => document.activeElement?.dataset.id);
+  const site = await sel();
+  await page.keyboard.press('ArrowDown'); const bat = await focus(); assert.notStrictEqual(bat, site); assert.match(bat, /^bld-/);
+  await page.keyboard.press('ArrowDown'); assert.match(await focus(), /^flr-/);
+  await page.keyboard.press('ArrowRight'); assert.ok(await page.evaluate(() => NetCarto.Carto.open.has(document.activeElement.dataset.id)), 'droite : ouvre');
+  await page.keyboard.press('ArrowDown'); assert.match(await focus(), /^room-/);
+  await page.keyboard.press('Enter'); assert.match(await sel(), /^room-/); assert.match(await focus(), /^room-/, 'le curseur reste sur l\'élément choisi');
+  await page.keyboard.press('ArrowLeft'); assert.match(await focus(), /^flr-/, 'gauche sur une feuille : remonte au parent');
+  await page.keyboard.press('ArrowLeft'); assert.ok(!(await page.evaluate(() => NetCarto.Carto.open.has(document.activeElement.dataset.id))), 'gauche : referme');
+  // Recherche : « / », flèches dans les résultats, Entrée ouvre le résultat choisi
+  await page.keyboard.press('/'); await page.keyboard.type('SW-A1-ACC'); await page.waitForSelector('#gsearch-res .it');
+  await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown');
+  assert.strictEqual(await page.locator('#gsearch-res .it.actif').count(), 1);
+  const attendu = await page.locator('#gsearch-res .it.actif span').first().innerText();
+  await page.keyboard.press('Enter');
+  assert.strictEqual(await page.evaluate(() => NetCarto.Store.idx.id.get(NetCarto.Carto.sel).hostname), attendu);
+  // Une ligne de l'Inventaire s'ouvre avec Entrée ; « ? » affiche les raccourcis ; Tab reste dans la fenêtre
+  await page.keyboard.press('Escape'); await page.keyboard.press('2'); await page.focus('#inv-table tbody tr'); await page.keyboard.press('Enter');
+  assert.strictEqual(await page.$eval('.tab.on', e => e.id), 'tab-carto');
+  await page.evaluate(() => document.activeElement.blur()); await page.keyboard.press('?'); await page.waitForSelector('.modal');
+  assert.match(await page.locator('.modal').innerText(), /Raccourcis clavier[\s\S]*Ctrl \+ Z/);
+  for (let i = 0; i < 6; i++) { await page.keyboard.press('Tab'); assert.ok(await page.evaluate(() => !!document.activeElement.closest('.modal')), 'Tab ne sort pas de la fenêtre'); }
+  await page.keyboard.press('Escape'); assert.strictEqual(await page.locator('.modal').count(), 0);
+});
+test('Historique : filtre par texte et par type, retour à l\'état d\'avant une action', async page => {
+  const nommer = (i, n) => page.evaluate(([i, n]) => NetCarto.Store.commit('edit', 'Renommage en ' + n, db => { db.devices[i].hostname = n; }), [i, n]);
+  await nommer(0, 'HIST-UN'); await nommer(1, 'HIST-DEUX');
+  await page.evaluate(() => NetCarto.installFromStock('cat-c9200l-24p-4g', { rackId: NetCarto.Store.db.racks.find(r => r.name === 'BAIE-A2-01').id, u: 20, name: 'SW-HIST-01' }));
+  await nommer(2, 'HIST-TROIS');
+  await page.click('[data-tab=dash]'); await page.click('[data-act=historique]'); await page.waitForSelector('#hist-list .h-row');
+  assert.ok(await page.locator('#hist-list .h-row').count() >= 4);
+  await page.fill('#hist-q', 'hist-deux'); assert.strictEqual(await page.locator('#hist-list .h-row').count(), 1);
+  await page.fill('#hist-q', ''); await page.selectOption('#hist-type', 'add');
+  assert.ok((await page.locator('#hist-list .h-row').allInnerTexts()).every(t => /Installation|Ajout/.test(t))); assert.ok(await page.locator('#hist-list .h-row', { hasText: 'SW-HIST-01' }).count() === 1);
+  await page.selectOption('#hist-type', '');
+  // Seules les actions encore annulables proposent le retour ; les plus anciennes (jeu de démonstration) non
+  assert.strictEqual(await page.locator('#hist-list [data-act=hist-retour]').count(), 4);
+  await page.locator('#hist-list .h-row', { hasText: 'HIST-DEUX' }).locator('[data-act=hist-retour]').click();
+  assert.match(await page.locator('.modal .body').innerText(), /3 actions seront annulées/);
+  await page.click('[data-act=modal-ok]');
+  assert.deepStrictEqual(await page.evaluate(() => { const d = NetCarto.Store.db; return [d.devices[0].hostname, d.devices[1].hostname === 'HIST-DEUX', d.devices.some(x => x.hostname === 'SW-HIST-01'), d.devices[2].hostname === 'HIST-TROIS', NetCarto.Store.undoStack.length]; }), ['HIST-UN', false, false, false, 1]);
+});
+
 /* ---------- Sauvegarde locale du mode démonstration ---------- */
 const recharger = async page => { await page.waitForTimeout(600); await page.reload(); await page.waitForFunction(() => window.NetCarto?.Store.db); };
 test('Sauvegarde locale : base gardée dans IndexedDB, anciennes données reprises, grand fond de plan accepté', async page => {

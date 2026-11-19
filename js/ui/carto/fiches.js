@@ -78,7 +78,7 @@ const Detail = {
     const u = rackUsage(e.id), c = catOf(e);
     return dHead('rack', e.name, locLabel(e.roomId)) +
       sec('Occupation', `<div class="row"><div class="bar grow"><i style="width:${u.pct}%;background:${u.pct >= RACK_FULL_PCT ? COL.serious : 'var(--accent)'}"></i></div><b>${u.used}/${u.total} U</b></div>`) +
-      sec('', `<div class="btns"><button class="btn sm pri" data-act="c-view" data-v="rack">${ico('cube')}Vue 3D</button><button class="btn sm" data-act="rack-edit" data-id="${e.id}">${ico('edit')}Modifier</button><button class="btn sm danger" data-act="rack-del" data-id="${e.id}">${ico('trash')}Retirer</button></div>`) +
+      sec('', `<div class="btns"><button class="btn sm pri" data-act="c-view" data-v="rack">${ico('cube')}Vue 3D</button><button class="btn sm" data-act="rack-edit" data-id="${e.id}">${ico('edit')}Modifier</button><button class="btn sm" data-act="rack-print" data-id="${e.id}" data-tip="Imprimer|Fiche de la baie et plan de brassage">${ico('list')}Imprimer</button><button class="btn sm danger" data-act="rack-del" data-id="${e.id}">${ico('trash')}Retirer</button></div>`) +
       sec('Caractéristiques', kv([['Modèle', esc(`${c.brand} ${c.model}`)], ['Hauteur', `${e.heightU} U`], ['N° de série', mono(e.serial)], ['Installée le', fmtDate(e.installDate)], ['Statut', stDev(e.status)]])) +
       sec(`Équipements (${u.devices.length})`, u.devices.map(d => li(d.id, d.hostname, `U${d.u}${catOf(d).heightU > 1 ? '–' + (d.u + catOf(d).heightU - 1) : ''}`)).join('') || '<span class="dim">Baie vide</span>');
   },

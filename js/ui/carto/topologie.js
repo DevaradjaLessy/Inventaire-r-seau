@@ -67,7 +67,7 @@ function renderTopo() {
   const H = 720;
   if (!Topo.vb || Topo.w !== W) { Topo.vb = { x: 0, y: 0, w: W, h: H }; Topo.w = W; }
   host.innerHTML = `<svg class="topo" xmlns="http://www.w3.org/2000/svg" viewBox="${Topo.vb.x} ${Topo.vb.y} ${Topo.vb.w} ${Topo.vb.h}">${o.join('')}</svg>
-    <div class="overlay tl"><button class="btn icon" data-act="topo-fit" data-tip="Ajuster">${ico('fit')}</button><button class="btn ${Topo.ends ? 'on' : ''}" data-act="topo-ends" data-tip="Terminaux|Afficher le nombre de terminaux reliés à chaque équipement">${ico('phone')}Terminaux</button>${tr ? `<button class="btn on" data-act="trace-clear">${ico('x')}Effacer le tracé</button>` : ''}</div>
+    <div class="overlay tl"><button class="btn icon" data-act="topo-fit" data-tip="Ajuster">${ico('fit')}</button><button class="btn icon" data-act="topo-image" data-tip="Image|Télécharger la topologie en image (PNG)">${ico('download')}</button><button class="btn ${Topo.ends ? 'on' : ''}" data-act="topo-ends" data-tip="Terminaux|Afficher le nombre de terminaux reliés à chaque équipement">${ico('phone')}Terminaux</button>${tr ? `<button class="btn on" data-act="trace-clear">${ico('x')}Effacer le tracé</button>` : ''}</div>
     <div class="overlay bl legend"><b>Liens</b><span><i style="background:var(--link2);height:3px"></i>10 Gb/s et plus</span><span><i style="background:var(--link1);height:2px"></i>1 Gb/s</span><span><i style="background:${COL.down};height:2px"></i>inactif</span><span><i style="background:${COL.crit};height:3px"></i>en erreur</span><span>×2 : liens redondants</span><span>Niveaux calculés à partir du câblage</span></div>`;
   if (!host.dataset.pz) { host.dataset.pz = '1'; panZoom(host, 'svg.topo', () => Topo.vb); }
 }

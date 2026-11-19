@@ -562,6 +562,15 @@ Les tables `utilisateurs` et `audit` viendront avec la migration du lot 17.
 - **Corrections faites au passage :** la légende ne bloque plus les appuis sur le plan ; la fenêtre « Sauvegardes » passe à la ligne sur écran étroit.
 - **Limite :** tout est vérifié dans Chromium en émulation de téléphone (390 px, contacts d'écran envoyés comme de vrais doigts), pas sur un appareil réel. Safari sur iPhone n'a pas été essayé.
 
+### 3.25 Confort (lot 15)
+
+- **Impression** (`js/ui/impression.js`) : bouton « Imprimer » de la fiche d'une baie. Le document contient la fiche de la baie (une ligne par équipement : position, nom, type, modèle, série, IP, statut) puis, sur une nouvelle page, le plan de brassage (pour chaque port actif câblé : VLAN, état, panneaux et prises traversés, équipement au bout, cordon). Il est écrit dans `#print-root`, invisible à l'écran ; la feuille de style d'impression ne montre que lui, en thème clair.
+- **Export en image** (`js/ui/export-image.js`) : bouton de téléchargement sur le plan et sur la topologie. Le dessin est copié avec ses styles calculés, puis tracé en PNG de 2 400 px de large. Le plan exporté est toujours l'étage entier, quel que soit le zoom à l'écran. Compatible avec la politique de sécurité du contenu.
+- **Clavier** (`js/ui/clavier.js`) : `1` à `4` changent d'onglet ; dans l'arbre, les flèches parcourent, ouvrent, referment ou remontent, `Entrée` choisit ; dans la recherche, les flèches parcourent les résultats et `Entrée` ouvre celui qui est choisi ; une ligne de l'Inventaire s'ouvre avec `Entrée` ; `Tab` reste dans la fenêtre ouverte ; `?` affiche la liste des raccourcis.
+- **Historique** (`js/ui/historique.js`) : bouton « Tout voir » de la carte « Dernières actions » du Tableau de bord. Filtre par texte et par type. « Revenir avant » défait l'action choisie et toutes celles faites après elle, après confirmation du nombre d'actions annulées.
+- **Limite du retour en arrière :** il porte sur les actions de la visite en cours, 25 au plus (la pile d'annulation). Pour revenir plus loin : les copies de secours en mode démonstration (3.23), les sauvegardes en mode serveur (3.18).
+- **Non fait :** impression du plan d'un étage (l'export en image y répond) ; choix du format de papier.
+
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
@@ -590,7 +599,7 @@ Les tables `utilisateurs` et `audit` viendront avec la migration du lot 17.
 | 12 | **Harmonisation visuelle :** appliquer le style du tableau de bord et de l'inventaire à la Cartographie et au Matériel ; sol et baie de la vue 3D adaptés au thème clair | Moyen à élevé | ✅ Fait |
 | 13 | **Téléphone :** zoom du plan par pincement, élévation de baie accessible, glisser-déposer au doigt, vérification sur un vrai appareil | Moyen à élevé | ✅ Fait (voir 3.24), sauf la vérification sur un vrai appareil, qui reste à faire par l'utilisateur |
 | 14 | **Montée en charge :** jeu de test de grande taille, mesures, puis réaffichage partiel et affichage limité à la zone visible si nécessaire | Élevé (high) | ✅ Fait (voir 3.19). Réaffichage partiel jugé inutile à cette taille, d'après les mesures. |
-| 15 | **Confort :** impression d'une fiche de baie et d'un plan de brassage, export en image du plan et de la topologie, navigation au clavier, historique filtrable avec retour à un état antérieur | Moyen | ⏳ À faire |
+| 15 | **Confort :** impression d'une fiche de baie et d'un plan de brassage, export en image du plan et de la topologie, navigation au clavier, historique filtrable avec retour à un état antérieur | Moyen | ✅ Fait (voir 3.25) |
 
 | 16 | **Serveur et base :** serveur Node, API, SQLite, schéma, couche d'accès aux données, bascule de l'interface vers l'API, mode démo conservé | Maximal (max) | ✅ Fait |
 | 17 | **Comptes et sécurité :** comptes, rôles, journal d'audit, modifications concurrentes, HTTPS | Très élevé (xhigh) | ✅ Fait |
@@ -637,7 +646,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-18 | Peut-on encore peaufiner le design ? | ✅ Fait (lot 12) : typographie et espacements revus, en-tête plus aéré avec onglets en pastilles, boutons et champs arrondis avec transitions, anneau de focus au clavier, fiches de détail en cartes (Cartographie et Matériel), barres d'outils flottantes translucides sur le plan et la 3D, arbre à lignes arrondies, cartes du catalogue avec effet au survol, fenêtres et notifications animées. Vérifié dans les deux thèmes et sur téléphone. |
 | 2026-11-19 | **Nouvelle orientation :** NetCarto devient un logiciel serveur installable sur Linux, avec ou sans Docker, avec sa propre base de données (décisions détaillées, lots 16 à 22, ordre de réalisation, méthode « tests avant le code ») | ✅ Décisions notées en 3.14, lots ajoutés en section 4. **Lot 16 fait** (voir 3.15) : serveur Node dans `serveur/`, base SQLite relationnelle, API `/api/v1`, interface basculée sur l'API, page GitHub Pages inchangée. Prochain lot : 17. |
 | 2026-11-19 | « Continue à tout concevoir, je vais tester à la maison » | ✅ Lots 17, 11, 18, 14, 19, 20 et 22 faits (voir 3.16 à 3.22). Restent, hors de l'ordre fixé : la fin du lot 9, les lots 13 et 15. |
-| 2026-11-19 | « Tu as tout fini ? Si non, fais tout » | 🔄 Fin du lot 9 (voir 3.23) et lot 13 (voir 3.24) faits. Suite : lot 15 et les vérifications laissées de côté. |
+| 2026-11-19 | « Tu as tout fini ? Si non, fais tout » | ✅ Fin du lot 9 (3.23), lot 13 (3.24) et lot 15 (3.25) faits. Tous les lots du tableau sont faits. Reste à l'utilisateur : essai sur un vrai téléphone, sur Ubuntu, et avec un vrai PRTG ou de vrais switchs. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---

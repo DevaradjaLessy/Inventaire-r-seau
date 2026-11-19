@@ -140,14 +140,16 @@ const Store = {
     try { res = fn(this.db); }
     catch (e) { this.db = JSON.parse(snap); this.reindex(); throw e; }
     const jeton = ++this.jetons;
+    let hid = null;   // entrée de l'historique liée à cette modification (pour « revenir avant »)
     if (text) {
-      this.db.history.unshift({ id: nextId(this.db, 'h'), ts: Date.now(), type, text, ref });
+      hid = nextId(this.db, 'h');
+      this.db.history.unshift({ id: hid, ts: Date.now(), type, text, ref });
       if (this.db.history.length > this.MAX_HISTORY) this.db.history.length = this.MAX_HISTORY;
     }
     this.db.meta.updatedAt = Date.now();
     // L'annulation garde l'écart avec l'état d'avant, pas une copie de toute la base
     const { changements, retour } = ecartEntre(JSON.parse(snap), this.db);
-    this.undoStack.push({ retour, text, jeton });
+    this.undoStack.push({ retour, text, jeton, hid });
     if (this.undoStack.length > this.MAX_UNDO) this.undoStack.shift();
     this.reindex(); this.save(); this.emit();
     if (this.mode === 'serveur' && changements.length) Sync.envoyerLot({ type, texte: text || '', changements }).catch(e => this.surRefus(e, jeton));

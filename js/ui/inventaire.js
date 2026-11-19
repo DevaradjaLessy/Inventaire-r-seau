@@ -88,7 +88,7 @@ function renderInvTable() {
   $('#inv-pager').innerHTML = `<span class="muted" id="inv-count">${rows.length ? `${from + 1} – ${from + page.length} sur ${rows.length}` : '0 élément'}${INV_GROUPS[Inv.group] ? ` · ${INV_GROUPS[Inv.group].label}` : ''}</span>
     <button class="btn icon" data-act="inv-page" data-d="-1" ${Inv.page ? '' : 'disabled'} data-tip="Page précédente">${ico('chevr', 'flip')}</button><button class="btn icon" data-act="inv-page" data-d="1" ${Inv.page < pages - 1 ? '' : 'disabled'} data-tip="Page suivante">${ico('chevr')}</button>`;
   $('#inv-table').innerHTML = rows.length ? `<table class="it"><thead><tr>${INV_COLS.map(([k, l]) => `<th data-act="inv-sort" data-k="${k}" class="${Inv.sort === k ? 'on' : ''}">${l}<span class="so">${Inv.sort === k ? (Inv.dir > 0 ? '▲' : '▼') : '↕'}</span></th>`).join('')}<th></th></tr></thead><tbody>
-    ${page.map(r => `<tr data-act="inv-go" data-id="${r.id}" data-tip="${esc(r.hostname)}|Clic : ouvrir dans la Cartographie">
+    ${page.map(r => `<tr tabindex="0" data-act="inv-go" data-id="${r.id}" data-tip="${esc(r.hostname)}|Clic : ouvrir dans la Cartographie">
       <td class="muted">${r.type}</td>
       <td><div class="nm"><span class="tile" style="color:${CATEGORIES[r.cat].color}">${ico(CATEGORIES[r.cat].icon)}</span><b>${esc(r.hostname)}</b></div></td>
       <td>${esc(r.brand)}</td><td>${esc(r.model)}</td><td class="muted">${esc(r.loc)}</td>

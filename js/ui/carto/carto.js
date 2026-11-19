@@ -125,15 +125,19 @@ function renderTree() {
     if (t === 'rack') meta = `${rackUsage(id).pct} %`;
     if (t === 'device') { meta = e.rackId ? `U${e.u}` : ''; if (e.status !== 'active') dot = `<i class="dotst" style="background:${DEVICE_STATUS[e.status].color}"></i>`; }
     if (t === 'room' && kids.length) meta = kids.length;
-    html.push(`<div class="tn ${Carto.sel === id ? 'sel' : ''}" style="padding-left:${4 + depth * 14}px" data-act="sel" data-id="${id}">
+    html.push(`<div class="tn ${Carto.sel === id ? 'sel' : ''}" role="treeitem" tabindex="${Carto.sel === id ? 0 : -1}" style="padding-left:${4 + depth * 14}px" data-act="sel" data-id="${id}">
       <span class="car" ${kids.length ? `data-act="tree-toggle" data-id="${id}"` : ''}>${kids.length ? ico(open ? 'chevd' : 'chevr') : ''}</span>
       <span class="lb">${ico(iconOf(id))}<span>${esc(label)}</span>${dot}</span>${meta !== '' ? `<small>${meta}</small>` : ''}</div>`);
     if (open) for (const k of kids) node(k, depth + 1);
   };
   for (const s of Store.db.sites) node(s.id, 0);
+  // Curseur du clavier : il reste sur le même élément quand l'arbre est redessiné
+  const curseur = document.activeElement?.closest?.('#tree .tn')?.dataset.id;
   const top = host.scrollTop;
   host.innerHTML = html.join('') || `<div class="empty">${Store.db.sites.length ? 'Aucun résultat' : 'Aucun site pour l\'instant'}</div>`;
   host.scrollTop = top;
+  if (curseur) { const n = host.querySelector(`.tn[data-id="${curseur}"]`); if (n) { for (const x of host.querySelectorAll('.tn[tabindex="0"]')) x.tabIndex = -1; n.tabIndex = 0; n.focus({ preventScroll: true }); } }
+  if (!host.querySelector('.tn[tabindex="0"]')) host.querySelector('.tn')?.setAttribute('tabindex', '0');
 }
 function revealInTree() { $('#tree .tn.sel')?.scrollIntoView({ block: 'nearest' }); }
 

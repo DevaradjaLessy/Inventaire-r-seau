@@ -71,6 +71,30 @@ a{color:var(--accent)}
 .u-new{display:grid;grid-template-columns:1fr 1fr 150px 1.4fr auto;gap:8px}
 .u-new input,.u-new select,.u-row select{width:100%}
 .a-row{display:grid;grid-template-columns:118px 90px 190px minmax(0,1fr);gap:10px;align-items:start;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}
+.h-row{display:grid;grid-template-columns:118px 110px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.h-row .chip{justify-self:start}
+#hist-list{max-height:52vh;overflow:auto}
+.kb-list{display:grid;grid-template-columns:auto 1fr;gap:10px 16px;align-items:center}
+.kb-list kbd{font-family:var(--mono);font-size:12px;padding:3px 8px;border:1px solid var(--line2);border-radius:6px;background:var(--panel2);white-space:nowrap;justify-self:start}
+#gsearch-res .it.actif{background:var(--accent-bg)}
+.tn:focus-visible,tr[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+/* Impression : seul le document préparé dans #print-root est imprimé, en clair */
+#print-root{display:none}
+@media print{
+  body{display:block;height:auto;overflow:visible;background:var(--panel)}
+  body>*:not(#print-root){display:none!important}
+  #print-root{display:block;color:var(--txt);font-size:10.5pt;padding:0}
+  #print-root h1{font-size:16pt;margin:0 0 4pt}
+  #print-root h2{font-size:11.5pt;margin:12pt 0 4pt;break-after:avoid}
+  #print-root h2 small{font-weight:400;color:var(--txt2)}
+  #print-root .pr-sous{margin:0 0 8pt;color:var(--txt2)}
+  #print-root table{width:100%;border-collapse:collapse;break-inside:auto}
+  #print-root th,#print-root td{border:1px solid var(--line3);padding:3pt 5pt;text-align:left;vertical-align:top}
+  #print-root th{background:var(--panel3);font-size:9pt}
+  #print-root tr{break-inside:avoid}
+  #print-root .pr-brassage{break-before:page}
+  #print-root .pr-pied{margin-top:10pt;color:var(--txt3);font-size:8.5pt}
+}
 .cp-row{display:grid;grid-template-columns:150px minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
 .sv-row{display:grid;grid-template-columns:130px minmax(0,1fr) 80px auto;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
 .sv-row .nom{font-family:var(--mono);font-size:12px;color:var(--txt2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -520,7 +544,8 @@ svg.plan,svg.topo{touch-action:none}
   .form-grid .full,.form-grid label[style]{grid-column:auto!important}
   .pg-row{grid-template-columns:1fr 1fr 1fr;padding:8px;border:1px solid var(--line);border-radius:8px}
   .vl-row{grid-template-columns:70px 1fr 46px;padding:8px;border:1px solid var(--line);border-radius:8px}
-  .u-row,.u-new,.a-row,.sv-row,.cp-row{grid-template-columns:1fr}
+  .u-row,.u-new,.a-row,.sv-row,.cp-row,.h-row{grid-template-columns:1fr}
+  .h-row{gap:4px}
   .sv-row{gap:4px}
   .tools #user-chip span{display:none}
   /* Cartographie : la vue occupe l'écran, l'arbre et la fiche s'ouvrent en volets */
