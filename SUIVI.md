@@ -618,7 +618,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 
 | Quoi | Qui | Statut |
 |---|---|---|
-| **Ranger les branches du dépôt.** Créer une branche `main` avec le contenu actuel ; la choisir comme branche par défaut (GitHub : *Settings → General → Default branch*) et, si GitHub Pages est activé, comme source (*Settings → Pages*) ; supprimer ensuite les deux branches `claude/serene-johnson-wll23d` et `claude/upbeat-ptolemy-lq3vu6`, qui sont identiques. | Claude crée `main` sur demande ; les réglages GitHub et la suppression sont à faire par l'utilisateur | ⏳ À faire |
+| **Ranger les branches du dépôt.** La branche `main` existe (créée le 2026-11-19, identique aux deux autres). Reste, dans GitHub : la choisir comme branche par défaut (*Settings → General → Default branch*) et, si GitHub Pages est activé, comme source (*Settings → Pages*) ; puis supprimer `claude/serene-johnson-wll23d` et `claude/upbeat-ptolemy-lq3vu6` (page *Branches* du dépôt). | Utilisateur (réglages GitHub, hors de portée de Claude) | 🔄 `main` créée ; réglages à faire |
 | Essayer NetCarto sur un vrai téléphone (Android, et Safari sur iPhone) | Utilisateur | ⏳ À faire |
 | Essayer `installer.sh` sur Ubuntu, et l'installation en ligne sur une vraie machine | Utilisateur | ⏳ À faire |
 | Essayer les connecteurs avec un vrai PRTG ou de vrais switchs (SNMP) | Utilisateur | ⏳ À faire |
@@ -658,6 +658,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-19 | « Tu as tout fini ? Si non, fais tout » | ✅ Fin du lot 9 (3.23), lot 13 (3.24) et lot 15 (3.25) faits. Tous les lots du tableau sont faits. Reste à l'utilisateur : essai sur un vrai téléphone, sur Ubuntu, et avec un vrai PRTG ou de vrais switchs. |
 | 2026-11-19 | « Fusionne tout sur la branche principale » | ✅ La branche par défaut du dépôt (`claude/serene-johnson-wll23d`) a été avancée jusqu'au dernier commit de la branche de travail, sans réécriture d'historique. Les deux branches sont identiques. |
 | 2026-11-19 | « Pourquoi deux branches ? » puis « Mets en rappel à faire » | ✅ Rangement des branches noté dans les rappels de la section 4, avec les essais qui restent à faire par l'utilisateur. |
+| 2026-11-19 | « Fais-le, prends la main » | ✅ Branche `main` créée et poussée. Le changement de branche par défaut et la suppression des anciennes branches se font dans les réglages GitHub : voir les rappels de la section 4. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---
