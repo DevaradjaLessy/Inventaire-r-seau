@@ -201,6 +201,82 @@ test('Téléphone : pas de débordement, arbre et fiche en volets', async page =
   for (const t of ['inv', 'mat', 'dash']) { await page.tap(`[data-tab=${t}]`); assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, t); }
 }, { mobile: true });
 
+/* Gestes au doigt, envoyés comme de vrais contacts d'écran. points : [[x, y], …] par doigt */
+async function doigts(page, depart, arrivee, pas = 8) {
+  const cdp = await page.context().newCDPSession(page), pts = l => l.map(([x, y], i) => ({ x, y, id: i }));
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pts(depart) });
+  for (let k = 1; k <= pas; k++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: pts(depart.map(([x, y], i) => [x + (arrivee[i][0] - x) * k / pas, y + (arrivee[i][1] - y) * k / pas])) });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+}
+const centre = async (page, sel) => { const b = await page.locator(sel).first().boundingBox(); return [b.x + b.width / 2, b.y + b.height / 2]; };
+test('Téléphone : zoom du plan en écartant deux doigts, déplacement à un doigt', async page => {
+  await page.evaluate(() => NetCarto.select(NetCarto.Store.db.floors[1].id));
+  const vb = () => page.evaluate(() => ({ ...NetCarto.Carto.vbs[NetCarto.Carto.floorId] }));
+  const [cx, cy] = await centre(page, 'svg.plan'), v0 = await vb();
+  await doigts(page, [[cx - 30, cy], [cx + 30, cy]], [[cx - 120, cy], [cx + 120, cy]]);
+  const v1 = await vb();
+  assert.ok(v1.w < v0.w * 0.4, `écarter les doigts doit zoomer (largeur ${Math.round(v0.w)} → ${Math.round(v1.w)})`);
+  assert.ok(Math.abs((v1.x + v1.w / 2) - (v0.x + v0.w / 2)) < v0.w * 0.05, 'le point entre les doigts reste en place');
+  await doigts(page, [[cx - 120, cy], [cx + 120, cy]], [[cx - 40, cy], [cx + 40, cy]]);
+  const v2 = await vb(); assert.ok(v2.w > v1.w * 2.5, 'rapprocher les doigts doit dézoomer');
+  await doigts(page, [[cx, cy]], [[cx + 60, cy + 40]]);
+  const v3 = await vb(); assert.ok(v3.x < v2.x && v3.y < v2.y && Math.abs(v3.w - v2.w) < 0.01, 'un doigt déplace le plan sans changer le zoom');
+  assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+}, { mobile: true });
+test('Téléphone : l\'élévation de la baie est accessible, on y choisit un équipement ou une U libre', async page => {
+  await page.evaluate(() => NetCarto.select(NetCarto.Store.db.racks.find(r => r.name === 'BAIE-A2-01').id));
+  await page.waitForSelector('.rv-switch'); assert.ok(!(await page.isVisible('#elev')), 'par défaut : la 3D');
+  await page.tap('[data-act=rv-vue][data-v=elev]');
+  assert.ok(await page.isVisible('#elev .elev-grid')); assert.ok(!(await page.isVisible('.r3d')));
+  assert.ok(await page.locator('#elev .eu.dev').count() > 5);
+  assert.ok((await page.locator('#elev .eu.dev').first().boundingBox()).height >= 30, 'lignes assez hautes pour le doigt');
+  await page.tap('#elev .eu.dev >> text=SW-A2-ACC-01');
+  assert.strictEqual(await page.evaluate(() => NetCarto.Store.idx.id.get(NetCarto.Carto.sel).hostname), 'SW-A2-ACC-01');
+  await page.tap('#elev .eu.free[data-u="30"]'); await page.waitForSelector('.modal'); assert.match(await page.locator('.modal h2').innerText(), /Installer en U30/);
+  await page.tap('[data-act=modal-close]'); await page.tap('[data-act=rv-vue][data-v=r3d]'); assert.ok(await page.isVisible('.r3d'));
+  assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+}, { mobile: true });
+test('Téléphone : installer depuis le stock en touchant le modèle puis l\'emplacement (plan et baie)', async page => {
+  await page.evaluate(() => NetCarto.select(NetCarto.Store.db.floors[2].id));
+  const n0 = await page.evaluate(() => NetCarto.Store.db.devices.length);
+  await page.tap('[data-act=palette]'); await page.tap('.pal-it[data-cat=cat-u6-pro]');
+  assert.ok(await page.locator('.pal-it[data-cat=cat-u6-pro].arme').count() === 1); assert.match(await page.locator('.toast').last().innerText(), /Touchez l'endroit/);
+  // La palette se replie pour laisser voir le plan ; on touche une pièce
+  const cible = await page.evaluate(() => { const r = NetCarto.Store.db.rooms.find(x => x.name === 'Bureaux DSI'), svg = document.querySelector('svg.plan'), p = new DOMPoint((r.x + r.w / 2) * 20, (r.y + r.h / 2) * 20).matrixTransform(svg.getScreenCTM()); return [p.x, p.y]; });
+  await page.touchscreen.tap(cible[0], cible[1]);
+  await page.waitForFunction(n => NetCarto.Store.db.devices.length === n + 1, n0);
+  assert.strictEqual(await page.evaluate(() => { const d = NetCarto.Store.db.devices.at(-1); return NetCarto.Store.idx.id.get(d.roomId).name + ' ' + d.catalogId; }), 'Bureaux DSI cat-u6-pro');
+  assert.strictEqual(await page.locator('.pal-it.arme').count(), 0, 'un seul équipement par choix');
+  // En baie : modèle touché, puis U libre touchée dans l'élévation
+  await page.evaluate(() => NetCarto.select(NetCarto.Store.db.racks.find(r => r.name === 'BAIE-A2-01').id));
+  await page.tap('[data-act=rv-vue][data-v=elev]'); await page.tap('.pal-it[data-cat=cat-c9200l-24p-4g]'); await page.tap('#elev .eu.free[data-u="25"]');
+  await page.waitForFunction(n => NetCarto.Store.db.devices.length === n + 2, n0);
+  assert.deepStrictEqual(await page.evaluate(() => { const d = NetCarto.Store.db.devices.at(-1); return [d.u, NetCarto.Store.idx.id.get(d.rackId).name]; }), [25, 'BAIE-A2-01']);
+}, { mobile: true });
+test('Téléphone : glisser au doigt un modèle du stock vers le plan, et déplacer une prise en mode Édition', async page => {
+  await page.evaluate(() => NetCarto.select(NetCarto.Store.db.floors[2].id));
+  const n0 = await page.evaluate(() => NetCarto.Store.db.devices.length);
+  await page.tap('[data-act=palette]');
+  const poignee = await centre(page, '.pal-it[data-cat=cat-u6-pro] .pal-grip');
+  const cible = await page.evaluate(() => { const r = NetCarto.Store.db.rooms.find(x => x.name === 'Bureaux DSI'), svg = document.querySelector('svg.plan'), p = new DOMPoint((r.x + 3) * 20, (r.y + 2) * 20).matrixTransform(svg.getScreenCTM()); return [p.x, p.y]; });
+  await doigts(page, [poignee], [cible], 12);
+  await page.waitForFunction(n => NetCarto.Store.db.devices.length === n + 1, n0);
+  assert.strictEqual(await page.evaluate(() => NetCarto.Store.idx.id.get(NetCarto.Store.db.devices.at(-1).roomId).name), 'Bureaux DSI');
+  assert.strictEqual(await page.locator('.pal-fantome').count(), 0, 'l\'image qui suit le doigt disparaît');
+  // Mode Édition : une prise suit le doigt
+  await page.tap('.palette [data-act=palette]'); await page.tap('[data-act=plan-edit]');
+  // Comme sur un vrai téléphone, on zoome d'abord sur la zone : à l'échelle de l'étage entier, une prise est trop petite pour le doigt
+  const prise = await page.evaluate(() => { const C = NetCarto.Carto, o = NetCarto.Store.db.outlets.find(x => NetCarto.Store.idx.id.get(x.roomId).name === 'Bureaux DSI'), vb = C.vbs[C.floorId], w = 200, h = w * vb.h / vb.w;
+    Object.assign(vb, { x: o.x * 20 - w / 2, y: o.y * 20 - h / 2, w, h }); return { id: o.id, x: o.x, y: o.y }; });
+  await page.tap('[data-act=plan-zoom][data-k="0.7"]');
+  prise.p = await page.evaluate(i => { const el = document.querySelector(`svg.plan [data-drag="${i}"] rect`).getBoundingClientRect(); return [el.x + el.width / 2, el.y + el.height / 2]; }, prise.id);
+  assert.strictEqual(await page.evaluate(([i, p]) => document.elementFromPoint(p[0], p[1])?.closest('[data-drag]')?.dataset.drag === i, [prise.id, prise.p]), true, 'la prise doit être sous le doigt');
+  await doigts(page, [prise.p], [[prise.p[0] + 14, prise.p[1] + 10]], 10);
+  const apres = await page.evaluate(i => { const o = NetCarto.Store.idx.id.get(i); return [o.x, o.y]; }, prise.id);
+  assert.ok(apres[0] > prise.x + 0.1 && apres[1] > prise.y + 0.1, `la prise doit avoir bougé (${prise.x},${prise.y} → ${apres})`);
+}, { mobile: true });
+
 /* ---------- Qualité des données : import CSV, doublons, déplacement ---------- */
 const fichierCsv = (nom, texte) => ({ name: nom, mimeType: 'text/csv', buffer: Buffer.from('\ufeff' + texte, 'utf8') });
 test('Import CSV d\'équipements : aperçu, lignes refusées expliquées, import d\'un bloc, annulable', async page => {

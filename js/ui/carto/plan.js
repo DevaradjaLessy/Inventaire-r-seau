@@ -12,7 +12,7 @@ import { renderPalette } from '../materiel/palette.js';
 import { emptyState, roomDrawn } from './structure.js';
 
 /* ---------- Plan 2D ---------- */
-const planDrag = { moved: false };
+const planDrag = { moved: false, geste: 0 };
 /* Contenu SVG d'un étage. mini = vignette (pièces et baies seulement) */
 function planSvg(floor, mini) {
   const I = Store.idx, rooms = I.roomsByFloor.get(floor.id) || [], sel = Carto.sel, o = [];
@@ -131,16 +131,44 @@ function initPlanEvents(host) {
     vb.x = pt.x - (pt.x - vb.x) * k; vb.y = pt.y - (pt.y - vb.y) * k; vb.w = nw; vb.h *= k;
     applyVb(svg);
   }, { passive: false });
+  // Deux doigts sur le plan : zoom par pincement, centré entre les doigts, avec déplacement
+  const doigts = new Map();
+  let pince = null;
+  const ecart = () => { const [a, b] = [...doigts.values()]; return { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; };
+  const lacher = e => { doigts.delete(e.pointerId); if (doigts.size < 2) pince = null; };
+  addEventListener('pointerup', lacher); addEventListener('pointercancel', lacher);
+  addEventListener('pointermove', e => {
+    if (!doigts.has(e.pointerId)) return;
+    doigts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const svg = $('svg.plan', host), vb = Carto.vbs[Carto.floorId];
+    if (!pince || !svg || !vb) return;
+    const g = ecart(), w = clamp(pince.vb.w * pince.d / g.d, 80, 6000), k = w / pince.vb.w;
+    vb.w = w; vb.h = pince.vb.h * k;
+    vb.x = pince.c.x - (pince.c.x - pince.vb.x) * k - (g.x - pince.x) * pince.inv * k;
+    vb.y = pince.c.y - (pince.c.y - pince.vb.y) * k - (g.y - pince.y) * pince.inv * k;
+    applyVb(svg);
+  });
   host.addEventListener('pointerdown', e => {
     const svg = $('svg.plan', host);
     if (!svg || e.button !== 0 || !e.target.closest('svg.plan')) return;
-    const vb = Carto.vbs[Carto.floorId], sx = e.clientX, sy = e.clientY, inv = svg.getScreenCTM().inverse().a;
+    if (e.pointerType === 'touch') {
+      doigts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (doigts.size === 2 && !Carto.draw) {
+        const g = ecart(), m = svg.getScreenCTM().inverse();
+        pince = { ...g, vb: { ...Carto.vbs[Carto.floorId] }, c: new DOMPoint(g.x, g.y).matrixTransform(m), inv: m.a };
+        planDrag.geste++; planDrag.moved = true; Tip.hide(); svg.classList.remove('panning');
+        return;
+      }
+      if (doigts.size > 2) return;
+    }
+    const vb = Carto.vbs[Carto.floorId], sx = e.clientX, sy = e.clientY, inv = svg.getScreenCTM().inverse().a, geste = ++planDrag.geste;
     if (Carto.draw) return drawRoom(svg, e);
     const dragEl = Carto.edit ? e.target.closest('[data-drag]') : null;
     const start = { x: vb.x, y: vb.y }, p0 = svgPoint(svg, e);
     let last = null;
     planDrag.moved = false;
     const move = ev => {
+      if (ev.pointerId !== e.pointerId || planDrag.geste !== geste) return;   // un second doigt a pris la main (pincement)
       if (!planDrag.moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return;
       planDrag.moved = true; Tip.hide();
       if (dragEl) {
@@ -154,12 +182,14 @@ function initPlanEvents(host) {
         applyVb(svg);
       }
     };
-    const up = () => {
-      removeEventListener('pointermove', move); removeEventListener('pointerup', up);
+    const up = ev => {
+      if (ev.pointerId !== e.pointerId) return;
+      removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up);
       svg.classList.remove('panning');
+      if (planDrag.geste !== geste || ev.type === 'pointercancel') return;
       if (dragEl && last) run(() => moveOnPlan(dragEl.dataset.drag, +last.x.toFixed(2), +last.y.toFixed(2)));
     };
-    addEventListener('pointermove', move); addEventListener('pointerup', up);
+    addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up);
   });
   // Un glisser ne doit pas déclencher le clic de sélection
   host.addEventListener('click', e => { if (planDrag.moved) { e.stopPropagation(); e.preventDefault(); planDrag.moved = false; } }, true);

@@ -274,7 +274,9 @@ svg.plan .trace-halo{fill:var(--hl-bg);stroke:var(--hl);stroke-width:1.6;pointer
 .hop b{font-weight:600}
 
 /* --- Vue 3D et élévation de baie --- */
-.rackview{display:grid;grid-template-columns:236px minmax(0,1fr);width:100%;height:100%}
+.rackview{display:grid;grid-template-columns:236px minmax(0,1fr);width:100%;height:100%;position:relative}
+.rv-switch{display:none}
+#palette-host-r{position:absolute;inset:0;pointer-events:none} #palette-host-r .palette{pointer-events:auto}
 .elev{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:14px 12px}
 .elev h4{font-size:13px;display:flex;align-items:center;gap:6px;margin-bottom:2px}
 .elev .sub{color:var(--txt2);font-size:11.5px;margin-bottom:8px}
@@ -298,7 +300,12 @@ svg.plan .trace-halo{fill:var(--hl-bg);stroke:var(--hl);stroke-width:1.6;pointer
 .palette h4{padding:9px 11px;border-bottom:1px solid var(--line);font-size:12.5px;display:flex;align-items:center;gap:6px}
 .palette .list{overflow:auto;padding:6px;display:flex;flex-direction:column;gap:5px}
 .pal-it{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel2);cursor:grab;font-size:12px}
-.pal-it:hover{border-color:var(--accent)}
+.pal-it:hover,.pal-it.arme{border-color:var(--accent)}
+.pal-it.arme{background:var(--accent-bg)}
+.pal-grip{display:none;touch-action:none;color:var(--txt3);padding:6px 4px;margin:-6px -4px -6px 0;cursor:grab}
+@media (pointer:coarse){.pal-grip{display:inline-flex}}
+.pal-fantome{position:fixed;left:0;top:0;z-index:200;pointer-events:none;opacity:.92;border-color:var(--accent);box-shadow:0 6px 18px var(--shadow)}
+.palette.glisse{opacity:.25;pointer-events:none}
 .pal-it .ico{color:var(--txt2)}
 .pal-it b{font-weight:600;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px}
 .pal-it small{color:var(--txt2)}
@@ -532,9 +539,14 @@ svg.plan,svg.topo{touch-action:none}
   .overlay.tl{flex-wrap:wrap;right:8px;left:8px;top:8px}
   .overlay.tl select{max-width:150px;height:34px}
   .overlay .btn{height:34px}
-  .legend{font-size:10.5px;padding:5px 8px;gap:4px 9px;left:8px!important;right:8px;bottom:8px!important;max-width:none}
-  .rackview{grid-template-columns:1fr}
+  .legend{pointer-events:none;font-size:10.5px;padding:5px 8px;gap:4px 9px;left:8px!important;right:8px;bottom:8px!important;max-width:none}
+  .rackview{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}
+  .rv-switch{margin:6px 8px;display:flex!important} .rv-switch button{flex:1;justify-content:center;height:34px}
   .elev{display:none}
+  .rackview.m-elev .elev{display:block;border-right:0;padding-bottom:130px}
+  .rackview.m-elev .r3d{display:none}
+  .pal-grip{display:inline-flex}
+  .palette.arme-on{height:auto} .palette.arme-on .pal-it:not(.arme){display:none}
   .palette{left:8px;right:8px;top:auto;bottom:8px;width:auto;height:46%}
   .floor-cards{grid-template-columns:1fr;padding:10px}
   .fld{grid-template-columns:100px 1fr}

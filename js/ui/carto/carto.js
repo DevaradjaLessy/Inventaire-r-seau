@@ -20,6 +20,7 @@ const Carto = {
   vbs: {},              // cadrage du plan, par étage
   edit: false, wifi: false, palette: false,
   draw: false,          // tracé d'une nouvelle pièce à la souris
+  arme: null,           // modèle du stock choisi dans la palette, à poser au prochain appui
   trace: null,          // chemin de câblage affiché
   built: false,
 };

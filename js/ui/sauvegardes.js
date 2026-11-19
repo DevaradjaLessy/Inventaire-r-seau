@@ -24,8 +24,8 @@ async function charger() {
 function ouvrir() {
   Modal.open({ title: 'Sauvegardes', wide: true, ok: false, cancel: 'Fermer',
     body: `<p class="muted" id="sv-reglages" style="margin:0 0 12px">Chargement…</p>
-      <div class="row" style="margin-bottom:8px"><button class="btn pri" data-act="sv-creer">${ico('download')}Sauvegarder maintenant</button>
-        <span class="muted">Une sauvegarde contient toute la base : téléchargez-en une de temps en temps pour la garder ailleurs que sur le serveur.</span></div>
+      <div class="row" style="margin-bottom:8px;flex-wrap:wrap"><button class="btn pri" data-act="sv-creer">${ico('download')}Sauvegarder maintenant</button>
+        <span class="muted" style="flex:1 1 240px">Une sauvegarde contient toute la base : téléchargez-en une de temps en temps pour la garder ailleurs que sur le serveur.</span></div>
       <div id="sv-list"><div class="empty">Chargement…</div></div>` });
   charger().catch(erreur);
 }

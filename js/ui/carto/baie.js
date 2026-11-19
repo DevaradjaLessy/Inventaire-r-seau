@@ -6,23 +6,26 @@ import { Store } from '../../store.js';
 import { byId, cablesOf, catOf, deviceIcon, labelOf, locLabel, locOf, portsOf, rackMap, rackUsage, vlanOf } from '../../services/requetes.js';
 import { STATE_COL, STATE_LABEL } from '../../services/cablage.js';
 import { Viewer3D } from '../../3d/viewer.js';
-import { Actions, Changes } from '../socle.js';
+import { Actions, Changes, isMobile } from '../socle.js';
 import { Carto, select, Views3D } from './carto.js';
 import { opt } from './fiches.js';
 import { initElevEvents, renderPalette } from '../materiel/palette.js';
 
 /* ---------- Vue « Baie 3D » : élévation 2D à gauche, scène 3D à droite ---------- */
-const View3D = { mode: 'none', cables: true, key: '', focusReq: false };
+const View3D = { mode: 'none', cables: true, key: '', focusReq: false, vue: 'r3d' };   // vue : sur téléphone, 3D ou élévation (une seule à la fois)
 function renderRackView() {
   const host = $('#v-rack');
   if (!host.dataset.built) {
     host.dataset.built = '1';
-    host.innerHTML = `<div class="rackview"><div class="elev" id="elev"></div>
-      <div class="r3d"><div id="r3d-canvas"></div><div class="overlay tl wrap" id="r3d-tools"></div><div class="overlay bl legend" id="r3d-legend"></div><div id="palette-host-r"></div></div></div>`;
+    host.innerHTML = `<div class="rackview"><div class="rv-switch seg m-only" id="rv-switch"></div><div class="elev" id="elev"></div>
+      <div class="r3d"><div id="r3d-canvas"></div><div class="overlay tl wrap" id="r3d-tools"></div><div class="overlay bl legend" id="r3d-legend"></div></div><div id="palette-host-r"></div></div>`;
     Views3D.main = new Viewer3D($('#r3d-canvas'), { onPort: id => select(id, { keep: true }), onDevice: id => select(id, { keep: true }) });
     initElevEvents?.($('#elev'));
   }
   const v = Views3D.main, sel = Carto.sel, t = typeOf(sel || ''), l = locOf(sel || '');
+  $('.rackview', host).classList.toggle('m-elev', View3D.vue === 'elev');
+  $('#rv-switch').innerHTML = [['r3d', 'cube', 'Vue 3D'], ['elev', 'rack', 'Élévation']].map(([k, i, lb]) => `<button data-act="rv-vue" data-v="${k}" class="${View3D.vue === k ? 'on' : ''}">${ico(i)}${lb}</button>`).join('')
+    + `<button data-act="palette" class="${Carto.palette ? 'on' : ''}">${ico('box')}Stock</button>`;
   const racksOpt = cur => Store.db.buildings.map(b => `<optgroup label="${esc(b.name)}">${Store.db.racks.filter(r => locOf(r.id).building?.id === b.id).map(r => opt(r.id, `${r.name} — ${locOf(r.id).floor.name}`, cur)).join('')}</optgroup>`).join('');
   const objDev = l.device && !l.rack && l.device.roomId ? l.device : null;
   const objCat = objDev ? catOf(objDev) : t === 'outlet' ? Store.idx.cat.get('cat-outlet') || Store.db.catalog.find(c => c.template === 'outlet') : null;
@@ -61,7 +64,7 @@ function renderRackView() {
 }
 /* Élévation 2D de la baie : une ligne par U, de haut en bas */
 function elevHtml(rack) {
-  const u = rackUsage(rack.id), map = rackMap(rack.id), H = rack.heightU, rowH = H > 30 ? 15 : 22, out = [], selDev = locOf(Carto.sel || '').device?.id;
+  const u = rackUsage(rack.id), map = rackMap(rack.id), H = rack.heightU, rowH = isMobile() ? 32 : H > 30 ? 15 : 22, out = [], selDev = locOf(Carto.sel || '').device?.id;
   for (let n = H; n >= 1; n--) {
     const row = H - n + 1, d = map[n];
     out.push(`<div class="eu-n" style="grid-row:${row}">${n}</div>`);
@@ -77,5 +80,6 @@ Changes['rack-pick'] = el => { if (el.value) { View3D.focusReq = true; select(el
 Actions['r3d-mode'] = el => { View3D.mode = el.dataset.m; Views3D.main.setMode(View3D.mode); renderRackView(); };
 Actions['r3d-cables'] = () => { View3D.cables = !View3D.cables; Views3D.main.setCables(View3D.cables); renderRackView(); };
 Actions['r3d-fit'] = () => Views3D.main.frameAll();
+Actions['rv-vue'] = el => { View3D.vue = el.dataset.v; renderRackView(); };
 
 export { renderRackView, View3D };
