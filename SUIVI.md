@@ -647,6 +647,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-19 | **Nouvelle orientation :** NetCarto devient un logiciel serveur installable sur Linux, avec ou sans Docker, avec sa propre base de données (décisions détaillées, lots 16 à 22, ordre de réalisation, méthode « tests avant le code ») | ✅ Décisions notées en 3.14, lots ajoutés en section 4. **Lot 16 fait** (voir 3.15) : serveur Node dans `serveur/`, base SQLite relationnelle, API `/api/v1`, interface basculée sur l'API, page GitHub Pages inchangée. Prochain lot : 17. |
 | 2026-11-19 | « Continue à tout concevoir, je vais tester à la maison » | ✅ Lots 17, 11, 18, 14, 19, 20 et 22 faits (voir 3.16 à 3.22). Restent, hors de l'ordre fixé : la fin du lot 9, les lots 13 et 15. |
 | 2026-11-19 | « Tu as tout fini ? Si non, fais tout » | ✅ Fin du lot 9 (3.23), lot 13 (3.24) et lot 15 (3.25) faits. Tous les lots du tableau sont faits. Reste à l'utilisateur : essai sur un vrai téléphone, sur Ubuntu, et avec un vrai PRTG ou de vrais switchs. |
+| 2026-11-19 | « Fusionne tout sur la branche principale » | ✅ La branche par défaut du dépôt (`claude/serene-johnson-wll23d`) a été avancée jusqu'au dernier commit de la branche de travail, sans réécriture d'historique. Les deux branches sont identiques. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---
