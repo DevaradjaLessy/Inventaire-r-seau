@@ -594,6 +594,8 @@ const api = (page, chemin, methode = 'GET', corps) => page.evaluate(async ([c, m
 const synchro = page => page.waitForFunction(() => NetCarto.Sync.enAttente === 0 && NetCarto.Sync.etat !== 'envoi', null, { timeout: 8000 });
 const S = { serveur: true };
 const MDP = 'Mot-de-passe-de-test-1';   // mot de passe fictif des comptes de test
+/* Ouvre une rubrique de la page d'administration (comptes, audit, sauvegardes, securite) */
+const rubrique = async (page, r) => { await page.click('[data-tab=admin]'); await page.click(`[data-act=admin-rubrique][data-r=${r}]`); };
 
 test('Serveur : l\'interface charge la base par l\'API, rien dans le stockage du navigateur', async page => {
   assert.deepStrictEqual(await page.evaluate(() => [NetCarto.Store.mode, NetCarto.Store.db.devices.length, localStorage.getItem('netcarto:db:v1'), document.querySelector('meta[name=netcarto-api]').content]), ['serveur', 102, null, '/api/v1']);
@@ -766,6 +768,14 @@ test('Administration : page /admin réservée aux administrateurs, tout y est re
   await page.selectOption('#user-new [name=u-role]', 'technicien'); await page.fill('#user-new [name=u-mdp]', MDP); await page.click('[data-act=user-add]');
   const ligne = page.locator('#users-list .u-row', { hasText: 'alice' }); await ligne.waitFor();
   assert.match(await ligne.innerText(), /alice@exemple\.test/); assert.strictEqual(await page.locator('.modal').count(), 0, 'on reste dans la page, sans fenêtre');
+  // Suppression d'un compte : confirmation, puis retour à la liste, sans autre fenêtre
+  await page.fill('#user-new [name=u-identifiant]', 'bob'); await page.fill('#user-new [name=u-mdp]', MDP); await page.click('[data-act=user-add]');
+  await page.locator('#users-list [data-act=user-del][data-ident=bob]').click(); await page.click('[data-act=modal-ok]');
+  await page.waitForFunction(() => !document.querySelector('#users-list [data-ident=bob]') && !document.querySelector('.modal'));
+  // Le menu du compte ne propose plus de fenêtres en doublon : tout passe par cette page
+  await page.click('#user-chip');
+  assert.deepStrictEqual(await page.$$eval('.modal .compte-actions [data-act]', a => a.map(b => b.dataset.act)), ['compte-mdp', 'compte-admin', 'compte-deconnexion']);
+  await page.click('[data-act=compte-admin]'); assert.strictEqual(await page.locator('.modal').count(), 0);
   // Les autres rubriques sont dans la même page
   await page.click('[data-act=admin-rubrique][data-r=audit]'); await page.waitForSelector('#audit-list .a-row'); assert.match(await page.locator('#audit-list').innerText(), /Compte créé/);
   await page.click('[data-act=admin-rubrique][data-r=sauvegardes]'); await page.waitForSelector('#sv-reglages b');
@@ -818,7 +828,7 @@ test('Comptes : un technicien modifie, mais ne remplace pas la base', async page
   assert.strictEqual((await api(page, '/equipements')).json.length, 102);
 }, { serveur: true, compte: 'tech' });
 test('Comptes : l\'administrateur crée un utilisateur, le verrou et le rôle se gèrent depuis la fenêtre', async page => {
-  await page.click('#user-chip'); await page.click('[data-act=compte-utilisateurs]'); await page.waitForSelector('#users-list .u-row');
+  await rubrique(page, 'comptes'); await page.waitForSelector('#users-list .u-row');
   assert.strictEqual(await page.locator('#users-list .u-row').count(), 3);
   await page.fill('#user-new [name=u-identifiant]', 'alice'); await page.fill('#user-new [name=u-nom]', 'Alice Martin'); await page.selectOption('#user-new [name=u-role]', 'technicien'); await page.fill('#user-new [name=u-mdp]', 'court');
   await page.click('[data-act=user-add]'); await page.waitForSelector('.toast.err'); assert.match(await page.locator('.toast.err').first().innerText(), /12 caractères/);
@@ -832,7 +842,7 @@ test('Comptes : l\'administrateur crée un utilisateur, le verrou et le rôle se
 test('Comptes : le journal d\'audit montre qui a fait quoi, avec la valeur avant et après', async page => {
   const dev = await page.evaluate(() => { const x = NetCarto.Store.db.devices.find(d => d.hostname === 'SW-A1-ACC-01'); NetCarto.select(x.id); return x; });
   await page.click('#detail [data-act=dev-edit]'); await page.fill('.modal [name=notes]', 'baie réorganisée'); await page.click('[data-act=modal-ok]'); await synchro(page);
-  await page.click('#user-chip'); await page.click('[data-act=compte-audit]'); await page.waitForSelector('#audit-list .a-row');
+  await rubrique(page, 'audit'); await page.waitForSelector('#audit-list .a-row');
   const ligne = page.locator('#audit-list .a-row', { hasText: 'SW-A1-ACC-01' }).first();
   const texte = await ligne.innerText();
   assert.match(texte, /admin/); assert.match(texte, /Modification/); assert.match(texte, /notes/); assert.match(texte, /baie réorganisée/);
@@ -840,12 +850,12 @@ test('Comptes : le journal d\'audit montre qui a fait quoi, avec la valeur avant
   assert.strictEqual(await page.locator('#audit-list .a-row', { hasText: 'SW-A1-ACC-01' }).count(), 0, 'le filtre par personne s\'applique');
 }, S);
 test('Sauvegardes : l\'administrateur sauvegarde, puis restaure l\'inventaire après une erreur', async page => {
-  const ouvrir = async () => { await page.click('#user-chip'); await page.click('[data-act=compte-sauvegardes]'); await page.waitForSelector('#sv-reglages b'); };
+  const ouvrir = async () => { await rubrique(page, 'sauvegardes'); await page.waitForSelector('#sv-reglages b'); };
   await ouvrir();
   assert.match(await page.locator('#sv-reglages').innerText(), /chaque jour à 02:30/);
   await page.click('[data-act=sv-creer]'); await page.waitForSelector('#sv-list .sv-row:has-text("Manuelle")');
   assert.match(await page.locator('#sv-list .sv-row:has-text("Manuelle") a[download]').getAttribute('href'), /^\/api\/v1\/sauvegardes\/netcarto-[\w-]+-manuelle\.sqlite$/);
-  await page.click('[data-act=modal-close]');
+  await page.click('[data-tab=carto]');
   const dev = await page.evaluate(() => { const x = NetCarto.Store.db.devices.find(d => d.hostname === 'SW-A1-ACC-01'); NetCarto.select(x.id); return x; });
   await page.click('#detail [data-act=dev-edit]'); await page.fill('.modal [name=hostname]', 'NOM-FAUX'); await page.click('[data-act=modal-ok]'); await synchro(page);
   assert.strictEqual((await api(page, '/equipements/' + dev.id)).json.hostname, 'NOM-FAUX');
@@ -862,7 +872,8 @@ test('Sécurité : l\'administrateur voit l\'état du serveur et exporte le jour
   const carte = page.locator('.dcard', { hasText: 'Sécurité du serveur' }); await carte.locator('.sec-row').first().waitFor();
   const t = await carte.innerText();
   assert.match(t, /3 échecs de connexion/); assert.match(t, /Dernière sauvegarde/); assert.match(t, /HTTPS désactivé/); assert.match(t, /jamais connecté/);
-  await carte.locator('[data-act=compte-audit]').click(); await page.waitForSelector('#audit-list .a-row');   // le journal s'ouvre depuis la carte
+  await carte.locator('[data-act=compte-audit]').click(); await page.waitForSelector('#tab-admin.on #audit-list .a-row');   // le bouton de la carte mène à la rubrique de la page d'administration
+  assert.strictEqual(await page.locator('.modal').count(), 0);
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-act=audit-csv]')]);
   const csv = fs.readFileSync(await dl.path(), 'utf8');
   assert.match(csv, /date;identifiant;action;objet;libelle;avant;apres;adresse/); assert.match(csv, /echec_connexion/); assert.ok(csv.split('\n').length > 4);

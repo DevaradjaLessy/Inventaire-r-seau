@@ -158,9 +158,9 @@ Les sauvegardes sont rangées dans `sauvegardes/`, à l'intérieur du dossier de
 | Avant mise à jour | avant d'appliquer une migration à une base existante | idem |
 | Avant restauration | juste avant chaque restauration | idem |
 
-Une sauvegarde contient toute la base, y compris les empreintes des mots de passe : gardez ces fichiers à l'abri. Téléchargez-en une régulièrement (fenêtre *Sauvegardes*) pour en avoir une copie hors du serveur.
+Une sauvegarde contient toute la base, y compris les empreintes des mots de passe : gardez ces fichiers à l'abri. Téléchargez-en une régulièrement (page d'administration, rubrique *Sauvegardes*) pour en avoir une copie hors du serveur.
 
-**Revenir en arrière après une erreur de saisie** : fenêtre *Sauvegardes*, bouton *Restaurer*. Les données d'inventaire reviennent à l'état de la sauvegarde ; les comptes et le journal d'audit sont conservés ; le serveur reste en marche.
+**Revenir en arrière après une erreur de saisie** : page d'administration, rubrique *Sauvegardes*, bouton *Restaurer*. Les données d'inventaire reviennent à l'état de la sauvegarde ; les comptes et le journal d'audit sont conservés ; le serveur reste en marche.
 
 **Restaurer toute la base** (panne, changement de machine), comptes et journal d'audit compris : arrêtez le serveur, puis
 

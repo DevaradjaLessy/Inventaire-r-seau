@@ -81,7 +81,7 @@ Actions['compte-menu'] = () => {
   Modal.open({ title: 'Mon compte', ok: false, cancel: 'Fermer',
     body: `<div class="d-head" style="margin:0 0 14px"><div class="dico">${ico('user')}</div><div><h2>${esc(u.nom || u.identifiant)}</h2><div class="sub">${esc(u.identifiant)} · ${ROLES[u.role]}</div></div></div>
       <div class="compte-actions"><button class="btn" data-act="compte-mdp">${ico('edit')}Changer mon mot de passe</button>
-      ${admin ? `<button class="btn pri" data-act="compte-admin">${ico('user')}Page d'administration</button><button class="btn" data-act="compte-utilisateurs">${ico('user')}Utilisateurs</button><button class="btn" data-act="compte-audit">${ico('history')}Journal d'audit</button><button class="btn" data-act="compte-sauvegardes">${ico('download')}Sauvegardes</button>` : ''}
+      ${admin ? `<button class="btn pri" data-act="compte-admin" data-tip="Comptes, journal d'audit, sauvegardes, sécurité">${ico('user')}Page d'administration</button>` : ''}
       <button class="btn danger" data-act="compte-deconnexion">${ico('out')}Se déconnecter</button></div>` });
 };
 Actions['compte-deconnexion'] = async () => { Modal.close(); try { await Sync.appel('DELETE', '/session'); } catch { /* déjà déconnecté */ } location.reload(); };
@@ -114,18 +114,13 @@ const corpsUtilisateurs = () => `<p class="muted" style="margin:0 0 12px"><b>Lec
       <div id="users-list"><div class="empty">Chargement…</div></div>
       <div class="sec-t" style="margin:16px 0 8px">Nouveau compte</div>
       <div class="u-new" id="user-new"><input type="text" name="u-identifiant" placeholder="Identifiant" autocomplete="off"><input type="text" name="u-nom" placeholder="Nom affiché" autocomplete="off"><input type="email" name="u-courriel" placeholder="Courriel (facultatif)" autocomplete="off"><select name="u-role">${roleOptions('technicien')}</select><input type="password" name="u-mdp" placeholder="Mot de passe (12 caractères au moins)" autocomplete="new-password"><button class="btn pri" data-act="user-add">${ico('plus')}Créer</button></div>`;
-const ouvrirUtilisateurs = () => {
-  Modal.open({ title: 'Utilisateurs', wide: true, ok: false, cancel: 'Fermer', body: corpsUtilisateurs() });
-  chargerUtilisateurs().catch(e => toast(e.message, 'err'));
-};
 const requeteCompte = (p, message) => p.then(() => { if (message) toast(message, 'ok'); return chargerUtilisateurs(); }).catch(e => { toast(e.message, 'err'); return chargerUtilisateurs().catch(() => {}); });
 const idLigne = el => el.closest('.u-row').dataset.id;
-Actions['compte-utilisateurs'] = ouvrirUtilisateurs;
 Actions['user-add'] = () => { const v = n => $(`#user-new [name=u-${n}]`).value; requeteCompte(Sync.appel('POST', '/utilisateurs', { identifiant: v('identifiant'), nom: v('nom'), courriel: v('courriel'), role: v('role'), motDePasse: v('mdp') }).then(() => { for (const n of ['identifiant', 'nom', 'courriel', 'mdp']) $(`#user-new [name=u-${n}]`).value = ''; }), 'Compte créé'); };
 Changes['user-role'] = el => requeteCompte(Sync.appel('PUT', '/utilisateurs/' + idLigne(el), { role: el.value }), 'Rôle modifié');
 Changes['user-actif'] = el => requeteCompte(Sync.appel('PUT', '/utilisateurs/' + idLigne(el), { actif: el.checked }), el.checked ? 'Compte réactivé' : 'Compte désactivé : ses sessions sont fermées');
 Actions['user-unlock'] = el => requeteCompte(Sync.appel('PUT', '/utilisateurs/' + idLigne(el), { deverrouiller: true }), 'Compte déverrouillé');
-Actions['user-del'] = el => { const id = idLigne(el); Modal.confirm('Supprimer le compte', `Supprimer le compte <b>${esc(el.dataset.ident)}</b> ? Le journal d'audit garde la trace de ses actions.`, () => { requeteCompte(Sync.appel('DELETE', '/utilisateurs/' + id), 'Compte supprimé').then(ouvrirUtilisateurs); return false; }, 'Supprimer', 'danger'); };
+Actions['user-del'] = el => { const id = idLigne(el); Modal.confirm('Supprimer le compte', `Supprimer le compte <b>${esc(el.dataset.ident)}</b> ? Le journal d'audit garde la trace de ses actions.`, () => { requeteCompte(Sync.appel('DELETE', '/utilisateurs/' + id), 'Compte supprimé').then(() => Actions['compte-utilisateurs']()); return false; }, 'Supprimer', 'danger'); };
 Actions['user-mdp'] = el => { const id = idLigne(el); Modal.open({ title: `Nouveau mot de passe — ${esc(el.dataset.ident)}`, ok: 'Enregistrer',
   body: `<div class="form-grid" style="grid-template-columns:1fr">${champ('Nouveau mot de passe (12 caractères au moins)', 'motDePasse', 'password', 'autocomplete="new-password" autofocus')}</div><p class="muted" style="margin:10px 0 0">Les sessions ouvertes de ce compte seront fermées.</p>`,
   onOk(v) { Sync.appel('PUT', '/utilisateurs/' + id, { motDePasse: v.motDePasse, deverrouiller: true }).then(() => { toast('Mot de passe enregistré', 'ok'); Actions['compte-utilisateurs'](); }, e => toast(e.message, 'err')); return false; } }); };
@@ -172,11 +167,8 @@ async function chargerAudit(suite = false) {
 }
 const corpsAudit = () => `<div class="row" style="margin-bottom:12px"><input type="search" id="audit-filtre" data-inp="audit-filtre" placeholder="Filtrer par identifiant" style="flex:1"><button class="btn" data-act="audit-csv" data-tip="Exporter|Télécharger les entrées affichées (CSV)">${ico('download')}CSV</button><span class="muted">Qui, quand, quoi, valeur avant → après. Ce journal ne se modifie pas.</span></div>
       <div id="audit-list"><div class="empty">Chargement…</div></div><div style="text-align:center;margin-top:10px"><button class="btn hidden" id="audit-suite" data-act="audit-suite">Entrées plus anciennes</button></div>`;
-Actions['compte-audit'] = () => {
-  Audit.identifiant = ''; Audit.lignes = [];
-  Modal.open({ title: 'Journal d\'audit', wide: true, ok: false, cancel: 'Fermer', body: corpsAudit() });
-  chargerAudit().catch(e => toast(e.message, 'err'));
-};
+/* Remet le journal à zéro avant de l'afficher (rubrique de la page d'administration) */
+const ouvrirAudit = () => { Audit.identifiant = ''; Audit.lignes = []; return chargerAudit(); };
 /* Le filtre s'applique pendant la saisie, après une courte pause */
 let minuterieFiltre = 0;
 Inputs['audit-filtre'] = el => { clearTimeout(minuterieFiltre); minuterieFiltre = setTimeout(() => { Audit.identifiant = el.value.trim(); chargerAudit().catch(e => toast(e.message, 'err')); }, 250); };
@@ -188,4 +180,4 @@ Actions['audit-csv'] = () => {
 };
 Actions['audit-suite'] = () => chargerAudit(true).catch(e => toast(e.message, 'err'));
 
-export { chargerAudit, chargerUtilisateurs, corpsAudit, corpsUtilisateurs, ouvrirSession, ROLES };
+export { chargerUtilisateurs, corpsAudit, corpsUtilisateurs, ouvrirAudit, ouvrirSession, ROLES };

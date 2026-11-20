@@ -1,4 +1,4 @@
-/* Mode serveur — fenêtre « Sauvegardes » de l'administrateur : liste, sauvegarde immédiate, téléchargement, restauration. */
+/* Mode serveur — rubrique « Sauvegardes » de la page d'administration : liste, sauvegarde immédiate, téléchargement, restauration. */
 import { $, esc, fmtDateTime, plural } from '../utils.js';
 import { ico } from '../icones.js';
 import { Store } from '../store.js';
@@ -25,12 +25,7 @@ const corpsSauvegardes = () => `<p class="muted" id="sv-reglages" style="margin:
       <div class="row" style="margin-bottom:8px;flex-wrap:wrap"><button class="btn pri" data-act="sv-creer">${ico('download')}Sauvegarder maintenant</button>
         <span class="muted" style="flex:1 1 240px">Une sauvegarde contient toute la base : téléchargez-en une de temps en temps pour la garder ailleurs que sur le serveur.</span></div>
       <div id="sv-list"><div class="empty">Chargement…</div></div>`;
-function ouvrir() {
-  Modal.open({ title: 'Sauvegardes', wide: true, ok: false, cancel: 'Fermer', body: corpsSauvegardes() });
-  charger().catch(erreur);
-}
 const nomDe = el => el.closest('.sv-row').dataset.nom;
-Actions['compte-sauvegardes'] = ouvrir;
 Actions['sv-creer'] = () => Sync.appel('POST', '/sauvegardes', {}).then(() => { toast('Sauvegarde faite', 'ok'); return charger(); }).catch(erreur);
 Actions['sv-supprimer'] = el => { const nom = nomDe(el); Modal.confirm('Supprimer la sauvegarde', `Supprimer définitivement <b>${esc(nom)}</b> ?`, () => { Sync.appel('DELETE', '/sauvegardes/' + encodeURIComponent(nom)).then(() => { toast('Sauvegarde supprimée', 'ok'); Actions['compte-sauvegardes'](); }, e => { erreur(e); Actions['compte-sauvegardes'](); }); return false; }, 'Supprimer', 'danger'); };
 Actions['sv-restaurer'] = el => {

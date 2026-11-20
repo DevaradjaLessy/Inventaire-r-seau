@@ -440,7 +440,7 @@ Les tables `utilisateurs` et `audit` viendront avec la migration du lot 17.
 - **Modifications concurrentes :** le refus (409) nomme la personne qui a modifié l'élément, d'après le journal d'audit ; l'interface recharge les données.
 - **HTTPS par défaut :** certificat fourni par l'administrateur, sinon certificat auto-signé créé au premier démarrage dans le dossier de données. Le certificat est construit par NetCarto lui-même (structure X.509 écrite dans `securite/certificat.js`), sans programme extérieur, pour rester portable. L'option `--http` existe pour les essais sur le poste.
 - **Port par défaut :** 8443.
-- **Interface :** écran de connexion et de première initialisation, bouton du compte dans l'en-tête, fenêtres « Utilisateurs » et « Journal d'audit » (`js/ui/compte.js`). Une session expirée en cours de travail redemande la connexion sans perdre la page.
+- **Interface :** écran de connexion et de première initialisation, bouton du compte dans l'en-tête, gestion des comptes et journal d'audit (`js/ui/compte.js` ; rangés depuis dans la page d'administration, voir 3.27). Une session expirée en cours de travail redemande la connexion sans perdre la page.
 - **Non fait dans ce lot :** politique de sécurité du contenu (CSP), à poser quand Three.js sera hébergé localement (lot 22) ; limitation du nombre de tentatives par adresse (seul le verrouillage par compte existe) ; double authentification.
 
 **Tests :** 33 scénarios pour le serveur, 30 de bout en bout (dont 16 en mode serveur).
@@ -471,7 +471,7 @@ Les tables `utilisateurs` et `audit` viendront avec la migration du lot 17.
 - **Sauvegarde plus ancienne que le logiciel :** elle est mise au niveau du schéma actuel par les migrations avant d'être relue.
 - **Sécurité :** routes réservées à l'administrateur ; une sauvegarde n'est désignée que par son nom, contrôlé, jamais par un chemin ; création, suppression et restauration sont inscrites au journal d'audit. Un fichier de sauvegarde contient les empreintes des mots de passe : il est créé lisible par le seul compte du serveur.
 - **Routes ajoutées :** `GET|POST /sauvegardes`, `GET|DELETE /sauvegardes/{nom}`, `POST /sauvegardes/restauration`.
-- **Interface :** fenêtre « Sauvegardes » dans le menu du compte (`js/ui/sauvegardes.js`) : liste, sauvegarde immédiate, téléchargement, restauration, suppression.
+- **Interface :** rubrique « Sauvegardes » de la page d'administration (`js/ui/sauvegardes.js`) : liste, sauvegarde immédiate, téléchargement, restauration, suppression.
 - **Non fait :** envoi automatique des sauvegardes vers un autre serveur (à faire avec l'outil de sauvegarde de l'entreprise, en pointant sur le dossier) ; chiffrement des fichiers de sauvegarde.
 
 **Tests :** 42 scénarios pour le serveur (dont 9 pour les sauvegardes), 36 de bout en bout.
@@ -594,7 +594,7 @@ Le rapport complet est dans `AUDIT.md` : scénarios déroulés sur un vrai serve
 ### 3.27 Page d'administration, courriel des comptes, mot de passe perdu
 
 - **Rôles :** les trois niveaux demandés existaient déjà et sont gardés tels quels — *Lecture seule* (consulte tout), *Technicien* (modifie les données), *Administrateur* (tous les droits : comptes, mots de passe, journal d'audit, sauvegardes, remplacement de la base). Pas de quatrième niveau : il n'aurait rien à porter de plus.
-- **Page d'administration :** onglet « Administration », adresse `/admin`, visible des seuls administrateurs (`js/ui/administration.js`). Quatre rubriques : comptes et rôles, journal d'audit, sauvegardes, sécurité du serveur. Elle réutilise le contenu des anciennes fenêtres, qui restent accessibles ailleurs. Le serveur sert la même page à `/admin` ; l'adresse suit l'onglet, et un rechargement y revient. Un non-administrateur est renvoyé sur l'application avec un message ; le contrôle réel reste celui du serveur, route par route.
+- **Page d'administration :** onglet « Administration », adresse `/admin`, visible des seuls administrateurs (`js/ui/administration.js`). Quatre rubriques : comptes et rôles, journal d'audit, sauvegardes, sécurité du serveur. Les trois fenêtres qui faisaient doublon (« Utilisateurs », « Journal d'audit », « Sauvegardes », ouvertes depuis le menu du compte) ont été retirées : le menu ne propose plus que « Changer mon mot de passe », « Page d'administration » et « Se déconnecter », et le bouton « Journal d'audit » de la carte « Sécurité » du tableau de bord mène à la rubrique de la page. Le serveur sert la même page à `/admin` ; l'adresse suit l'onglet, et un rechargement y revient. Un non-administrateur est renvoyé sur l'application avec un message ; le contrôle réel reste celui du serveur, route par route.
 - **Adresse de courriel des comptes** (migration 003) : facultative, unique, gardée en minuscules. On se connecte avec son identifiant ou son courriel.
 - **Mot de passe perdu, deux voies :**
   - *Lien remis par un administrateur* : toujours disponible, sans aucun réglage. L'administrateur ne connaît jamais le nouveau mot de passe.
@@ -701,6 +701,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-19 | « Prends le rôle d'un administrateur système, réseau et cyber : simule l'usage (ajouts, interventions d'urgence), fais un rapport complet d'utilisation et d'audit, puis améliore chaque fonction, dont la praticité de la 3D » | ✅ Rapport `AUDIT.md` ; sept améliorations faites (voir 3.26) ; reste à faire classé par priorité dans le rapport. |
 | 2026-11-20 | « Refais-moi le rapport d'analyse, en administrateur qui reçoit NetCarto et doit s'en servir en vrai » | ✅ `AUDIT.md` réécrit après un nouveau parcours complet sur un vrai serveur (premier jour, quotidien, urgence, sécurité, téléphone). Douze constats ; cinq corrections rapides proposées, non faites (section 6 du rapport). |
 | 2026-11-20 | « Une page d'administration centrale à l'adresse /admin (création des comptes, rôles, réinitialisation des mots de passe), connexion par adresse mail, récupération de compte par mail avec serveur SMTP facultatif, niveaux de droits étagés. À toi de structurer. » | ✅ Fait (voir 3.27). |
+| 2026-11-20 | « Oui, retire les anciennes fenêtres en doublon » | ✅ Fenêtres « Utilisateurs », « Journal d'audit » et « Sauvegardes » retirées du menu du compte ; tout passe par la page d'administration (voir 3.27). |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---
