@@ -1,114 +1,145 @@
-# NetCarto — rapport d'usage et d'audit
+# NetCarto — rapport d'analyse
 
-*Rédigé le 19 novembre 2026, du point de vue d'un administrateur systèmes, réseau et sécurité qui reçoit l'outil et doit s'en servir, y compris en urgence.*
+*Point de vue : un administrateur systèmes, réseau et sécurité qui reçoit NetCarto et doit s'en servir pour de bon.*
+*Version analysée : celle du 20 novembre 2026, après les améliorations du premier audit.*
 
-## Résumé
+## 1. Verdict
 
-NetCarto répond bien à la question « où est quoi, et relié à quoi ». Retrouver une prise, un port ou une adresse et suivre le câble jusqu'au cœur prend trois actions. Le serveur est sain : comptes, rôles, journal d'audit, HTTPS, sauvegardes.
+**NetCarto est utilisable en production pour un site de taille moyenne, à trois conditions** : l'essayer d'abord sur votre vrai matériel (téléphone, PRTG ou switchs), sortir les sauvegardes de la machine, et remplacer le certificat auto-signé.
 
-L'outil était en revanche faible sur la question que l'on se pose en urgence : **« ce switch est mort, qui est touché, et comment je le remplace ? »** Il fallait ouvrir les ports un par un pour mesurer l'impact, et un remplacement obligeait à recâbler chaque port à la main. La vue 3D, belle, devenait illisible dès qu'on cherchait un port précis : les cordons le cachaient.
-
-Sept améliorations ont été faites à la suite de cet audit. Elles sont listées en section 4, avec ce qui reste.
-
-## 1. Méthode
-
-La simulation a été faite sur un vrai serveur NetCarto (mode serveur, compte administrateur), avec le jeu de démonstration : 2 bâtiments, 5 étages, 6 baies, 102 équipements, 121 prises. Chaque scénario a été déroulé dans l'interface, comme le ferait un technicien, en comptant les actions et en notant ce qui manque. Les écrans ont été relus en capture, sur écran large et à 390 px.
-
-Deux limites : la simulation est faite dans un navigateur automatisé, pas par plusieurs personnes pendant plusieurs semaines ; et les connecteurs PRTG et SNMP n'ont été vus que contre des simulateurs. Les durées « ressenties » ne sont donc pas mesurées, seules les actions le sont.
-
-## 2. Scénarios déroulés
-
-| # | Situation | Avant l'audit | Après les améliorations |
-|---|---|---|---|
-| 1 | Un utilisateur signale une prise morte | 3 actions : recherche, Entrée, lecture de la chaîne (panneau, port, VLAN, état). **Bon.** | Inchangé |
-| 2 | Un switch d'accès tombe : qui prévenir ? | Aucune vue d'ensemble : ouvrir les 31 ports câblés un par un | Aucune action : la fiche affiche « 28 prises · 12 terminaux · 5 pièces » ; le détail par pièce s'exporte en CSV. Pour le switch de cœur : 112 prises, 52 terminaux, 9 équipements réseau isolés |
-| 3 | Remplacer ce switch par un neuf | Retirer (tous les câbles sont supprimés), installer, puis recâbler 31 ports : environ 125 actions, avec risque d'erreur à chacune | 3 actions : « Remplacer », choix du modèle, valider. Nom, adresse, VLAN, états et câbles sont repris |
-| 4 | Le pare-feu signale une adresse MAC inconnue | Trouvée seulement si elle est tapée au format `aa:bb:cc:dd:ee:ff` | Trouvée dans tous les formats (`AABB.CCDD.EEFF`, `aa-bb-…`) |
-| 5 | Couper le port de ce poste, en gardant une trace | Changer l'état dans une liste ; aucun motif enregistré | Bouton « Désactiver » avec motif, noté dans la description du port et l'historique |
-| 6 | Trouver un port précis dans la baie, en 3D | Port caché par les cordons, cadre peu visible, aucun nom affiché | Les autres cordons s'effacent, une étiquette suit le port (nom, état, VLAN, appareil au bout) |
-| 7 | Voir d'un coup d'œil ce qui ne va pas dans une baie | Chercher la LED orange parmi les cordons | Ports en erreur encadrés en rouge à travers les cordons, et listés au-dessus de la vue |
-| 8 | Erreur de manipulation | Annulation, historique, sauvegardes. **Bon.** | Inchangé |
-| 9 | Installer du matériel depuis le local technique, au téléphone | Possible depuis le lot 13. **Correct**, mais non essayé sur un vrai appareil | Inchangé |
-| 10 | Revue de sécurité mensuelle | Journal d'audit consultable mais non exportable ; aucun indicateur | Carte « Sécurité du serveur » et export CSV du journal |
-| 11 | Quels équipements ne sont pas à jour ? | Tri de l'Inventaire par firmware, à lire ligne par ligne | Carte « Firmware par modèle » : les modèles à plusieurs versions sont signalés |
-
-## 3. Constats par fonction
-
-### Cartographie et plan
-
-- **Points forts.** L'arbre, le fil d'Ariane et le plan se répondent. La chaîne de liaison d'une prise (panneau, port, VLAN, terminal) est exactement ce qu'il faut au téléphone avec un utilisateur.
-- **Faiblesses.** À l'échelle d'un étage, une prise fait trois pixels sur téléphone. La légende couvrait le bas du plan (corrigé au lot 13). Le plan ne montre pas les chemins de câbles réels.
-
-### Vue 3D
-
-- **Points forts.** Reconnaître une baie comme on la voit sur place aide vraiment à ne pas se tromper de châssis. Les modes État, VLAN et PoE sont utiles.
-- **Faiblesses constatées.** Dès qu'une baie est brassée, les cordons masquent les ports : le port sélectionné et le port en erreur ne se voyaient pas. Aucune étiquette ne disait quel port on regardait. Pas de vue de face pour lire les numéros. Passer d'un port au suivant demandait de viser un rectangle de quelques pixels.
-- **Corrigé.** Voir section 4, point 3.
-- **Reste.** La face arrière n'est pas modélisée (alimentations, liens permanents). Sur une machine sans carte graphique, la première ouverture prend une à deux secondes.
-
-### Câblage et traçage
-
-- **Points forts.** Le tracé traverse panneaux et prises et s'affiche partout (plan, 3D, topologie). Les règles du serveur empêchent deux câbles sur un port.
-- **Faiblesses.** Pas d'étiquettes de câbles à imprimer. Le plan de brassage s'imprime par baie, pas par switch seul.
-
-### Inventaire et stock
-
-- **Points forts.** Compteurs, filtres, import et export CSV, doublons refusés.
-- **Faiblesses.** Pas de date de fin de garantie ni de fin de support. Pas de plan d'adressage (prochaine adresse libre d'un VLAN).
-
-### Interventions d'urgence
-
-- **Avant l'audit, c'était le point le plus faible** : ni analyse d'impact, ni remplacement d'un équipement. Les deux existent maintenant.
-- **Reste.** NetCarto note qu'un port est désactivé mais ne le coupe pas sur le switch : c'est voulu (les connecteurs sont en lecture seule), mais il faut le savoir. Pas de lien avec un outil de tickets.
-
-### Sécurité (regard cyber)
-
-| Sujet | État |
+| Question que je me pose | Réponse |
 |---|---|
-| Authentification | Mots de passe de 12 caractères au moins, empreinte scrypt, verrouillage après 5 échecs. Pas de double authentification |
-| Autorisations | Trois rôles, contrôlés par le serveur à chaque requête |
-| Traçabilité | Journal d'audit non modifiable, avec valeur avant et après ; exportable depuis cet audit |
-| Transport | HTTPS par défaut, certificat auto-signé ou fourni |
-| Navigateur | Politique de sécurité du contenu stricte ; aucune requête vers Internet |
-| Hébergement | Compte sans privilège, service cloisonné, conteneur en lecture seule |
-| Sauvegardes | Quotidiennes, vérifiées, restaurables. **Non chiffrées**, et sur la même machine par défaut |
-| Surveillance | Avant l'audit : rien. Maintenant : échecs de connexion, comptes verrouillés ou dormants, âge de la sauvegarde, validité du certificat |
+| Est-ce que je retrouve vite une prise, un port, une adresse ? | Oui, en trois actions |
+| Est-ce que l'outil m'aide quand un switch tombe ? | Oui depuis le premier audit : impact chiffré, remplacement en trois actions |
+| Est-ce que je peux lui confier mes vraies données ? | Oui côté logiciel (comptes, audit, HTTPS, cloisonnement). Non tant que les sauvegardes restent sur la même machine |
+| Est-ce que mon équipe peut s'en servir sans formation ? | Presque : le premier jour demande une explication (stock à zéro), et un compte en lecture seule voit des boutons qu'il ne peut pas utiliser |
+| Est-ce que je peux m'en servir au téléphone dans le local technique ? | Pour consulter et installer, oui. La vue 3D y est peu exploitable |
 
-Points à traiter par l'exploitant, hors du logiciel : envoyer les sauvegardes sur une autre machine, prévoir un second compte administrateur, remplacer le certificat auto-signé par celui de l'autorité interne.
+Douze constats sont détaillés en section 4. Aucun n'est une faille de sécurité ; trois gênent vraiment l'usage.
 
-### Exploitation
+## 2. Comment l'analyse a été faite
 
-- **Points forts.** Installation en une commande, mise à jour avec retour arrière automatique, commande de contrôle de santé.
-- **Faiblesses.** Pas d'alerte envoyée (courriel, webhook) quand une sauvegarde échoue ou qu'un compte est verrouillé : il faut ouvrir le tableau de bord.
+J'ai déroulé le parcours d'un administrateur sur un vrai serveur NetCarto, dans un navigateur piloté, en relevant ce que l'écran affiche et ce que le serveur enregistre.
 
-## 4. Améliorations faites à la suite de l'audit
+- **Premier jour** : serveur neuf, création du compte administrateur, base vide.
+- **Usage courant et urgence** : jeu de démonstration (2 bâtiments, 5 étages, 6 baies, 102 équipements, 121 prises), avec trois comptes : administrateur, technicien, lecture seule.
+- **Téléphone** : écran de 390 px de large, avec contacts tactiles.
+- **Installation** : image Docker et Debian 12 avec systemd, déroulées pour de bon lors des lots 19 et 20.
 
-1. **Impact d'une panne.** La fiche d'un équipement réseau affiche ce qui en dépend : prises, terminaux, pièces, et les équipements réseau qu'il isole du cœur (leurs prises sont comptées aussi). Le détail, classé par pièce, s'exporte en CSV pour prévenir les personnes concernées.
-2. **Remplacement d'un équipement.** « Remplacer » échange un équipement contre un modèle du stock. Le nouveau reprend le nom, l'adresse IP, l'emplacement, la configuration de chaque port et tous les câbles. Si le nouveau modèle a moins de ports, les câbles sans équivalent sont annoncés avant de valider. L'ancien passe hors service ou retourne en stock. Une seule opération, annulable.
-3. **Vue 3D utilisable en intervention.**
-   - Quand un port ou un équipement est choisi, les autres cordons s'effacent ; le bouton « Isoler » rétablit l'ensemble.
-   - Une étiquette suit le port choisi : nom, état, VLAN, appareil au bout.
-   - Les ports en erreur sont encadrés en rouge, visibles à travers les cordons, et listés au-dessus de la vue : un clic y mène.
-   - Bouton « Vue de face », bien droite, pour lire les numéros.
-   - Flèches gauche et droite du clavier : port précédent, port suivant.
-4. **Couper un port avec un motif.** Bouton « Désactiver » sur la fiche du port, motif noté dans la description et l'historique ; bouton « Réactiver ».
-5. **Recherche par adresse MAC dans tous les formats.**
-6. **Sécurité du serveur.** Carte du tableau de bord pour l'administrateur ; export CSV du journal d'audit.
-7. **Firmware par modèle.** Carte du tableau de bord ; un clic ouvre l'Inventaire sur le modèle.
+**Ce que cette analyse ne couvre pas.** Elle est faite par un automate, pas par une équipe pendant plusieurs semaines. Les connecteurs PRTG et SNMP n'ont tourné que contre des simulateurs. Aucun essai sur un vrai téléphone, ni sur Ubuntu. Les durées ressenties ne sont pas mesurées ; seules les actions et les résultats le sont.
 
-## 5. Ce qui reste, par ordre de priorité
+## 3. Le parcours, étape par étape
 
-| Priorité | Sujet | Pourquoi |
+### 3.1 Réception et installation
+
+`docker compose up -d`, ou `sudo installation/linux/installer.sh` sur Debian. Dans les deux cas : données dans `/var/lib/netcarto`, réglages dans `/etc/netcarto/netcarto.toml`, service sous un compte sans privilège, HTTPS actif.
+
+- **Ce qui marche bien.** Une commande. La mise à jour remet l'ancienne version en service si la nouvelle ne démarre pas (vérifié avec une version volontairement cassée). La désinstallation refuse de supprimer un dossier qui n'est pas le sien.
+- **Ce qui manque.** Le script d'installation en ligne n'a été déroulé qu'en mode hors ligne. Ubuntu n'a pas été essayé.
+
+### 3.2 Premier jour
+
+À la première ouverture, la page demande le code affiché au démarrage du serveur, puis crée le compte administrateur. Aucun mot de passe par défaut n'existe. La base arrive vide de tout site, avec 34 modèles au catalogue et 8 VLAN usuels. L'écran propose « Créer un site » ou « Charger la démonstration ».
+
+- **Ce qui marche bien.** L'écran d'accueil dit quoi faire. L'import CSV permet de charger un parc existant, ligne par ligne, avec les refus expliqués.
+- **Ce qui accroche.** Tous les stocks sont à zéro. Pour poser un premier switch à la main, il faut d'abord faire une « entrée en stock » dans l'onglet Matériel : rien ne le dit au moment où l'on en a besoin (constat 2).
+
+### 3.3 Usage courant
+
+Recherche globale (touche `/`), arbre, plan, fiche. Une prise affiche sa chaîne complète : panneau, port du switch, VLAN, état, terminal. Le tracé suit le câble jusqu'au cœur.
+
+- **Ce qui marche bien.** Trois actions pour répondre à un utilisateur au téléphone. Les doublons d'adresse IP, de nom et de MAC sont refusés à la saisie. Tout s'annule.
+- **Ce qui manque.** Pas de plan d'adressage (prochaine adresse libre d'un VLAN). Pas de date de garantie.
+
+### 3.4 Intervention d'urgence
+
+| Situation | Ce que fait l'outil | Relevé |
 |---|---|---|
-| Haute | Essais en conditions réelles : vrai téléphone, vrai PRTG ou vrais switchs, Ubuntu | Aucune simulation ne les remplace |
-| Haute | Sauvegardes envoyées hors de la machine, et chiffrées | Une panne de disque ou un vol emporte aujourd'hui la base et ses copies |
-| Moyenne | Alertes envoyées (courriel ou webhook) : sauvegarde en échec, compte verrouillé, équipement en panne | Personne ne regarde un tableau de bord la nuit |
-| Moyenne | Double authentification pour les administrateurs | Le compte administrateur ouvre tout |
-| Moyenne | Plan d'adressage : adresses par VLAN, prochaine adresse libre | Demande quotidienne d'un administrateur réseau |
-| Moyenne | Dates de garantie et de fin de support | Nécessaire au renouvellement du parc |
-| Basse | Étiquettes de câbles et de prises à imprimer | Gain de temps à la pose |
-| Basse | Face arrière des baies en 3D, alimentation électrique (quel équipement sur quel onduleur) | Utile pour les coupures de courant |
+| Un switch d'accès tombe | La fiche affiche ce qui en dépend | « 28 prises · 12 terminaux · 5 pièces » pour SW-A1-ACC-01 |
+| Le switch de distribution tombe | Compte aussi ce que desservent les équipements qu'il isole | « 34 prises · 17 terminaux · 13 pièces · 4 équipements réseau isolés » |
+| Remplacer un switch | Nom, adresse, VLAN et câbles repris | 6 câbles repris, 1 seule transaction sur le serveur, aucune erreur |
+| Adresse MAC suspecte | Trouvée dans tous les formats | `02AA.BBCC.DD77` mène au port |
+| Couper un port | Bouton « Désactiver » avec motif | Motif noté dans l'historique |
+| Port en erreur dans une baie | Encadré en rouge en 3D, listé au-dessus de la vue | 1 clic pour y aller |
 
-## 6. Comment vérifier
+- **Ce qui marche bien.** C'était le point faible ; c'est devenu un point fort.
+- **Ce qui reste.** NetCarto note qu'un port est désactivé, il ne le coupe pas sur le switch. Un remplacement écrit 43 lignes dans le journal d'audit (constat 5). Rien ne prévient par courriel ou par message quand quelque chose tombe.
 
-Chaque amélioration a son scénario dans `tests/netcarto.test.js` (bloc « Interventions d'urgence ») et, pour l'état de sécurité, dans `serveur/tests/exploitation.test.js`.
+### 3.5 Contrôle de sécurité
+
+La carte « Sécurité du serveur » a affiché, sur le serveur d'essai : 0 échec de connexion en 24 h, dernière sauvegarde il y a moins d'une heure, « HTTPS désactivé : les mots de passe circulent en clair », 1 seul administrateur (« prévoyez un second administrateur de secours »), 2 comptes jamais connectés. Tout cela était exact.
+
+- **Ce qui marche bien.** Les bons signaux, sans aucun secret dans la réponse. Un compte non administrateur reçoit un refus (403) sur cette route.
+- **Ce qui accroche.** La carte est tout en bas du tableau de bord, et ses alertes ne figurent pas dans la liste « Alertes » ni dans la pastille rouge de l'onglet (constat 4).
+
+### 3.6 Au téléphone
+
+Les fenêtres ajoutées récemment (impact, remplacement, cartes du tableau de bord) tiennent dans 390 px sans débordement. Le plan se zoome à deux doigts. On installe un équipement en touchant le modèle puis l'emplacement.
+
+- **Ce qui accroche.** Dans la vue 3D, la barre d'outils occupe 149 px sur 435, soit un tiers de la vue ; la baie n'apparaît qu'en bas, en petit. Le bouton « Stock » y figure deux fois (constat 3).
+
+## 4. Constats
+
+Classés par gêne pour l'usage. Aucun n'expose de données.
+
+| # | Constat | Gravité | Preuve |
+|---|---|---|---|
+| 1 | **Un compte en lecture seule voit tous les boutons d'action** (Modifier, Déplacer, Remplacer, Retirer), non grisés. « Remplacer » ouvre même la fenêtre ; le refus n'arrive qu'à la validation. | Gênant | Relevé sur le compte `lecteur` |
+| 2 | **Premier jour : stock à zéro, sans explication.** Installer un premier équipement à la main demande une entrée en stock préalable, que rien ne suggère. | Gênant | Stock initial relevé : 0 pour tous les modèles |
+| 3 | **Vue 3D peu exploitable sur téléphone.** La barre d'outils prend un tiers de la hauteur ; le bouton « Stock » est en double. | Gênant | 149 px sur 435 |
+| 4 | **Les alertes de sécurité sont hors de vue.** Carte en bas du tableau de bord, absente de la liste des alertes et de la pastille de l'onglet. | Moyen | « HTTPS désactivé » non compté parmi les 10 alertes |
+| 5 | **Journal d'audit bavard.** Un remplacement y écrit 43 lignes (28 créations de ports, 6 câbles, 6 ports…), sans ligne de synthèse. Relire une journée d'interventions devient pénible. | Moyen | 43 lignes pour une transaction |
+| 6 | **Sauvegardes sur la même machine, non chiffrées.** | Moyen (exploitation) | Par conception, voir `SUIVI.md` 3.18 |
+| 7 | **Aucune alerte envoyée.** Sauvegarde en échec, compte verrouillé, équipement en panne : il faut ouvrir la page pour le savoir. | Moyen | Fonction absente |
+| 8 | **Pas de double authentification** pour les administrateurs. | Moyen | Fonction absente |
+| 9 | **Connecteurs non éprouvés sur du vrai matériel.** | Moyen | Testés contre des simulateurs seulement |
+| 10 | **Pas de plan d'adressage** ni de dates de garantie. | Faible | Fonctions absentes |
+| 11 | **Face arrière des baies et alimentation électrique non modélisées.** On ne sait pas quel équipement dépend de quel onduleur. | Faible | Fonction absente |
+| 12 | **Pas d'étiquettes à imprimer** pour les câbles et les prises. | Faible | Fonction absente |
+
+## 5. Appréciation par fonction
+
+| Fonction | Appréciation | En une phrase |
+|---|---|---|
+| Recherche et navigation | Très bien | Trois actions pour tout retrouver, clavier compris |
+| Plan 2D | Bien | Clair ; les prises sont minuscules sur téléphone tant qu'on n'a pas zoomé |
+| Vue 3D sur ordinateur | Bien | Lisible depuis l'isolement des cordons et l'étiquette du port |
+| Vue 3D sur téléphone | Insuffisant | Barre d'outils trop haute, baie trop petite |
+| Câblage et traçage | Très bien | Suit le câble à travers panneaux et prises |
+| Inventaire, import, export | Bien | Complet ; manque garantie et plan d'adressage |
+| Interventions d'urgence | Bien | Impact et remplacement font gagner le plus de temps |
+| Comptes et rôles | Bien | Contrôle solide côté serveur ; interface à ajuster pour la lecture seule |
+| Journal d'audit | Bien | Fiable et non modifiable, mais bavard |
+| Sauvegardes | Bien | Automatiques et vérifiées ; à sortir de la machine |
+| Installation et mise à jour | Très bien | Une commande, retour arrière automatique |
+| Supervision (PRTG, SNMP) | À confirmer | Prête, jamais branchée sur du réel |
+
+## 6. Recommandations, dans l'ordre
+
+**Avant de mettre vos vraies données**
+
+1. Essayer sur votre matériel : un vrai téléphone, votre PRTG ou deux switchs en SNMP, et Ubuntu si c'est votre système.
+2. Envoyer `/var/lib/netcarto/sauvegardes` vers une autre machine avec votre outil de sauvegarde habituel.
+3. Renseigner `https.noms`, ou fournir le certificat de votre autorité interne.
+4. Créer un second compte administrateur.
+
+**Corrections rapides dans le logiciel**
+
+5. Masquer ou griser les boutons d'action pour un compte en lecture seule (constat 1).
+6. Proposer l'entrée en stock au moment où l'installation échoue faute de stock (constat 2).
+7. Replier la barre d'outils 3D sur téléphone et retirer le bouton en double (constat 3).
+8. Faire remonter les alertes de sécurité dans la liste des alertes, pour l'administrateur (constat 4).
+9. Ajouter une ligne de synthèse par opération dans le journal d'audit, le détail restant dépliable (constat 5).
+
+**Évolutions à planifier**
+
+10. Alertes envoyées par courriel ou webhook.
+11. Double authentification des administrateurs.
+12. Chiffrement des sauvegardes.
+13. Plan d'adressage, dates de garantie, étiquettes, alimentation électrique.
+
+## 7. Où trouver les preuves
+
+- Scénarios automatiques : `tests/netcarto.test.js` (58 scénarios, dont le bloc « Interventions d'urgence ») et `serveur/tests/` (51 scénarios).
+- Essais d'installation réels : `installation/tests/` (image Docker, Debian 12 avec systemd).
+- Décisions et limites connues : `SUIVI.md`, sections 3.14 à 3.26.

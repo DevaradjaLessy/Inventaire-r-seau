@@ -587,7 +587,9 @@ Le rapport complet est dans `AUDIT.md` : scénarios déroulés sur un vrai serve
 - **Sécurité du serveur** : route `GET /securite` (administrateur) et carte du tableau de bord — échecs de connexion sur 24 h, comptes verrouillés, jamais connectés ou inactifs depuis 90 jours, âge de la dernière sauvegarde, validité du certificat, nombre d'administrateurs. Export CSV du journal d'audit.
 - **Firmware par modèle** : carte du tableau de bord, modèles à plusieurs versions signalés.
 
-**Reste, par priorité** (détail dans `AUDIT.md`, section 5) : essais en conditions réelles ; sauvegardes hors de la machine et chiffrées ; alertes envoyées ; double authentification ; plan d'adressage ; dates de garantie ; étiquettes ; face arrière des baies et alimentation électrique.
+**Constats du second passage (2026-11-20), non corrigés :** boutons d'action visibles pour un compte en lecture seule ; stock à zéro sans explication le premier jour ; barre d'outils 3D trop haute sur téléphone, bouton « Stock » en double ; alertes de sécurité absentes de la liste des alertes ; journal d'audit bavard (43 lignes pour un remplacement).
+
+**Reste, par priorité** (détail dans `AUDIT.md`, sections 4 et 6) : essais en conditions réelles ; sauvegardes hors de la machine et chiffrées ; alertes envoyées ; double authentification ; plan d'adressage ; dates de garantie ; étiquettes ; face arrière des baies et alimentation électrique.
 
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
@@ -678,6 +680,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-19 | « Pourquoi deux branches ? » puis « Mets en rappel à faire » | ✅ Rangement des branches noté dans les rappels de la section 4, avec les essais qui restent à faire par l'utilisateur. |
 | 2026-11-19 | « Fais-le, prends la main » | ✅ Branche `main` créée et poussée. Le changement de branche par défaut et la suppression des anciennes branches se font dans les réglages GitHub : voir les rappels de la section 4. |
 | 2026-11-19 | « Prends le rôle d'un administrateur système, réseau et cyber : simule l'usage (ajouts, interventions d'urgence), fais un rapport complet d'utilisation et d'audit, puis améliore chaque fonction, dont la praticité de la 3D » | ✅ Rapport `AUDIT.md` ; sept améliorations faites (voir 3.26) ; reste à faire classé par priorité dans le rapport. |
+| 2026-11-20 | « Refais-moi le rapport d'analyse, en administrateur qui reçoit NetCarto et doit s'en servir en vrai » | ✅ `AUDIT.md` réécrit après un nouveau parcours complet sur un vrai serveur (premier jour, quotidien, urgence, sécurité, téléphone). Douze constats ; cinq corrections rapides proposées, non faites (section 6 du rapport). |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---
