@@ -84,7 +84,7 @@ Classés par gêne pour l'usage. Aucun n'expose de données.
 
 | # | Constat | Gravité | Preuve |
 |---|---|---|---|
-| 1 | **Un compte en lecture seule voit tous les boutons d'action** (Modifier, Déplacer, Remplacer, Retirer), non grisés. « Remplacer » ouvre même la fenêtre ; le refus n'arrive qu'à la validation. | Gênant | Relevé sur le compte `lecteur` |
+| 1 | *(corrigé le 20 novembre : ces boutons ne sont plus proposés)* **Un compte en lecture seule voit tous les boutons d'action** (Modifier, Déplacer, Remplacer, Retirer), non grisés. « Remplacer » ouvre même la fenêtre ; le refus n'arrive qu'à la validation. | Gênant | Relevé sur le compte `lecteur` |
 | 2 | **Premier jour : stock à zéro, sans explication.** Installer un premier équipement à la main demande une entrée en stock préalable, que rien ne suggère. | Gênant | Stock initial relevé : 0 pour tous les modèles |
 | 3 | **Vue 3D peu exploitable sur téléphone.** La barre d'outils prend un tiers de la hauteur ; le bouton « Stock » est en double. | Gênant | 149 px sur 435 |
 | 4 | **Les alertes de sécurité sont hors de vue.** Carte en bas du tableau de bord, absente de la liste des alertes et de la pastille de l'onglet. | Moyen | « HTTPS désactivé » non compté parmi les 10 alertes |

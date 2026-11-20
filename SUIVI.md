@@ -591,6 +591,24 @@ Le rapport complet est dans `AUDIT.md` : scénarios déroulés sur un vrai serve
 
 **Reste, par priorité** (détail dans `AUDIT.md`, sections 4 et 6) : essais en conditions réelles ; sauvegardes hors de la machine et chiffrées ; alertes envoyées ; double authentification ; plan d'adressage ; dates de garantie ; étiquettes ; face arrière des baies et alimentation électrique.
 
+### 3.27 Page d'administration, courriel des comptes, mot de passe perdu
+
+- **Rôles :** les trois niveaux demandés existaient déjà et sont gardés tels quels — *Lecture seule* (consulte tout), *Technicien* (modifie les données), *Administrateur* (tous les droits : comptes, mots de passe, journal d'audit, sauvegardes, remplacement de la base). Pas de quatrième niveau : il n'aurait rien à porter de plus.
+- **Page d'administration :** onglet « Administration », adresse `/admin`, visible des seuls administrateurs (`js/ui/administration.js`). Quatre rubriques : comptes et rôles, journal d'audit, sauvegardes, sécurité du serveur. Elle réutilise le contenu des anciennes fenêtres, qui restent accessibles ailleurs. Le serveur sert la même page à `/admin` ; l'adresse suit l'onglet, et un rechargement y revient. Un non-administrateur est renvoyé sur l'application avec un message ; le contrôle réel reste celui du serveur, route par route.
+- **Adresse de courriel des comptes** (migration 003) : facultative, unique, gardée en minuscules. On se connecte avec son identifiant ou son courriel.
+- **Mot de passe perdu, deux voies :**
+  - *Lien remis par un administrateur* : toujours disponible, sans aucun réglage. L'administrateur ne connaît jamais le nouveau mot de passe.
+  - *Lien envoyé par courriel* : seulement si un serveur d'envoi est réglé (`[courriel]`). Sans lui, l'écran « Mot de passe oublié » explique de s'adresser à un administrateur.
+- **Sécurité des liens :** jeton aléatoire de 32 octets, dont seule l'empreinte est en base ; valable 30 minutes ; usage unique ; le mot de passe choisi suit les mêmes règles que les autres ; les sessions ouvertes du compte sont fermées et le compte est déverrouillé. La demande par courriel répond la même chose que le compte existe ou non, et un compte reçoit au plus trois liens par heure (compté dans le journal d'audit). Le lien n'apparaît jamais dans le journal. Il est retiré de l'adresse du navigateur dès qu'il a servi.
+- **Lien des courriels :** écrit à partir du réglage `courriel.adresse`, jamais à partir de l'adresse reçue dans la requête (qui peut être falsifiée). Ce réglage est donc obligatoire dès qu'un serveur d'envoi est déclaré.
+- **Envoi de courriels :** `serveur/courrier.js`, sans bibliothèque (SMTP avec STARTTLS, TLS direct ou sans chiffrement ; authentification PLAIN). Le mot de passe du serveur d'envoi se donne par `"env:NOM"`. Un serveur d'envoi en panne n'empêche rien d'autre.
+- **Compte en lecture seule :** les boutons d'action ne lui sont plus proposés (constat 1 de `AUDIT.md`).
+- **Barre du haut :** libellés d'onglets raccourcis sur écran moyen, pour loger le cinquième onglet sans débordement (vérifié de 390 à 1700 px).
+- **Non essayé en réel :** l'envoi n'a tourné que contre un faux serveur SMTP, sans chiffrement. STARTTLS, le TLS direct et un vrai serveur de messagerie restent à essayer.
+- **Non fait :** raccordement à un annuaire (Active Directory, LDAP) ; double authentification ; alertes par courriel (le module d'envoi est prêt pour elles).
+
+**Tests :** 5 scénarios serveur (`serveur/tests/administration.test.js`), 4 scénarios d'interface.
+
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
@@ -642,6 +660,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | Essayer NetCarto sur un vrai téléphone (Android, et Safari sur iPhone) | Utilisateur | ⏳ À faire |
 | Essayer `installer.sh` sur Ubuntu, et l'installation en ligne sur une vraie machine | Utilisateur | ⏳ À faire |
 | Essayer les connecteurs avec un vrai PRTG ou de vrais switchs (SNMP) | Utilisateur | ⏳ À faire |
+| Essayer l'envoi de courriels avec votre vrai serveur de messagerie (réglage `[courriel]`) | Utilisateur | ⏳ À faire |
 
 **Réglage de l'effort :**
 - Moyen (medium) pour les petites corrections.
@@ -681,6 +700,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-19 | « Fais-le, prends la main » | ✅ Branche `main` créée et poussée. Le changement de branche par défaut et la suppression des anciennes branches se font dans les réglages GitHub : voir les rappels de la section 4. |
 | 2026-11-19 | « Prends le rôle d'un administrateur système, réseau et cyber : simule l'usage (ajouts, interventions d'urgence), fais un rapport complet d'utilisation et d'audit, puis améliore chaque fonction, dont la praticité de la 3D » | ✅ Rapport `AUDIT.md` ; sept améliorations faites (voir 3.26) ; reste à faire classé par priorité dans le rapport. |
 | 2026-11-20 | « Refais-moi le rapport d'analyse, en administrateur qui reçoit NetCarto et doit s'en servir en vrai » | ✅ `AUDIT.md` réécrit après un nouveau parcours complet sur un vrai serveur (premier jour, quotidien, urgence, sécurité, téléphone). Douze constats ; cinq corrections rapides proposées, non faites (section 6 du rapport). |
+| 2026-11-20 | « Une page d'administration centrale à l'adresse /admin (création des comptes, rôles, réinitialisation des mots de passe), connexion par adresse mail, récupération de compte par mail avec serveur SMTP facultatif, niveaux de droits étagés. À toi de structurer. » | ✅ Fait (voir 3.27). |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---

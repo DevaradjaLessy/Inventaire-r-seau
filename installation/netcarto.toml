@@ -22,6 +22,17 @@ inactiviteMinutes = 120 # une session inactive est fermée
 [donnees]
 dossier = "/var/lib/netcarto"
 
+[courriel]
+# Facultatif. Sans « hote », NetCarto n'envoie aucun courriel : un mot de passe perdu se traite alors
+# par un lien que l'administrateur remet depuis la page d'administration.
+# hote = "smtp.exemple.interne"
+# port = 587
+# securite = "starttls"           # "starttls" (port 587), "tls" (port 465) ou "aucune"
+# utilisateur = "netcarto"
+# motDePasse = "env:SMTP_MDP"     # jamais en clair ici : lu dans la variable d'environnement SMTP_MDP
+# expediteur = "NetCarto <netcarto@exemple.interne>"
+# adresse = "https://netcarto.exemple.interne:8443"   # adresse par laquelle vos collègues ouvrent NetCarto (sert aux liens)
+
 [sauvegardes]
 actif = true            # une sauvegarde automatique par jour
 heure = "02:30"         # heure locale du serveur

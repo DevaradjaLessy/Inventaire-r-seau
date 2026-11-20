@@ -11,6 +11,7 @@ const DEFAUTS = {
   https: { actif: true, certificat: '', cle: '', noms: [] },   // sans fichiers fournis, un certificat auto-signé est créé dans le dossier de données
   securite: { echecsMax: 5, verrouillageMinutes: 15, sessionHeures: 12, inactiviteMinutes: 120 },
   donnees: { dossier: 'donnees-locales' },
+  courriel: { hote: '', port: 587, securite: 'starttls', utilisateur: '', motDePasse: '', expediteur: '', adresse: '' },   // sans hôte : aucun courriel n'est envoyé
   sauvegardes: { actif: true, heure: '02:30', conserver: 14, dossier: '' },   // dossier vide : « sauvegardes » dans le dossier de données
   web: { dossier: '..' },
   supervision: { intervalle: 30, sources: [] },
@@ -25,6 +26,15 @@ function controlerSauvegardes(s) {
   if (typeof s.heure !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(s.heure)) throw new Error('Réglage « sauvegardes.heure » invalide : heure attendue au format HH:MM, par exemple "02:30".');
   if (!Number.isInteger(s.conserver) || s.conserver < 1) throw new Error('Réglage « sauvegardes.conserver » invalide : nombre entier d\'au moins 1 attendu.');
   if (typeof s.dossier !== 'string') throw new Error('Réglage « sauvegardes.dossier » invalide : chemin attendu.');
+}
+/* Réglages de l'envoi de courriels : facultatifs. Avec un hôte, l'expéditeur et l'adresse publique de NetCarto sont obligatoires. */
+function controlerCourriel(c) {
+  if (typeof c.hote !== 'string') throw new Error('Réglage « courriel.hote » invalide.');
+  if (!c.hote) return;
+  if (!Number.isInteger(c.port) || c.port < 1 || c.port > 65535) throw new Error('Réglage « courriel.port » invalide.');
+  if (!['starttls', 'tls', 'aucune'].includes(c.securite)) throw new Error('Réglage « courriel.securite » invalide : "starttls", "tls" ou "aucune" attendu.');
+  if (!/^[^\s@<>]+@[^\s@<>]+$|<[^\s@<>]+@[^\s@<>]+>$/.test(c.expediteur || '')) throw new Error('Réglage « courriel.expediteur » obligatoire : adresse d\'expédition, par exemple "NetCarto <netcarto@exemple.interne>".');
+  if (!/^https?:\/\/[^\s/]+/.test(c.adresse || '')) throw new Error('Réglage « courriel.adresse » obligatoire : adresse par laquelle vos collègues ouvrent NetCarto, par exemple "https://netcarto.exemple.interne:8443". Elle sert à écrire les liens des courriels.');
 }
 /* options : { env, args } (par défaut : ceux du processus) */
 function chargerConfig({ env = process.env, args = process.argv.slice(2) } = {}) {
@@ -54,8 +64,12 @@ function chargerConfig({ env = process.env, args = process.argv.slice(2) } = {})
   if (!Array.isArray(cfg.supervision.sources)) throw new Error('Réglage « supervision.sources » invalide : liste attendue.');
   if (args.includes('--http')) cfg.https.actif = false;
   for (const k of ['echecsMax', 'verrouillageMinutes', 'sessionHeures', 'inactiviteMinutes']) if (!(cfg.securite[k] > 0)) throw new Error(`Réglage « securite.${k} » invalide : nombre positif attendu.`);
+  // Le mot de passe du serveur d'envoi ne s'écrit pas dans le fichier : "env:NOM" le lit dans l'environnement
+  if (/^env:/.test(cfg.courriel.motDePasse || '')) cfg.courriel.motDePasse = env[cfg.courriel.motDePasse.slice(4)] || '';
+  cfg.courriel.adresse = String(cfg.courriel.adresse || '').replace(/\/+$/, '');
+  controlerCourriel(cfg.courriel);
   controlerSauvegardes(cfg.sauvegardes);
   if (!(cfg.limites.corpsMaxMo > 0)) throw new Error('Réglage « limites.corpsMaxMo » invalide.');
   return cfg;
 }
-module.exports = { chargerConfig, controlerSauvegardes, DEFAUTS };
+module.exports = { chargerConfig, controlerSauvegardes, controlerCourriel, DEFAUTS };

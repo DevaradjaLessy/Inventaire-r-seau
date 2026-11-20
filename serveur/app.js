@@ -7,7 +7,8 @@ const { modeleDeDepart, jeuDeDemonstration } = require('./depart');
 const { creerApi, VERSION } = require('./api/routes');
 const { creerStatique } = require('./api/statique');
 const { creerReleveur } = require('../connecteurs/lib/releveur');
-const { DEFAUTS, controlerSauvegardes } = require('./config');
+const { DEFAUTS, controlerSauvegardes, controlerCourriel } = require('./config');
+const { creerCourrier } = require('./courrier');
 const { creerSecurite } = require('./securite');
 const { preparerHttps } = require('./securite/certificat');
 
@@ -22,8 +23,8 @@ function serveurEnMarche(dossier) {
 
 /* Démarre le serveur. Renvoie { port, protocole, depot, securite, arreter }. options : { journal, horloge } */
 async function demarrer(config, { journal = console.log, horloge = () => Date.now() } = {}) {
-  const cfg = { serveur: { ...DEFAUTS.serveur, ...config.serveur }, donnees: { ...config.donnees }, web: { ...config.web }, supervision: { ...DEFAUTS.supervision, ...config.supervision }, limites: { ...DEFAUTS.limites, ...config.limites }, https: { ...DEFAUTS.https, ...config.https }, securite: { ...DEFAUTS.securite, ...config.securite }, sauvegardes: { ...DEFAUTS.sauvegardes, ...config.sauvegardes }, demo: !!config.demo, journal };
-  controlerSauvegardes(cfg.sauvegardes);
+  const cfg = { serveur: { ...DEFAUTS.serveur, ...config.serveur }, donnees: { ...config.donnees }, web: { ...config.web }, supervision: { ...DEFAUTS.supervision, ...config.supervision }, limites: { ...DEFAUTS.limites, ...config.limites }, https: { ...DEFAUTS.https, ...config.https }, securite: { ...DEFAUTS.securite, ...config.securite }, sauvegardes: { ...DEFAUTS.sauvegardes, ...config.sauvegardes }, courriel: { ...DEFAUTS.courriel, ...config.courriel }, demo: !!config.demo, journal };
+  controlerSauvegardes(cfg.sauvegardes); controlerCourriel(cfg.courriel);
   const depot = ouvrirBase({ fichier: path.join(cfg.donnees.dossier, 'netcarto.sqlite'), depart: await modeleDeDepart(cfg.web.dossier), sauvegardes: cfg.sauvegardes, horloge });
   // Témoin « serveur en marche » : la restauration complète en ligne de commande le consulte avant de remplacer la base
   const verrou = path.join(cfg.donnees.dossier, VERROU);
@@ -37,7 +38,8 @@ async function demarrer(config, { journal = console.log, horloge = () => Date.no
   const minuterie = setInterval(echeance, 60000); minuterie.unref();
   const releveur = creerReleveur(cfg.supervision.sources, journal);
   await releveur.demarrer(cfg.supervision.intervalle);
-  const securite = creerSecurite({ depot, config: cfg.securite, horloge });
+  const courrier = creerCourrier(cfg.courriel, journal);
+  const securite = creerSecurite({ depot, config: cfg.securite, horloge, courrier, journal });
   // HTTPS par défaut : certificat fourni, ou certificat auto-signé créé dans le dossier de données
   const tls = preparerHttps(cfg.https, cfg.donnees.dossier, { hote: cfg.serveur.hote });
   const api = creerApi({ depot, sauvegardes, releveur, securite, config: cfg, https: !!tls, certificat: tls }), statique = creerStatique(cfg.web.dossier, PREFIXE, { https: !!tls });

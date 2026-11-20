@@ -12,12 +12,13 @@ function creerComptes(p) {
     nombre: () => p.un('SELECT COUNT(*) AS n FROM utilisateurs').n,
     nombreAdministrateurs: () => p.un('SELECT COUNT(*) AS n FROM utilisateurs WHERE role = \'administrateur\' AND actif = 1').n,
     parIdentifiant: identifiant => p.un('SELECT * FROM utilisateurs WHERE identifiant = ? COLLATE NOCASE', [String(identifiant)]),
+    parCourriel: courriel => (courriel ? p.un('SELECT * FROM utilisateurs WHERE courriel = ? COLLATE NOCASE', [String(courriel)]) : null),
     parId: id => p.un('SELECT * FROM utilisateurs WHERE id = ?', [String(id)]),
     lister: () => p.tous('SELECT * FROM utilisateurs ORDER BY identifiant COLLATE NOCASE'),
-    creer: u => ecrire(() => p.lancer('INSERT INTO utilisateurs (id, identifiant, nom, role, mot_de_passe, actif, cree_le) VALUES (?, ?, ?, ?, ?, 1, ?)', [u.id, u.identifiant, u.nom, u.role, u.mot_de_passe, u.cree_le])),
+    creer: u => ecrire(() => p.lancer('INSERT INTO utilisateurs (id, identifiant, nom, courriel, role, mot_de_passe, actif, cree_le) VALUES (?, ?, ?, ?, ?, ?, 1, ?)', [u.id, u.identifiant, u.nom, u.courriel || '', u.role, u.mot_de_passe, u.cree_le])),
     /* champs : objet { colonne: valeur } parmi les colonnes modifiables */
     modifier(id, champs) {
-      const permis = ['nom', 'role', 'mot_de_passe', 'actif', 'echecs', 'verrouille_jusqu_a', 'derniere_connexion'], cols = Object.keys(champs).filter(k => permis.includes(k));
+      const permis = ['nom', 'courriel', 'role', 'mot_de_passe', 'actif', 'echecs', 'verrouille_jusqu_a', 'derniere_connexion'], cols = Object.keys(champs).filter(k => permis.includes(k));
       if (cols.length) ecrire(() => p.lancer(`UPDATE utilisateurs SET ${cols.map(c => c + ' = ?').join(', ')} WHERE id = ?`, [...cols.map(c => champs[c]), id]));
     },
     supprimer: id => p.lancer('DELETE FROM utilisateurs WHERE id = ?', [id]),
@@ -28,6 +29,11 @@ function creerComptes(p) {
     supprimerSession: jeton => p.lancer('DELETE FROM sessions WHERE jeton = ?', [jeton]),
     supprimerSessionsDe: (utilisateurId, sauf = '') => p.lancer('DELETE FROM sessions WHERE utilisateur_id = ? AND jeton <> ?', [utilisateurId, sauf]),
     purgerSessions: avant => p.lancer('DELETE FROM sessions WHERE vue_le < ?', [avant]),
+    // Liens de réinitialisation du mot de passe (empreinte du jeton, jamais le jeton)
+    creerReinitialisation: (jeton, utilisateurId, date, expire, origine) => p.lancer('INSERT INTO reinitialisations (jeton, utilisateur_id, cree_le, expire_le, origine) VALUES (?, ?, ?, ?, ?)', [jeton, utilisateurId, date, expire, origine]),
+    reinitialisation: jeton => p.un('SELECT * FROM reinitialisations WHERE jeton = ?', [jeton]),
+    supprimerReinitialisationsDe: utilisateurId => p.lancer('DELETE FROM reinitialisations WHERE utilisateur_id = ?', [utilisateurId]),
+    purgerReinitialisations: avant => p.lancer('DELETE FROM reinitialisations WHERE expire_le < ?', [avant]),
     // Journal d'audit
     ajouterAudit: a => p.lancer('INSERT INTO audit (date, utilisateur_id, identifiant, action, collection, cle, libelle, avant, apres, lot, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [a.date, a.utilisateur_id || null, a.identifiant || '', a.action, a.collection || '', a.cle || '', a.libelle || '', json(a.avant), json(a.apres), a.lot ?? null, a.ip || '']),
@@ -42,6 +48,7 @@ function creerComptes(p) {
     },
     /* Nombre d'entrées d'une action donnée depuis une date, et nombre de sessions vues depuis une date */
     compterAudit: (action, depuis) => p.un('SELECT COUNT(*) AS n FROM audit WHERE action = ? AND date >= ?', [action, depuis]).n,
+    compterAuditDe: (action, cle, depuis) => p.un('SELECT COUNT(*) AS n FROM audit WHERE action = ? AND cle = ? AND date >= ?', [action, String(cle), depuis]).n,
     nombreSessions: depuis => p.un('SELECT COUNT(*) AS n FROM sessions WHERE vue_le >= ?', [depuis]).n,
     /* Identifiant de la dernière personne à avoir modifié un élément (pour expliquer un conflit) */
     dernierAuteur: (collection, cle) => p.un('SELECT identifiant FROM audit WHERE collection = ? AND cle = ? AND identifiant <> \'\' ORDER BY id DESC LIMIT 1', [collection, String(cle)])?.identifiant || null,

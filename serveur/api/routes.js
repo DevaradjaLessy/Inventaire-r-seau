@@ -4,6 +4,8 @@
      GET    /info, /sante               version du serveur, état de la base
      GET    /session                    connecté ou non ; premier lancement ou non
      POST   /session                    connexion  { identifiant, motDePasse }
+     POST   /recuperation               mot de passe perdu  { compte } : envoie un lien par courriel si c'est possible
+     POST   /recuperation/mot-de-passe  { jeton, motDePasse } : choisit un nouveau mot de passe avec le lien reçu
      POST   /initialisation             création du premier administrateur, avec le code affiché au démarrage
    Tout compte connecté
      DELETE /session                    déconnexion
@@ -14,6 +16,7 @@
    Administrateur
      PUT    /base                       remplace toute la base
      GET|POST /utilisateurs, PUT|DELETE /utilisateurs/{id}
+     POST   /recuperation/lien          { id } : lien de réinitialisation à remettre à un collègue
      GET    /securite                   état de sécurité du serveur (échecs de connexion, comptes, sauvegarde, certificat)
      GET    /audit                      journal d'audit (filtres : cle, collection, identifiant, action, avant, limite)
      GET    /sauvegardes                réglages et liste des sauvegardes
@@ -70,13 +73,17 @@ function creerApi({ depot, sauvegardes, releveur, securite, config, https, certi
     }
     if (a === 'session' && !b) {
       methode(req, 'GET', 'POST', 'DELETE');
-      if (req.method === 'GET') return moi ? { connecte: true, utilisateur: moi, initialisation: false } : { connecte: false, initialisation: securite.aInitialiser() };
+      if (req.method === 'GET') return moi ? { connecte: true, utilisateur: moi, initialisation: false } : { connecte: false, initialisation: securite.aInitialiser(), recuperationParCourriel: securite.recuperationParCourriel() };
       if (req.method === 'DELETE') { securite.deconnecter(jeton); return new Reponse({ connecte: false }, { 'Set-Cookie': cookie('', 0) }); }
       const v = await lireJson(req, max), s = await securite.connecter(v.identifiant, v.motDePasse, { ip });
       return new Reponse({ connecte: true, utilisateur: s.utilisateur }, { 'Set-Cookie': cookie(s.jeton, s.dureeSecondes) });
     }
+    // Mot de passe perdu : la demande ne dit jamais si le compte existe ; le lien reçu permet d'en choisir un nouveau
+    if (a === 'recuperation' && !b) { methode(req, 'POST'); const v = await lireJson(req, max); securite.demanderReinitialisation(v.compte, { ip }); return { ok: true }; }
+    if (a === 'recuperation' && b === 'mot-de-passe') { methode(req, 'POST'); const v = await lireJson(req, max); return { ok: true, ...(await securite.reinitialiser(v.jeton, v.motDePasse, { ip })) }; }
     // --- Compte connecté ---
     exiger(moi);
+    if (a === 'recuperation' && b === 'lien') { methode(req, 'POST'); exiger(moi, 'administrateur'); const v = await lireJson(req, max); return securite.lienReinitialisation(v.id, moi); }
     if (a === 'session' && b === 'mot-de-passe') { methode(req, 'PUT'); const v = await lireJson(req, max); await securite.changerMotDePasse(moi, jeton, v.actuel, v.nouveau); return { ok: true }; }
     if (a === 'revision' && !b) { methode(req, 'GET'); return { revision: depot.revision() }; }
     if (a === 'base' && !b) {

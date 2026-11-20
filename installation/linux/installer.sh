@@ -120,7 +120,7 @@ else
   dire "Réglages existants gardés : $FICHIER_REGLAGES"
 fi
 if [ ! -f "$FICHIER_SECRETS" ]; then
-  printf '%s\n' "# Secrets des sources de supervision, lus par les valeurs \"env:NOM\" des réglages. Une ligne NOM=valeur par secret." "# PRTG_TOKEN=" "# SNMP_COMMUNITY=" > "$FICHIER_SECRETS"
+  printf '%s\n' "# Secrets des sources de supervision, lus par les valeurs \"env:NOM\" des réglages. Une ligne NOM=valeur par secret." "# PRTG_TOKEN=" "# SNMP_COMMUNITY=" "# SMTP_MDP=" > "$FICHIER_SECRETS"
   chown root:root "$FICHIER_SECRETS"; chmod 600 "$FICHIER_SECRETS"
 fi
 

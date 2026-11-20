@@ -6,32 +6,39 @@ const { ErreurMetier } = require('../donnees/erreurs');
 const { controlerMotDePasse, hacher, verifier } = require('./mots-de-passe');
 
 const ROLES = ['lecture', 'technicien', 'administrateur'];
-const DEFAUTS = { echecsMax: 5, verrouillageMinutes: 15, sessionHeures: 12, inactiviteMinutes: 120 };
+const DEFAUTS = { echecsMax: 5, verrouillageMinutes: 15, sessionHeures: 12, inactiviteMinutes: 120, reinitialisationMinutes: 30, reinitialisationsParHeure: 3 };
+/* Adresse de courriel : en minuscules, ou '' ; lève une erreur si la forme est invalide */
+function courrielValide(v) {
+  const c = String(v || '').trim().toLowerCase();
+  if (c && (c.length > 254 || !/^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/.test(c))) throw new ErreurMetier('regle', 'Adresse de courriel invalide.');
+  return c;
+}
 const empreinte = jeton => crypto.createHash('sha256').update(String(jeton)).digest('hex');
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // sans caractères ambigus (0/O, 1/I)
 const code = () => [0, 1, 2].map(() => Array.from(crypto.randomBytes(4), b => ALPHABET[b % ALPHABET.length]).join('')).join('-');
 
-function creerSecurite({ depot, config = {}, horloge = () => Date.now() }) {
+function creerSecurite({ depot, config = {}, horloge = () => Date.now(), courrier = null, journal = () => {} }) {
   const c = depot.comptes, regle = { ...DEFAUTS, ...config };
-  const publique = (u, t = horloge()) => u && ({ id: u.id, identifiant: u.identifiant, nom: u.nom, role: u.role, actif: !!u.actif, verrouille: !!u.verrouille_jusqu_a && u.verrouille_jusqu_a > t, derniereConnexion: u.derniere_connexion || null });
+  const publique = (u, t = horloge()) => u && ({ id: u.id, identifiant: u.identifiant, nom: u.nom, courriel: u.courriel || '', role: u.role, actif: !!u.actif, verrouille: !!u.verrouille_jusqu_a && u.verrouille_jusqu_a > t, derniereConnexion: u.derniere_connexion || null });
   const audit = (auteur, action, cible, apres = null, ip = '') => c.ajouterAudit({ date: Date.now(), utilisateur_id: auteur?.id || null, identifiant: auteur?.identifiant || '', action, collection: 'utilisateurs', cle: cible?.id || '', libelle: cible?.identifiant || '', avant: null, apres, ip });
   let codeInitialisation = c.nombre() === 0 ? code() : null;
 
-  async function creerUtilisateur({ identifiant, nom = '', role, motDePasse }, auteur = null) {
+  async function creerUtilisateur({ identifiant, nom = '', courriel = '', role, motDePasse }, auteur = null) {
     identifiant = String(identifiant || '').trim();
     if (!/^[A-Za-z0-9._-]{2,40}$/.test(identifiant)) throw new ErreurMetier('regle', 'Identifiant invalide : 2 à 40 lettres, chiffres, points ou tirets.');
     if (!ROLES.includes(role)) throw new ErreurMetier('regle', `Rôle inconnu (attendu : ${ROLES.join(', ')}).`);
     const refus = controlerMotDePasse(motDePasse, identifiant);
     if (refus) throw new ErreurMetier('regle', refus);
-    const u = { id: 'u-' + crypto.randomBytes(8).toString('hex'), identifiant, nom: String(nom || '').trim().slice(0, 80), role, mot_de_passe: await hacher(motDePasse), cree_le: horloge() };
+    const u = { id: 'u-' + crypto.randomBytes(8).toString('hex'), identifiant, nom: String(nom || '').trim().slice(0, 80), courriel: courrielValide(courriel), role, mot_de_passe: await hacher(motDePasse), cree_le: horloge() };
     c.creer(u);
-    audit(auteur, 'utilisateur_creer', u, { identifiant, nom: u.nom, role });
+    audit(auteur, 'utilisateur_creer', u, { identifiant, nom: u.nom, courriel: u.courriel, role });
     return publique(c.parId(u.id));
   }
   /* Vérifie l'identifiant et le mot de passe ; ouvre une session et renvoie son jeton */
   async function connecter(identifiant, motDePasse, { ip = '' } = {}) {
     const refus = new ErreurMetier('acces', 'Identifiant ou mot de passe incorrect.'), t = horloge();
-    const u = c.parIdentifiant(String(identifiant || ''));
+    // On se connecte avec son identifiant, ou avec son adresse de courriel
+    const saisi = String(identifiant || '').trim(), u = c.parIdentifiant(saisi) || (saisi.includes('@') ? c.parCourriel(saisi) : null);
     if (!u) { await verifier(String(motDePasse || ''), 'scrypt$32768$8$1$AAAAAAAAAAAAAAAAAAAAAA==$AAAA'); c.ajouterAudit({ date: Date.now(), identifiant: String(identifiant || '').slice(0, 40), action: 'echec_connexion', collection: 'utilisateurs', libelle: 'compte inconnu', ip }); throw refus; }
     if (u.verrouille_jusqu_a && u.verrouille_jusqu_a > t) throw new ErreurMetier('verrouille', `Compte verrouillé après plusieurs échecs. Réessayez dans ${Math.ceil((u.verrouille_jusqu_a - t) / 60000)} minute(s), ou demandez à un administrateur de le déverrouiller.`);
     if (!u.actif || !(await verifier(String(motDePasse || ''), u.mot_de_passe))) {
@@ -72,6 +79,7 @@ function creerSecurite({ depot, config = {}, horloge = () => Date.now() }) {
     if (!u) throw new ErreurMetier('regle', 'Compte introuvable.');
     const champs = {}, trace = {};
     if (v.nom !== undefined) { champs.nom = String(v.nom).trim().slice(0, 80); trace.nom = champs.nom; }
+    if (v.courriel !== undefined) { champs.courriel = courrielValide(v.courriel); trace.courriel = champs.courriel; }
     if (v.role !== undefined && v.role !== u.role) {
       if (!ROLES.includes(v.role)) throw new ErreurMetier('regle', `Rôle inconnu (attendu : ${ROLES.join(', ')}).`);
       if (dernierAdmin(u)) throw new ErreurMetier('regle', 'Impossible : c\'est le dernier administrateur actif.');
@@ -98,12 +106,55 @@ function creerSecurite({ depot, config = {}, horloge = () => Date.now() }) {
     audit(auteur, 'utilisateur_supprimer', u, { identifiant: u.identifiant });
   }
   /* Création du premier administrateur, avec le code affiché au démarrage du serveur */
-  async function initialiser({ code: recu, identifiant, nom, motDePasse }) {
+  async function initialiser({ code: recu, identifiant, nom, courriel, motDePasse }) {
     const a = Buffer.from(String(recu || '').trim().toUpperCase()), b = Buffer.from(codeInitialisation || '');
     if (!codeInitialisation || c.nombre() > 0 || a.length !== b.length || !crypto.timingSafeEqual(a, b)) throw new ErreurMetier('interdit', 'Code d\'initialisation incorrect, ou serveur déjà initialisé.');
-    const u = await creerUtilisateur({ identifiant, nom, role: 'administrateur', motDePasse });
+    const u = await creerUtilisateur({ identifiant, nom, courriel, role: 'administrateur', motDePasse });
     codeInitialisation = null;
     return u;
+  }
+  /* --- Mot de passe perdu --- */
+  /* Fabrique un lien à usage unique pour un compte. Renvoie le jeton (jamais stocké ni journalisé) et sa date d'expiration. */
+  function nouveauLien(u, origine) {
+    const t = horloge(), jeton = crypto.randomBytes(32).toString('base64url'), expire = t + regle.reinitialisationMinutes * 60000;
+    c.purgerReinitialisations(t - 3600000);
+    c.creerReinitialisation(empreinte(jeton), u.id, t, expire, origine);
+    return { jeton, expire };
+  }
+  /* Lien remis par un administrateur à un collègue (aucun courriel nécessaire) */
+  function lienReinitialisation(id, auteur) {
+    const u = c.parId(String(id || ''));
+    if (!u) throw new ErreurMetier('regle', 'Compte introuvable.');
+    const { jeton, expire } = nouveauLien(u, 'administrateur');
+    audit(auteur, 'lien_reinitialisation', u, { minutes: regle.reinitialisationMinutes });
+    return { lien: `/?reinitialisation=${jeton}`, expire, identifiant: u.identifiant };
+  }
+  /* Demande faite depuis l'écran de connexion. Ne dit jamais si le compte existe ; n'envoie rien sans serveur d'envoi. */
+  function demanderReinitialisation(compte, { ip = '' } = {}) {
+    const saisi = String(compte || '').trim(), t = horloge();
+    const u = saisi ? c.parIdentifiant(saisi) || (saisi.includes('@') ? c.parCourriel(saisi) : null) : null;
+    if (!u || !u.actif || !u.courriel || !courrier?.actif) return;
+    // Limite par compte, comptée dans le journal d'audit : elle tient même après une réinitialisation réussie
+    if (c.compterAuditDe('demande_reinitialisation', u.id, Date.now() - 3600000) >= regle.reinitialisationsParHeure) return;
+    const { jeton } = nouveauLien(u, 'courriel');
+    audit(u, 'demande_reinitialisation', u, null, ip);
+    courrier.envoyer({ a: u.courriel, sujet: 'NetCarto — réinitialisation de votre mot de passe',
+      texte: `Bonjour,\n\nUne réinitialisation du mot de passe a été demandée pour le compte NetCarto « ${u.identifiant} ».\n\nOuvrez ce lien pour choisir un nouveau mot de passe. Il est valable ${regle.reinitialisationMinutes} minutes et ne sert qu'une fois :\n\n${courrier.adresse}/?reinitialisation=${jeton}\n\nSi vous n'êtes pas à l'origine de cette demande, ignorez ce message : votre mot de passe ne change pas.\n` })
+      .catch(e => journal(`Réinitialisation : courriel non envoyé (${e.message})`));
+  }
+  /* Choix du nouveau mot de passe avec un lien valable */
+  async function reinitialiser(jeton, motDePasse, { ip = '' } = {}) {
+    const refus = new ErreurMetier('regle', 'Lien de réinitialisation invalide ou expiré. Demandez-en un nouveau.');
+    const r = c.reinitialisation(empreinte(String(jeton || ''))), t = horloge();
+    if (!r || r.expire_le < t) throw refus;
+    const u = c.parId(r.utilisateur_id);
+    if (!u || !u.actif) throw refus;
+    const faible = controlerMotDePasse(motDePasse, u.identifiant);
+    if (faible) throw new ErreurMetier('regle', faible);
+    c.modifier(u.id, { mot_de_passe: await hacher(motDePasse), echecs: 0, verrouille_jusqu_a: null });
+    c.supprimerReinitialisationsDe(u.id); c.supprimerSessionsDe(u.id);
+    audit(u, 'mot_de_passe_reinitialise', u, { origine: r.origine }, ip);
+    return { identifiant: u.identifiant };
   }
   /* État de sécurité du serveur, pour l'administrateur : ce qui mérite un coup d'œil, sans aucun secret.
      options : { sauvegardes (module des sauvegardes), certificat (HTTPS en service, ou null) } */
@@ -118,11 +169,12 @@ function creerSecurite({ depot, config = {}, horloge = () => Date.now() }) {
       comptes: { total: comptes.length, actifs: comptes.filter(u => u.actif).length, administrateurs: comptes.filter(u => u.actif && u.role === 'administrateur').length },
       sessions: c.nombreSessions(t - regle.inactiviteMinutes * 60000),
       sauvegarde: { automatique: !!reglages.actif, nombre: copies.length, derniere: derniere ? derniere.date : null, ageHeures: derniere ? Math.max(0, Math.round((t - derniere.date) / 360000) / 10) : null },
+      courriel: { actif: !!courrier?.actif, sansAdresse: comptes.filter(u => u.actif && !u.courriel).map(u => u.identifiant) },
       https: certificat ? { actif: true, autoSigne: !!certificat.autoSigne, expire: certificat.expire.getTime(), joursRestants: Math.floor((certificat.expire.getTime() - t) / jour) } : { actif: false },
     };
   }
   return {
-    ROLES, etat, creerUtilisateur, connecter, session, deconnecter, changerMotDePasse, modifierUtilisateur, supprimerUtilisateur, initialiser,
+    ROLES, etat, lienReinitialisation, demanderReinitialisation, reinitialiser, recuperationParCourriel: () => !!courrier?.actif, creerUtilisateur, connecter, session, deconnecter, changerMotDePasse, modifierUtilisateur, supprimerUtilisateur, initialiser,
     lister: () => c.lister().map(u => publique(u)), trouver: identifiant => publique(c.parIdentifiant(identifiant)),
     aInitialiser: () => c.nombre() === 0, get codeInitialisation() { return codeInitialisation; },
   };

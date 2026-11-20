@@ -24,7 +24,8 @@ function creerStatique(racine, prefixeApi, { https = false } = {}) {
   return function servir(chemin, res, accepte = '') {
     let rel;
     try { rel = decodeURIComponent(chemin); } catch { return refus(res, 404); }
-    if (rel === '/' || rel === '') rel = '/index.html';
+    // La page d'administration est la même page, ouverte sur sa vue « Administration »
+    if (rel === '/' || rel === '' || rel === '/admin' || rel === '/admin/') rel = '/index.html';
     const segments = rel.split('/').filter(Boolean), ext = path.extname(rel).toLowerCase();
     const permis = (segments.length === 1 && segments[0] === 'index.html') || (segments.length > 1 && DOSSIERS.includes(segments[0]));
     if (!permis || !MIME[ext] || segments.some(s => s.startsWith('.') || s.includes('\\') || s.includes('\0'))) return refus(res, 403);

@@ -7,13 +7,16 @@ import { Sync } from '../sync.js';
 import { computeAlerts, vlanOf } from '../services/requetes.js';
 import { Live } from '../services/mesures.js';
 
-const UI = { tab: 'carto', dirty: new Set(['carto', 'inv', 'mat', 'dash']) };
+const UI = { tab: 'carto', dirty: new Set(['carto', 'inv', 'mat', 'dash', 'admin']) };
 const TABS = [
   { id: 'carto', label: 'Cartographie', icon: 'carto' },
   { id: 'inv', label: 'Inventaire', icon: 'list' },
   { id: 'mat', label: 'Matériel disponible', short: 'Matériel', icon: 'box' },
   { id: 'dash', label: 'Tableau de bord', short: 'Tableau', icon: 'gauge' },
+  { id: 'admin', label: 'Administration', short: 'Admin', icon: 'user', admin: true },   // mode serveur, administrateurs seulement ; adresse /admin
 ];
+const estAdmin = () => Store.mode === 'serveur' && Sync.utilisateur?.role === 'administrateur';
+const ongletsVisibles = () => TABS.filter(t => !t.admin || estAdmin());
 /* Vrai sur un écran étroit (téléphone) : même seuil que la feuille de styles */
 const isMobile = () => matchMedia('(max-width: 900px)').matches;
 const Views = {};       // chaque onglet enregistre ici { render() }
@@ -45,7 +48,9 @@ function renderShell() {
   tag.innerHTML = `<i></i>${e === 'envoi' ? 'Enregistrement…' : e === 'horsligne' ? 'Hors ligne' : 'Serveur · enregistré'}`;
   tag.dataset.tip = e === 'horsligne' ? 'Serveur injoignable|Les modifications ne sont pas enregistrées tant que la liaison n\'est pas rétablie.' : 'Base sur le serveur NetCarto|Chaque modification est enregistrée dans la base du serveur.';
   const nAlerts = computeAlerts().filter(a => a.level !== 'warn' || a.kind === 'stock').length;
-  $('#tabs').innerHTML = TABS.map(t => `<button data-act="tab" data-tab="${t.id}" class="${UI.tab === t.id ? 'on' : ''}">${ico(t.icon)}<span class="lg">${t.label}</span><span class="sh">${t.short || t.label}</span>${t.id === 'dash' && nAlerts ? `<span class="badge" data-tip="${plural(nAlerts, 'alerte')} à traiter">${nAlerts}</span>` : ''}</button>`).join('');
+  // Un compte en lecture seule ne voit pas les boutons dont il ne peut pas se servir (règles « role-lecture » de la feuille de styles)
+  document.body.classList.toggle('role-lecture', Store.mode === 'serveur' && Sync.utilisateur?.role === 'lecture');
+  $('#tabs').innerHTML = ongletsVisibles().map(t => `<button data-act="tab" data-tab="${t.id}" class="${UI.tab === t.id ? 'on' : ''}">${ico(t.icon)}<span class="lg">${t.label}</span><span class="sh">${t.short || t.label}</span>${t.id === 'dash' && nAlerts ? `<span class="badge" data-tip="${plural(nAlerts, 'alerte')} à traiter">${nAlerts}</span>` : ''}</button>`).join('');
   $('#tools').innerHTML = `
     ${Store.mode === 'serveur' && Sync.utilisateur ? `<button class="btn" id="user-chip" data-act="compte-menu" data-tip="${esc(Sync.utilisateur.nom || Sync.utilisateur.identifiant)}|${{ lecture: 'Lecture seule', technicien: 'Technicien', administrateur: 'Administrateur' }[Sync.utilisateur.role]}|Clic : mon compte, déconnexion">${ico('user')}<span>${esc(Sync.utilisateur.identifiant)}</span></button>` : ''}
     <button class="btn icon" data-act="theme" data-tip="${Theme.get() === 'dark' ? 'Passer au thème clair' : 'Passer au thème sombre'}|Le choix est mémorisé dans ce navigateur">${ico(Theme.get() === 'dark' ? 'sun' : 'moon')}</button>
@@ -57,7 +62,10 @@ function renderShell() {
     <button class="btn icon" data-act="reset" data-tip="Réinitialiser|Recharger la démonstration ou repartir d'une base vide">${ico('reset')}</button>`;
 }
 function showTab(id) {
+  if (TABS.find(t => t.id === id)?.admin && !estAdmin()) { if (Store.mode === 'serveur') toast('La page d\'administration est réservée aux administrateurs.', 'err'); id = 'carto'; }
   UI.tab = id;
+  // En mode serveur, l'adresse suit : /admin pour l'administration, / pour le reste
+  if (Store.mode === 'serveur') { const chemin = id === 'admin' ? '/admin' : '/'; if (location.pathname !== chemin) history.replaceState(null, '', chemin); }
   for (const t of TABS) $('#tab-' + t.id).classList.toggle('on', t.id === id);
   renderShell();
   renderActive();
@@ -74,7 +82,7 @@ Store.onSaveError = () => toast('Sauvegarde locale impossible (stockage plein ou
 Sync.surEtat = () => { if (Store.db) renderShell(); };
 Store.onSyncError = e => toast(e.code === 'conflit' ? e.message : e.code === 'reseau' ? e.message : `Modification refusée par le serveur : ${e.message}`, e.code === 'conflit' ? 'warn' : 'err');
 Store.onExternalChange = () => toast('Données mises à jour : un autre poste a modifié la base.', 'ok');
-Store.on(() => { TABS.forEach(t => UI.dirty.add(t.id)); renderShell(); renderActive(); });
+Store.on(() => { TABS.filter(t => !t.admin).forEach(t => UI.dirty.add(t.id)); renderShell(); renderActive(); });   // l'administration ne dépend pas de la base : elle n'est pas redessinée sous les doigts
 
 /* --- Notifications --- */
 function toast(msg, kind = 'ok', action = null) {
@@ -190,4 +198,4 @@ $('#file-import').addEventListener('change', async e => {
     }, 'Importer');
   } catch (err) { toast(`Import impossible : ${err.message}`, 'err'); }
 });
-export { Actions, Changes, Inputs, isMobile, levelColor, Modal, renderActive, renderShell, run, showTab, stDev, stPort, TABS, Tip, toast, UI, undoAction, Views, vlanChip };
+export { Actions, Changes, estAdmin, Inputs, isMobile, levelColor, Modal, renderActive, renderShell, run, showTab, stDev, stPort, TABS, Tip, toast, UI, undoAction, Views, vlanChip };

@@ -44,7 +44,36 @@ Ouvrez ensuite `https://127.0.0.1:8443`.
 | Technicien | modifier les données (équipements, câblage, stock, structure) |
 | Administrateur | en plus : gérer les comptes, lire le journal d'audit, importer ou réinitialiser la base |
 
-Dans l'interface, le bouton à votre nom (en haut à droite) ouvre : *Changer mon mot de passe*, *Utilisateurs*, *Journal d'audit*, *Sauvegardes*, *Se déconnecter*.
+### La page d'administration
+
+Les administrateurs ont un onglet **Administration**, à l'adresse `https://<serveur>:8443/admin`. Tout y est regroupé :
+
+- **Comptes et rôles** : créer un compte, choisir son rôle, saisir son adresse de courriel, le désactiver, le déverrouiller, le supprimer.
+- **Journal d'audit**, **Sauvegardes**, **Sécurité du serveur**.
+
+Un compte qui n'est pas administrateur est renvoyé sur l'application avec un message.
+
+### Connexion et mot de passe perdu
+
+On se connecte avec son identifiant ou avec son adresse de courriel. Deux façons de retrouver l'accès :
+
+- **Lien remis par un administrateur** (fonctionne toujours) : page d'administration, bouton *Lien* du compte. L'administrateur remet le lien au collègue, qui choisit lui-même son nouveau mot de passe. Le lien vaut 30 minutes et ne sert qu'une fois.
+- **Lien envoyé par courriel** (si un serveur d'envoi est réglé) : « Mot de passe oublié ? » sur l'écran de connexion. La réponse est la même que le compte existe ou non, et un compte reçoit au plus trois liens par heure.
+
+Pour régler l'envoi de courriels, dans le fichier de réglages :
+
+```toml
+[courriel]
+hote = "smtp.exemple.interne"
+utilisateur = "netcarto"
+motDePasse = "env:SMTP_MDP"
+expediteur = "NetCarto <netcarto@exemple.interne>"
+adresse = "https://netcarto.exemple.interne:8443"
+```
+
+`adresse` est l'adresse par laquelle vos collègues ouvrent NetCarto : elle sert à écrire les liens des courriels. La liaison utilise STARTTLS sur le port 587 par défaut (`securite = "tls"` pour le port 465).
+
+Le bouton à votre nom (en haut à droite) ouvre : *Changer mon mot de passe*, *Page d'administration*, *Se déconnecter*.
 
 - **Mots de passe** : 12 caractères au moins, jamais enregistrés en clair (empreinte scrypt salée).
 - **Verrouillage** : 5 échecs de suite verrouillent le compte 15 minutes. Un administrateur peut le déverrouiller.
@@ -96,6 +125,7 @@ node --disable-warning=ExperimentalWarning netcarto.js --config netcarto.toml
 | Taille maximale d'une requête | `limites.corpsMaxMo` | | |
 | HTTPS | `https.actif`, `https.noms`, `https.certificat`, `https.cle` | | `--http` |
 | Sécurité | `securite.echecsMax`, `securite.verrouillageMinutes`, `securite.sessionHeures`, `securite.inactiviteMinutes` | | |
+| Courriel (facultatif) | `courriel.hote`, `courriel.port`, `courriel.securite`, `courriel.utilisateur`, `courriel.motDePasse`, `courriel.expediteur`, `courriel.adresse` | | |
 | Sauvegardes | `sauvegardes.actif`, `sauvegardes.heure`, `sauvegardes.conserver`, `sauvegardes.dossier` | | |
 | Supervision | `supervision.intervalle`, `[[supervision.sources]]` | | |
 
@@ -168,6 +198,9 @@ Préfixe : `/api/v1`. Tout est en JSON.
 | `GET /session` | libre | connecté ou non |
 | `POST /session` | libre | connexion `{ identifiant, motDePasse }` |
 | `POST /initialisation` | libre, une seule fois | création du premier administrateur |
+| `POST /recuperation` | libre | mot de passe perdu `{ compte }` : envoie un lien par courriel si c'est possible ; répond toujours la même chose |
+| `POST /recuperation/mot-de-passe` | libre, avec un lien valable | `{ jeton, motDePasse }` |
+| `POST /recuperation/lien` | administrateur | `{ id }` : lien de réinitialisation à remettre à un collègue |
 | `DELETE /session` | connecté | déconnexion |
 | `PUT /session/mot-de-passe` | connecté | changer son mot de passe |
 | `GET /revision`, `GET /base` | connecté | révision, base complète |
@@ -236,6 +269,7 @@ donnees/             couche d'accès aux données, la seule à connaître la bas
   sauvegardes.js     copies de la base, planification, purge, restauration
   erreurs.js         refus de la base traduits en messages clairs
 securite/            comptes, sessions, mots de passe, certificat HTTPS
+courrier.js          envoi de courriels par SMTP (facultatif)
 tests/               tests (node:test)
 ```
 

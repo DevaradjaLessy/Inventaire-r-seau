@@ -35,6 +35,7 @@ import './ui/export-image.js';
 import './ui/historique.js';
 import './ui/clavier.js';
 import './ui/interventions.js';
+import './ui/administration.js';
 import { impactOf } from './services/impact.js';
 import './ui/recherche.js';
 import './ui/materiel/catalogue.js';
@@ -57,6 +58,7 @@ catch (e) {
   document.querySelector('main').innerHTML = `<div class="boot-error"><h2>Base inaccessible</h2><p class="muted">${String(e.message).replace(/[<>&]/g, '')}</p><p><button class="btn pri" onclick="location.reload()">Réessayer</button></p></div>`;
   throw e;
 }
+if (api && /^\/admin\/?$/.test(location.pathname)) UI.tab = 'admin';   // adresse de la page d'administration
 showTab(UI.tab);
 Live.load();
 Live.start();   // relevés de supervision, si une source est configurée

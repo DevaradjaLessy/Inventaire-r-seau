@@ -748,7 +748,70 @@ test('Comptes : un compte en lecture seule consulte tout mais ne modifie rien', 
   assert.strictEqual(await page.evaluate(i => NetCarto.Store.idx.id.get(i).vlan, pid), avant);
   assert.strictEqual((await api(page, '/ports/' + pid)).json.vlan, avant);
   await page.click('#user-chip'); assert.strictEqual(await page.locator('[data-act=compte-utilisateurs]').count(), 0, 'la gestion des comptes est réservée aux administrateurs');
+  await page.click('[data-act=modal-close]');
+  // Les boutons d'action ne sont pas proposés à un compte qui ne peut pas s'en servir
+  await page.evaluate(() => NetCarto.select(NetCarto.Store.db.devices.find(x => x.hostname === 'SW-A1-ACC-01').id));
+  for (const a of ['dev-edit', 'dev-move', 'dev-replace', 'dev-remove']) assert.strictEqual(await page.locator(`#detail [data-act=${a}]`).isVisible(), false, a);
+  assert.strictEqual(await page.locator('#detail [data-act=impact]').isVisible(), true, 'la consultation reste entière');
+  assert.strictEqual(await page.locator('[data-tab=admin]').count(), 0);
 }, { serveur: true, compte: 'lecteur' });
+test('Administration : page /admin réservée aux administrateurs, tout y est regroupé', async (page, { app }) => {
+  const racine = `http://127.0.0.1:${app.port}/`;
+  await page.goto(racine + 'admin'); await page.waitForSelector('#tab-admin.on');
+  assert.match(await page.locator('#tab-admin h1').innerText(), /Administration/);
+  // Comptes : création avec adresse de courriel, rôle expliqué
+  await page.waitForSelector('#users-list .u-row');
+  assert.match(await page.locator('#tab-admin').innerText(), /Lecture seule[\s\S]*Technicien[\s\S]*Administrateur/);
+  await page.fill('#user-new [name=u-identifiant]', 'alice'); await page.fill('#user-new [name=u-nom]', 'Alice Martin'); await page.fill('#user-new [name=u-courriel]', 'alice@exemple.test');
+  await page.selectOption('#user-new [name=u-role]', 'technicien'); await page.fill('#user-new [name=u-mdp]', MDP); await page.click('[data-act=user-add]');
+  const ligne = page.locator('#users-list .u-row', { hasText: 'alice' }); await ligne.waitFor();
+  assert.match(await ligne.innerText(), /alice@exemple\.test/); assert.strictEqual(await page.locator('.modal').count(), 0, 'on reste dans la page, sans fenêtre');
+  // Les autres rubriques sont dans la même page
+  await page.click('[data-act=admin-rubrique][data-r=audit]'); await page.waitForSelector('#audit-list .a-row'); assert.match(await page.locator('#audit-list').innerText(), /Compte créé/);
+  await page.click('[data-act=admin-rubrique][data-r=sauvegardes]'); await page.waitForSelector('#sv-reglages b');
+  await page.click('[data-act=admin-rubrique][data-r=securite]'); await page.locator('#sec-etat .sec-row').first().waitFor(); assert.match(await page.locator('#sec-etat').innerText(), /HTTPS désactivé/);
+  // L'adresse suit l'onglet ; un rechargement revient au même endroit
+  assert.strictEqual(await page.evaluate(() => location.pathname), '/admin');
+  await page.click('[data-tab=carto]'); assert.strictEqual(await page.evaluate(() => location.pathname), '/');
+  await page.click('[data-tab=admin]'); assert.strictEqual(await page.evaluate(() => location.pathname), '/admin');
+  await page.reload(); await page.waitForSelector('#tab-admin.on #users-list .u-row');
+}, S);
+test('Administration : /admin est refusé à un technicien', async (page, { app }) => {
+  await page.goto(`http://127.0.0.1:${app.port}/admin`); await page.waitForFunction(() => window.NetCarto?.Store.db);
+  await page.waitForSelector('.toast.err'); assert.match(await page.locator('.toast.err').first().innerText(), /réservée aux administrateurs/);
+  assert.strictEqual(await page.$eval('.tab.on', e => e.id), 'tab-carto'); assert.strictEqual(await page.locator('[data-tab=admin]').count(), 0);
+  assert.strictEqual(await page.evaluate(() => location.pathname), '/');
+}, { serveur: true, compte: 'tech' });
+test('Mot de passe perdu : l\'administrateur remet un lien, le collègue choisit son mot de passe et se connecte avec son courriel', async (page, { app }) => {
+  const racine = `http://127.0.0.1:${app.port}/`;
+  await page.goto(racine + 'admin'); await page.waitForSelector('#users-list .u-row');
+  await page.click('#users-list [data-act=user-courriel][data-ident=tech]'); await page.fill('.modal [name=courriel]', 'tech@exemple.test'); await page.click('[data-act=modal-ok]');
+  await page.locator('#users-list .u-row', { hasText: 'tech@exemple.test' }).waitFor();
+  await page.click('#users-list [data-act=user-lien][data-ident=tech]'); await page.waitForSelector('#lien-reinit');
+  const lien = await page.inputValue('#lien-reinit');
+  assert.match(lien, new RegExp(`^http://127\\.0\\.0\\.1:${app.port}/\\?reinitialisation=`)); assert.match(await page.locator('.modal').innerText(), /30 minutes/);
+  // Le collègue ouvre le lien sur son poste (aucune session)
+  const autre = await page.context().browser().newContext(), p2 = await autre.newPage();
+  await p2.goto(lien); await p2.waitForSelector('#auth form[data-mode=reinitialisation]');
+  await p2.fill('#auth [name=motDePasse]', 'Nouveau-mot-de-passe-2'); await p2.fill('#auth [name=confirmation]', 'Nouveau-mot-de-passe-2'); await p2.click('#auth button[type=submit]');
+  await p2.waitForSelector('#auth form[data-mode=connexion]'); assert.match(await p2.locator('#auth').innerText(), /Mot de passe changé/);
+  assert.strictEqual(await p2.evaluate(() => location.search), '', 'le lien ne reste pas dans l\'adresse');
+  await p2.fill('#auth [name=identifiant]', 'tech@exemple.test'); await p2.fill('#auth [name=motDePasse]', 'Nouveau-mot-de-passe-2'); await p2.click('#auth button[type=submit]');
+  await p2.waitForFunction(() => window.NetCarto?.Store.db && !document.querySelector('#auth'));
+  assert.strictEqual(await p2.evaluate(() => NetCarto.Store.utilisateur.identifiant), 'tech');
+  // Lien déjà utilisé : refusé clairement
+  const p3 = await autre.newPage(); await p3.goto(lien); await p3.waitForSelector('#auth form[data-mode=reinitialisation]');
+  await p3.fill('#auth [name=motDePasse]', 'Encore-un-autre-mot-3'); await p3.fill('#auth [name=confirmation]', 'Encore-un-autre-mot-3'); await p3.click('#auth button[type=submit]');
+  await p3.waitForSelector('#auth .auth-err:not(:empty)'); assert.match(await p3.locator('#auth .auth-err').innerText(), /invalide ou expiré/);
+  await autre.close();
+}, { serveur: true, erreursAttendues: /422/ });
+test('Écran de connexion : « Mot de passe oublié » explique quoi faire quand aucun serveur d\'envoi n\'est réglé', async page => {
+  await page.waitForSelector('#auth form[data-mode=connexion]');
+  assert.match(await page.locator('#auth label', { hasText: 'Identifiant' }).innerText(), /courriel/i);
+  await page.click('#auth [data-auth=oubli]'); await page.waitForSelector('#auth form[data-mode=oubli]');
+  assert.match(await page.locator('#auth').innerText(), /administrateur[\s\S]*lien/i); assert.strictEqual(await page.locator('#auth [name=compte]').count(), 0);
+  await page.click('#auth [data-auth=retour]'); await page.waitForSelector('#auth form[data-mode=connexion]');
+}, { serveur: true, compte: null });
 test('Comptes : un technicien modifie, mais ne remplace pas la base', async page => {
   await page.click('[data-act=reset]'); await page.check('input[value=vide]'); await page.click('[data-act=modal-ok]'); await page.waitForSelector('.toast.err');
   assert.match(await page.locator('.toast.err').first().innerText(), /administrateurs/);

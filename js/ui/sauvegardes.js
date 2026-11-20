@@ -21,24 +21,26 @@ async function charger() {
       <div class="row" style="gap:4px;justify-content:flex-end"><a class="btn sm" href="${esc(Sync.api)}/sauvegardes/${encodeURIComponent(s.nom)}" download="${esc(s.nom)}" data-tip="Télécharger|Pour garder une copie hors du serveur">${ico('download')}</a>
         <button class="btn sm" data-act="sv-restaurer">Restaurer</button><button class="btn sm icon danger" data-act="sv-supprimer" data-tip="Supprimer">${ico('trash')}</button></div></div>`).join('') || '<div class="empty">Aucune sauvegarde pour l\'instant.</div>';
 }
-function ouvrir() {
-  Modal.open({ title: 'Sauvegardes', wide: true, ok: false, cancel: 'Fermer',
-    body: `<p class="muted" id="sv-reglages" style="margin:0 0 12px">Chargement…</p>
+const corpsSauvegardes = () => `<p class="muted" id="sv-reglages" style="margin:0 0 12px">Chargement…</p>
       <div class="row" style="margin-bottom:8px;flex-wrap:wrap"><button class="btn pri" data-act="sv-creer">${ico('download')}Sauvegarder maintenant</button>
         <span class="muted" style="flex:1 1 240px">Une sauvegarde contient toute la base : téléchargez-en une de temps en temps pour la garder ailleurs que sur le serveur.</span></div>
-      <div id="sv-list"><div class="empty">Chargement…</div></div>` });
+      <div id="sv-list"><div class="empty">Chargement…</div></div>`;
+function ouvrir() {
+  Modal.open({ title: 'Sauvegardes', wide: true, ok: false, cancel: 'Fermer', body: corpsSauvegardes() });
   charger().catch(erreur);
 }
 const nomDe = el => el.closest('.sv-row').dataset.nom;
 Actions['compte-sauvegardes'] = ouvrir;
 Actions['sv-creer'] = () => Sync.appel('POST', '/sauvegardes', {}).then(() => { toast('Sauvegarde faite', 'ok'); return charger(); }).catch(erreur);
-Actions['sv-supprimer'] = el => { const nom = nomDe(el); Modal.confirm('Supprimer la sauvegarde', `Supprimer définitivement <b>${esc(nom)}</b> ?`, () => { Sync.appel('DELETE', '/sauvegardes/' + encodeURIComponent(nom)).then(() => { toast('Sauvegarde supprimée', 'ok'); ouvrir(); }, e => { erreur(e); ouvrir(); }); return false; }, 'Supprimer', 'danger'); };
+Actions['sv-supprimer'] = el => { const nom = nomDe(el); Modal.confirm('Supprimer la sauvegarde', `Supprimer définitivement <b>${esc(nom)}</b> ?`, () => { Sync.appel('DELETE', '/sauvegardes/' + encodeURIComponent(nom)).then(() => { toast('Sauvegarde supprimée', 'ok'); Actions['compte-sauvegardes'](); }, e => { erreur(e); Actions['compte-sauvegardes'](); }); return false; }, 'Supprimer', 'danger'); };
 Actions['sv-restaurer'] = el => {
   const nom = nomDe(el);
   Modal.confirm('Restaurer une sauvegarde', `Les données d'inventaire (sites, baies, équipements, câblage, catalogue, stock) reviennent à l'état de <b>${esc(nom)}</b>.
       Tout ce qui a été saisi depuis sera remplacé.<br><br>Les comptes et le journal d'audit sont conservés. L'état actuel est sauvegardé juste avant, sous le nom « Avant restauration ».`,
   () => {
-    Sync.appel('POST', '/sauvegardes/restauration', { nom }).then(async () => { await Store.recharger(); toast('Inventaire restauré depuis la sauvegarde', 'ok'); ouvrir(); }, e => { erreur(e); ouvrir(); });
+    Sync.appel('POST', '/sauvegardes/restauration', { nom }).then(async () => { await Store.recharger(); toast('Inventaire restauré depuis la sauvegarde', 'ok'); Actions['compte-sauvegardes'](); }, e => { erreur(e); Actions['compte-sauvegardes'](); });
     return false;
   }, 'Restaurer', 'danger');
 };
+
+export { charger as chargerSauvegardes, corpsSauvegardes };

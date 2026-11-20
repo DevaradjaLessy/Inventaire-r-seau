@@ -18,7 +18,7 @@ test('mot de passe : 12 caractères au moins, hachage fort et salé', async () =
 
 test('première ouverture : le compte administrateur se crée avec le code affiché au démarrage', async t => {
   const { api, app } = await serveurDeTest(t, { comptes: false });
-  assert.deepStrictEqual((await requete('GET', api + '/session')).json, { connecte: false, initialisation: true });
+  assert.deepStrictEqual((await requete('GET', api + '/session')).json, { connecte: false, initialisation: true, recuperationParCourriel: false });
   assert.match(app.codeInitialisation, /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
   assert.strictEqual((await requete('GET', api + '/base')).code, 401);
   const corps = { identifiant: 'chef', nom: 'Chef de projet', motDePasse: MDP };
@@ -180,7 +180,7 @@ test('une base du lot 16 (version 1) reçoit les nouvelles tables sans perdre se
   p.lancer('INSERT INTO meta (cle, valeur) VALUES (\'initialisee\', \'1\'), (\'revision\', \'7\')');
   p.fermer();
   const { app, api, admin } = await serveurDeTest(t, { dossier });
-  assert.strictEqual(app.depot.versionSchema(), 2);
+  assert.strictEqual(app.depot.versionSchema(), 3);
   assert.deepStrictEqual((await requete('GET', api + '/sites', undefined, admin)).json.map(x => x.name), ['Ancien site']);
   assert.strictEqual((await requete('GET', api + '/batiments', undefined, admin)).json.length, 1);
   assert.strictEqual((await requete('GET', api + '/revision', undefined, admin)).json.revision, 7);

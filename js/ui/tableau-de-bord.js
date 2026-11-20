@@ -63,8 +63,7 @@ function firmwareCard() {
 }
 Actions['fw-inv'] = el => { Object.assign(Inv, { q: el.dataset.q, group: '', type: '', bld: '', status: '', brand: '', page: 0 }); UI.dirty.add('inv'); showTab('inv'); };
 /* État de sécurité du serveur (mode serveur, administrateur) : la carte se remplit dès que le serveur a répondu */
-function securiteCard() {
-  if (Store.mode !== 'serveur' || Sync.utilisateur?.role !== 'administrateur') return '';
+function remplirSecurite() {
   Sync.appel('GET', '/securite').then(e => {
     const hote = $('#sec-etat'); if (!hote) return;
     const l = (niveau, texte) => `<div class="sec-row"><i style="background:${{ ok: COL.up, warn: COL.warn, crit: COL.crit }[niveau]}"></i><span>${texte}</span></div>`;
@@ -74,10 +73,15 @@ function securiteCard() {
       l(s.derniere == null || s.ageHeures > 48 ? 'crit' : s.ageHeures > 26 ? 'warn' : 'ok', s.derniere == null ? 'Dernière sauvegarde : aucune' : `Dernière sauvegarde : il y a ${s.ageHeures < 1 ? 'moins d\'une heure' : `${Math.round(s.ageHeures)} h`}${s.automatique ? '' : ' — sauvegarde automatique désactivée'}`),
       e.https.actif ? l(e.https.joursRestants < 30 ? 'warn' : 'ok', `HTTPS actif — certificat ${e.https.autoSigne ? 'auto-signé' : 'fourni'}, valable encore ${e.https.joursRestants} jours`) : l('crit', 'HTTPS désactivé : les mots de passe circulent en clair'),
       l(e.comptes.administrateurs < 2 ? 'warn' : 'ok', `${plural(e.comptes.actifs, 'compte')} actif${e.comptes.actifs > 1 ? 's' : ''}, dont ${plural(e.comptes.administrateurs, 'administrateur')}${e.comptes.administrateurs < 2 ? ' — prévoyez un second administrateur de secours' : ''} · ${plural(e.sessions, 'session')} ouverte${e.sessions > 1 ? 's' : ''}`),
+      l('ok', e.courriel.actif ? `Envoi de courriels réglé : « Mot de passe oublié » envoie un lien${e.courriel.sansAdresse.length ? ` — comptes sans adresse : ${liste(e.courriel.sansAdresse)}` : ''}` : 'Envoi de courriels non réglé : un mot de passe perdu se traite par un lien remis par un administrateur'),
       e.jamaisConnectes.length ? l('warn', `Comptes jamais connectés : ${liste(e.jamaisConnectes)}`) : '',
       e.inactifs90j.length ? l('warn', `Comptes inactifs depuis 90 jours : ${liste(e.inactifs90j)}`) : '',
     ].join('');
   }).catch(err => { const hote = $('#sec-etat'); if (hote) hote.innerHTML = `<div class="empty">${esc(err.message)}</div>`; });
+}
+function securiteCard() {
+  if (Store.mode !== 'serveur' || Sync.utilisateur?.role !== 'administrateur') return '';
+  remplirSecurite();
   return `<div class="dcard c7">${titre('alert', 'Sécurité du serveur', `<button class="btn sm" data-act="compte-audit">${ico('history')}Journal d'audit</button>`)}<div id="sec-etat"><div class="empty">Chargement…</div></div></div>`;
 }
 Views.dash = {
@@ -126,3 +130,5 @@ Views.dash = {
     </div>`;
   },
 };
+
+export { remplirSecurite };

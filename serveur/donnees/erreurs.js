@@ -18,6 +18,7 @@ const UNICITE = [
   [/ux_batiments_code|batiments\.code/, 'Code de bâtiment déjà utilisé sur ce site'],
   [/ux_etages_niveau|etages\.niveau/, 'Ce niveau existe déjà dans le bâtiment'],
   [/ux_utilisateurs_identifiant|utilisateurs\.identifiant/, 'Identifiant déjà utilisé par un autre compte'],
+  [/ux_utilisateurs_courriel|utilisateurs\.courriel/, 'Adresse de courriel déjà utilisée par un autre compte'],
   [/ux_ports_rang|ux_ports_nom|ports\.(idx|nom)/, 'Deux ports du même équipement ont le même nom ou le même rang'],
 ];
 const CONTROLE = {

@@ -23,6 +23,7 @@ services:
       # Ne les écrivez pas ici : mettez-les dans un fichier .env à côté de ce fichier (jamais dans le dépôt).
       # PRTG_TOKEN: ${PRTG_TOKEN}
       # SNMP_COMMUNITY: ${SNMP_COMMUNITY}
+      # SMTP_MDP: ${SMTP_MDP}             # mot de passe du serveur d'envoi de courriels, si vous en réglez un
     volumes:
       - /var/lib/netcarto:/var/lib/netcarto
       - /etc/netcarto:/etc/netcarto

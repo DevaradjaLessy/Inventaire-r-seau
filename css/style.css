@@ -111,6 +111,17 @@ a{color:var(--accent)}
   #print-root .pr-brassage{break-before:page}
   #print-root .pr-pied{margin-top:10pt;color:var(--txt3);font-size:8.5pt}
 }
+.auth-lien{text-align:center;font-size:12.5px;cursor:pointer}
+/* Page d'administration */
+.adm{height:100%;overflow:auto;padding:22px 26px;display:flex;flex-direction:column;gap:16px;max-width:1180px;margin:0 auto;width:100%}
+.adm-h h1{font-size:20px;margin-bottom:4px} .adm-h p{margin:0}
+.adm-nav{display:flex;flex-wrap:wrap;gap:8px}
+.adm-nav .btn{height:36px} .adm-nav .btn.on{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
+.adm-corps{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+.adm-corps>h2{font-size:15px;display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.adm-corps #audit-list,.adm-corps #sv-list{max-height:none}
+/* Compte en lecture seule : les boutons d'action ne sont pas proposés */
+.role-lecture :is([data-act=dev-edit],[data-act=dev-move],[data-act=dev-replace],[data-act=dev-remove],[data-act=dev-restock],[data-act=rack-edit],[data-act=rack-del],[data-act=connect],[data-act=disconnect],[data-act=port-couper],[data-act=port-retablir],[data-act=outlet-del],[data-act=install],[data-act=palette],[data-act=plan-edit],[data-act=plan-draw],[data-act=plan-img],[data-act=csv-import],[data-act=import],[data-act=reset],[data-act=undo],[data-act=st-add],[data-act=st-edit],[data-act=st-del],[data-act=hist-retour],[data-act=stock-in],[data-act=stock-out],[data-act=cat-new],[data-act=cat-edit]){display:none!important}
 .cp-row{display:grid;grid-template-columns:150px minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
 .sv-row{display:grid;grid-template-columns:130px minmax(0,1fr) 80px auto;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
 .sv-row .nom{font-family:var(--mono);font-size:12px;color:var(--txt2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -121,11 +132,11 @@ a{color:var(--accent)}
 .boot-error{margin:auto;max-width:520px;padding:28px;text-align:center}
 .boot-error h2{margin-bottom:10px}
 #tabs{display:flex;gap:4px;height:100%;align-items:center}
-#tabs button{background:none;border:0;padding:0 13px;color:var(--txt2);cursor:pointer;display:flex;align-items:center;gap:8px;font-weight:550;height:36px;border-radius:9px;transition:background .12s,color .12s}
+#tabs button{white-space:nowrap;background:none;border:0;padding:0 13px;color:var(--txt2);cursor:pointer;display:flex;align-items:center;gap:8px;font-weight:550;height:36px;border-radius:9px;transition:background .12s,color .12s}
 #tabs button:hover{color:var(--txt);background:var(--hover)}
 #tabs button.on{color:var(--accent);background:var(--accent-bg)}
 .badge{min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--crit);color:#fff;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
-.gsearch{position:relative;flex:1;max-width:420px;margin-left:auto}
+.gsearch{position:relative;flex:1;max-width:420px;min-width:170px;margin-left:auto}
 .gsearch .ico{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--txt3)}
 #gsearch{width:100%;padding-left:30px}
 .gsearch kbd{position:absolute;right:8px;top:50%;transform:translateY(-50%);font:11px var(--mono);color:var(--txt3);border:1px solid var(--line2);border-radius:4px;padding:0 5px}
@@ -155,7 +166,7 @@ a{color:var(--accent)}
 .seg button{background:transparent;border:0;height:28px;padding:0 11px;color:var(--txt2);cursor:pointer;display:flex;align-items:center;gap:6px;font-weight:550;border-radius:7px;transition:background .12s,color .12s}
 .seg button:hover{color:var(--txt)}
 .seg button.on{background:var(--panel);color:var(--accent);box-shadow:0 1px 2px var(--shadow)}
-input[type=text],input[type=password],input[type=search],input[type=number],input[type=date],select,textarea{background:var(--input);border:1px solid var(--line2);border-radius:var(--r);height:32px;padding:0 10px;outline:none;min-width:0;transition:border-color .12s,box-shadow .12s}
+input[type=text],input[type=email],input[type=password],input[type=search],input[type=number],input[type=date],select,textarea{background:var(--input);border:1px solid var(--line2);border-radius:var(--r);height:32px;padding:0 10px;outline:none;min-width:0;transition:border-color .12s,box-shadow .12s}
 textarea{height:auto;padding:7px 9px;resize:vertical}
 input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg);outline:none}
 select{padding-right:4px}
@@ -525,6 +536,10 @@ svg.plan .draw-txt{fill:var(--accent);font-size:8px;font-weight:700;pointer-even
 /* --- Éléments réservés au téléphone --- */
 .m-only{display:none!important}
 #tabs .sh{display:none}
+/* Barre du haut serrée (cinq onglets pour un administrateur) : libellés courts entre 900 et 1650 px */
+@media (min-width:901px) and (max-width:1650px){#tabs .lg{display:none} #tabs .sh{display:inline} #tabs button{padding:0 9px;gap:6px} #tabs{gap:2px} .gsearch{min-width:130px} .tools{gap:2px}}
+@media (min-width:901px) and (max-width:1340px){#tabs button:not(.on) .sh{display:none}}   /* plus serré encore : seul l'onglet ouvert garde son nom */
+@media (min-width:901px) and (max-width:1120px){.demo-tag{display:none} .gsearch{min-width:0} #tabs button{padding:0 7px}}
 svg.plan,svg.topo{touch-action:none}
 
 /* ============================================================
@@ -561,6 +576,7 @@ svg.plan,svg.topo{touch-action:none}
   .pg-row{grid-template-columns:1fr 1fr 1fr;padding:8px;border:1px solid var(--line);border-radius:8px}
   .vl-row{grid-template-columns:70px 1fr 46px;padding:8px;border:1px solid var(--line);border-radius:8px}
   .u-row,.u-new,.a-row,.sv-row,.cp-row,.h-row{grid-template-columns:1fr}
+  .adm{padding:12px 10px} .adm-nav .btn{flex:1 1 46%;justify-content:center} .adm-corps{padding:12px}
   .h-row{gap:4px}
   .imp-row{grid-template-columns:1fr 1fr;gap:2px 8px}
   .sv-row{gap:4px}
