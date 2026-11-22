@@ -1,6 +1,6 @@
 /* Interventions d'urgence : impact d'une panne, remplacement d'un équipement, coupure d'un port. */
 import { CATEGORIES } from '../config.js';
-import { $, download, esc, fmtDate, groupBy, plural, today } from '../utils.js';
+import { $, csvCell, download, esc, fmtDate, groupBy, plural, today } from '../utils.js';
 import { ico } from '../icones.js';
 import { Store } from '../store.js';
 import { byId, catOf, labelOf } from '../services/requetes.js';
@@ -28,7 +28,7 @@ Actions.impact = el => {
       <div id="impact-list">${[...parPiece].map(([id, rows]) => `<div class="sec-t" style="margin:12px 0 4px">${esc(byId(id) ? labelOf(id) : 'Hors pièce')} — ${rows.length}</div>${rows.map(ligne).join('')}`).join('') || '<div class="empty">Aucune prise ni aucun terminal ne dépend de cet équipement.</div>'}</div>` });
 };
 Actions['impact-csv'] = el => {
-  const I = impactOf(el.dataset.id), q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const I = impactOf(el.dataset.id), q = csvCell;
   const lignes = I.rows.map(r => [r.room ? labelOf(r.room.id) : '', r.outlet?.label || '', r.terminal?.hostname || r.poste, `${r.via.hostname} ${r.port.name}`, r.vlan].map(q).join(';'));
   download(`netcarto-impact-${I.device.hostname}-${today()}.csv`, '\ufeff' + ['piece;prise;terminal;port_du_switch;vlan', ...lignes].join('\r\n'), 'text/csv');
 };

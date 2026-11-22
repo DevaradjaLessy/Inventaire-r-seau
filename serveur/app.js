@@ -23,6 +23,8 @@ function serveurEnMarche(dossier) {
 
 /* Démarre le serveur. Renvoie { port, protocole, depot, securite, arreter }. options : { journal, horloge } */
 async function demarrer(config, { journal = console.log, horloge = () => Date.now() } = {}) {
+  // Les fichiers créés par le serveur (base, journal d'écriture, sauvegardes, clé) ne sont lisibles que par son compte
+  try { process.umask(0o077); } catch { /* sans effet sur ce système */ }
   const cfg = { serveur: { ...DEFAUTS.serveur, ...config.serveur }, donnees: { ...config.donnees }, web: { ...config.web }, supervision: { ...DEFAUTS.supervision, ...config.supervision }, limites: { ...DEFAUTS.limites, ...config.limites }, https: { ...DEFAUTS.https, ...config.https }, securite: { ...DEFAUTS.securite, ...config.securite }, sauvegardes: { ...DEFAUTS.sauvegardes, ...config.sauvegardes }, courriel: { ...DEFAUTS.courriel, ...config.courriel }, demo: !!config.demo, journal };
   controlerSauvegardes(cfg.sauvegardes); controlerCourriel(cfg.courriel);
   const depot = ouvrirBase({ fichier: path.join(cfg.donnees.dossier, 'netcarto.sqlite'), depart: await modeleDeDepart(cfg.web.dossier), sauvegardes: cfg.sauvegardes, horloge });
@@ -43,7 +45,7 @@ async function demarrer(config, { journal = console.log, horloge = () => Date.no
   // HTTPS par défaut : certificat fourni, ou certificat auto-signé créé dans le dossier de données
   const tls = preparerHttps(cfg.https, cfg.donnees.dossier, { hote: cfg.serveur.hote });
   const api = creerApi({ depot, sauvegardes, releveur, securite, config: cfg, https: !!tls, certificat: tls }), statique = creerStatique(cfg.web.dossier, PREFIXE, { https: !!tls });
-  const serveur = (tls ? https.createServer.bind(https, { cert: tls.cert, key: tls.key }) : http.createServer.bind(http))((req, res) => {
+  const serveur = (tls ? https.createServer.bind(https, { cert: tls.cert, key: tls.key, minVersion: 'TLSv1.2' }) : http.createServer.bind(http))((req, res) => {
     let url;
     try { url = new URL(req.url, 'http://x'); } catch { res.writeHead(400); return res.end(); }
     if (url.pathname === PREFIXE || url.pathname.startsWith(PREFIXE + '/')) return api(req, res, url.pathname.slice(PREFIXE.length), url.searchParams);
@@ -51,10 +53,13 @@ async function demarrer(config, { journal = console.log, horloge = () => Date.no
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { Allow: 'GET, HEAD' }); return res.end(); }
     statique(url.pathname, res, req.headers['accept-encoding'] || '');
   });
+  // Délais : une liaison qui tarde à envoyer ses en-têtes ou sa requête est coupée (attaque par connexions lentes)
+  const delais = { enTetes: 10000, requete: 60000, repos: 5000 };
+  serveur.headersTimeout = delais.enTetes; serveur.requestTimeout = delais.requete; serveur.keepAliveTimeout = delais.repos;
   await new Promise((ok, ko) => { serveur.once('error', ko); serveur.listen(cfg.serveur.port, cfg.serveur.hote, ok); });
   let arrete = false;
   return {
-    port: serveur.address().port, hote: cfg.serveur.hote, protocole: tls ? 'https' : 'http', certificat: tls, depot, securite, sauvegardes, version: VERSION,
+    port: serveur.address().port, hote: cfg.serveur.hote, protocole: tls ? 'https' : 'http', certificat: tls, depot, securite, sauvegardes, delais, version: VERSION,
     get codeInitialisation() { return securite.codeInitialisation; },
     async arreter() { if (arrete) return; arrete = true; clearInterval(minuterie); releveur.arreter(); serveur.closeAllConnections?.(); await new Promise(ok => serveur.close(ok)); depot.fermer(); fs.rmSync(verrou, { force: true }); },
   };

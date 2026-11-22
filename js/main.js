@@ -55,7 +55,9 @@ try {
   else await Store.init();
 }
 catch (e) {
-  document.querySelector('main').innerHTML = `<div class="boot-error"><h2>Base inaccessible</h2><p class="muted">${String(e.message).replace(/[<>&]/g, '')}</p><p><button class="btn pri" onclick="location.reload()">Réessayer</button></p></div>`;
+  document.querySelector('main').innerHTML = `<div class="boot-error"><h2>Base inaccessible</h2><p class="muted">${String(e.message).replace(/[<>&]/g, '')}</p><p><button class="btn pri" id="boot-retry">Réessayer</button></p></div>`;
+  // Pas de gestionnaire écrit dans le HTML : la politique de sécurité du contenu le bloquerait
+  document.querySelector('#boot-retry').addEventListener('click', () => location.reload());
   throw e;
 }
 if (api && /^\/admin\/?$/.test(location.pathname)) UI.tab = 'admin';   // adresse de la page d'administration

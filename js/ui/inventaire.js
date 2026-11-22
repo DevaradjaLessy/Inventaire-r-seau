@@ -1,6 +1,6 @@
 /* Onglet Inventaire : tableau, filtres, tri, pagination, exports. */
 import { CATEGORIES, COL, DEVICE_STATUS } from '../config.js';
-import { $, clamp, download, esc, fmtDate, norm, plural, today, typeOf } from '../utils.js';
+import { $, clamp, csvCell, download, esc, fmtDate, norm, plural, today, typeOf } from '../utils.js';
 import { ico } from '../icones.js';
 import { Cache, Store } from '../store.js';
 import { catOf, locLabel, locOf } from '../services/requetes.js';
@@ -109,7 +109,7 @@ Actions['inv-go'] = el => goto(el.dataset.id);
 Actions.go = el => { const id = el.dataset.id; if (typeOf(id) === 'catalog') { Mat.sel = id; Mat.cat = ''; UI.dirty.add('mat'); showTab('mat'); } else goto(id); };
 const invExportRows = () => invFiltered().map(r => ({ type: r.type, nom: r.hostname, marque: r.brand, modele: r.model, emplacement: r.loc, numero_serie: r.serial, ip: r.ip, mac: r.mac, firmware: r.firmware, date_installation: r.installDate, statut: DEVICE_STATUS[r.status].label }));
 Actions['inv-csv'] = () => {
-  const rows = invExportRows(), cols = Object.keys(rows[0] || { type: '' }), q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = invExportRows(), cols = Object.keys(rows[0] || { type: '' }), q = csvCell;
   download(`netcarto-inventaire-${today()}.csv`, '﻿' + [cols.join(';'), ...rows.map(r => cols.map(c => q(r[c])).join(';'))].join('\r\n'), 'text/csv');
   toast(`${plural(rows.length, 'ligne')} exportée(s) en CSV`);
 };

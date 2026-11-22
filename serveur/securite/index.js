@@ -3,10 +3,13 @@
 'use strict';
 const crypto = require('crypto');
 const { ErreurMetier } = require('../donnees/erreurs');
-const { controlerMotDePasse, hacher, verifier } = require('./mots-de-passe');
+const { controlerMotDePasse, hacher, verifier, aRelever, empreinteFactice, reglerCout } = require('./mots-de-passe');
+const { creerLimiteur } = require('./limiteur');
 
 const ROLES = ['lecture', 'technicien', 'administrateur'];
-const DEFAUTS = { echecsMax: 5, verrouillageMinutes: 15, sessionHeures: 12, inactiviteMinutes: 120, reinitialisationMinutes: 30, reinitialisationsParHeure: 3 };
+const DEFAUTS = { echecsMax: 5, verrouillageMinutes: 15, sessionHeures: 12, inactiviteMinutes: 120, reinitialisationMinutes: 30, reinitialisationsParHeure: 3, tentativesParAdresse: 20, fenetreMinutes: 10, coutMotDePasse: 17 };
+/* Valeur écrite au journal du service : sans caractère de contrôle (pas de fausse ligne injectée), et courte */
+const propre = v => String(v ?? '').replace(/[^\x21-\x7e]/g, '?').slice(0, 64) || '-';
 /* Adresse de courriel : en minuscules, ou '' ; lève une erreur si la forme est invalide */
 function courrielValide(v) {
   const c = String(v || '').trim().toLowerCase();
@@ -19,6 +22,10 @@ const code = () => [0, 1, 2].map(() => Array.from(crypto.randomBytes(4), b => AL
 
 function creerSecurite({ depot, config = {}, horloge = () => Date.now(), courrier = null, journal = () => {} }) {
   const c = depot.comptes, regle = { ...DEFAUTS, ...config };
+  reglerCout(regle.coutMotDePasse);
+  /* Événement de sécurité au journal du service (journald, Docker) : exploitable par un outil de surveillance */
+  const evenement = (nom, champs) => journal(`SECURITE ${nom} ${Object.entries(champs).map(([k, v]) => `${k}=${propre(v)}`).join(' ')}`);
+  const limiteur = creerLimiteur({ max: regle.tentativesParAdresse, fenetreMs: regle.fenetreMinutes * 60000, horloge, surBlocage: ip => evenement('adresse_bloquee', { adresse: ip, minutes: regle.fenetreMinutes }) });
   const publique = (u, t = horloge()) => u && ({ id: u.id, identifiant: u.identifiant, nom: u.nom, courriel: u.courriel || '', role: u.role, actif: !!u.actif, verrouille: !!u.verrouille_jusqu_a && u.verrouille_jusqu_a > t, derniereConnexion: u.derniere_connexion || null });
   const audit = (auteur, action, cible, apres = null, ip = '') => c.ajouterAudit({ date: Date.now(), utilisateur_id: auteur?.id || null, identifiant: auteur?.identifiant || '', action, collection: 'utilisateurs', cle: cible?.id || '', libelle: cible?.identifiant || '', avant: null, apres, ip });
   let codeInitialisation = c.nombre() === 0 ? code() : null;
@@ -36,18 +43,23 @@ function creerSecurite({ depot, config = {}, horloge = () => Date.now(), courrie
   }
   /* Vérifie l'identifiant et le mot de passe ; ouvre une session et renvoie son jeton */
   async function connecter(identifiant, motDePasse, { ip = '' } = {}) {
-    const refus = new ErreurMetier('acces', 'Identifiant ou mot de passe incorrect.'), t = horloge();
+    // Une seule réponse pour tous les refus : compte inconnu, mauvais mot de passe, compte verrouillé ou désactivé.
+    // Elle ne dit donc pas si un compte existe, et le temps de calcul est le même dans tous les cas.
+    const refus = new ErreurMetier('acces', `Identifiant ou mot de passe incorrect. Après ${regle.echecsMax} échecs, un compte est verrouillé ${regle.verrouillageMinutes} minutes.`), t = horloge();
     // On se connecte avec son identifiant, ou avec son adresse de courriel
     const saisi = String(identifiant || '').trim(), u = c.parIdentifiant(saisi) || (saisi.includes('@') ? c.parCourriel(saisi) : null);
-    if (!u) { await verifier(String(motDePasse || ''), 'scrypt$32768$8$1$AAAAAAAAAAAAAAAAAAAAAA==$AAAA'); c.ajouterAudit({ date: Date.now(), identifiant: String(identifiant || '').slice(0, 40), action: 'echec_connexion', collection: 'utilisateurs', libelle: 'compte inconnu', ip }); throw refus; }
-    if (u.verrouille_jusqu_a && u.verrouille_jusqu_a > t) throw new ErreurMetier('verrouille', `Compte verrouillé après plusieurs échecs. Réessayez dans ${Math.ceil((u.verrouille_jusqu_a - t) / 60000)} minute(s), ou demandez à un administrateur de le déverrouiller.`);
+    if (!u) { await verifier(String(motDePasse || ''), empreinteFactice()); evenement('echec_connexion', { compte: saisi, adresse: ip }); c.ajouterAudit({ date: Date.now(), identifiant: String(identifiant || '').slice(0, 40), action: 'echec_connexion', collection: 'utilisateurs', libelle: 'compte inconnu', ip }); throw refus; }
+    if (u.verrouille_jusqu_a && u.verrouille_jusqu_a > t) { await verifier(String(motDePasse || ''), empreinteFactice()); evenement('echec_connexion', { compte: u.identifiant, adresse: ip, motif: 'verrouille' }); throw refus; }
     if (!u.actif || !(await verifier(String(motDePasse || ''), u.mot_de_passe))) {
-      if (u.actif) { const echecs = u.echecs + 1, verrou = echecs >= regle.echecsMax; c.modifier(u.id, { echecs: verrou ? 0 : echecs, verrouille_jusqu_a: verrou ? t + regle.verrouillageMinutes * 60000 : null }); }
+      if (u.actif) { const echecs = u.echecs + 1, verrou = echecs >= regle.echecsMax; c.modifier(u.id, { echecs: verrou ? 0 : echecs, verrouille_jusqu_a: verrou ? t + regle.verrouillageMinutes * 60000 : null }); if (verrou) evenement('compte_verrouille', { compte: u.identifiant, adresse: ip, minutes: regle.verrouillageMinutes }); }
+      evenement('echec_connexion', { compte: u.identifiant, adresse: ip });
       audit(u, 'echec_connexion', u, null, ip);
       throw refus;
     }
     const jeton = crypto.randomBytes(32).toString('base64url');
-    c.modifier(u.id, { echecs: 0, verrouille_jusqu_a: null, derniere_connexion: t });
+    // Empreinte calculée avec un coût plus faible que le réglage actuel : elle est refaite maintenant que le mot de passe est connu
+    const releve = aRelever(u.mot_de_passe) ? { mot_de_passe: await hacher(String(motDePasse)) } : {};
+    c.modifier(u.id, { echecs: 0, verrouille_jusqu_a: null, derniere_connexion: t, ...releve });
     c.creerSession(empreinte(jeton), u.id, t, ip);
     c.purgerSessions(t - regle.sessionHeures * 3600000);
     audit(u, 'connexion', u, null, ip);
@@ -174,7 +186,7 @@ function creerSecurite({ depot, config = {}, horloge = () => Date.now(), courrie
     };
   }
   return {
-    ROLES, etat, lienReinitialisation, demanderReinitialisation, reinitialiser, recuperationParCourriel: () => !!courrier?.actif, creerUtilisateur, connecter, session, deconnecter, changerMotDePasse, modifierUtilisateur, supprimerUtilisateur, initialiser,
+    ROLES, limiteur, etat, lienReinitialisation, demanderReinitialisation, reinitialiser, recuperationParCourriel: () => !!courrier?.actif, creerUtilisateur, connecter, session, deconnecter, changerMotDePasse, modifierUtilisateur, supprimerUtilisateur, initialiser,
     lister: () => c.lister().map(u => publique(u)), trouver: identifiant => publique(c.parIdentifiant(identifiant)),
     aInitialiser: () => c.nombre() === 0, get codeInitialisation() { return codeInitialisation; },
   };

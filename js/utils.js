@@ -7,7 +7,8 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const pad2 = n => String(n).padStart(2, '0');
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
-const fmtDate = s => s ? s.split('-').reverse().join('/') : '—';
+/* Date AAAA-MM-JJ → JJ/MM/AAAA. Toute autre valeur est rendue telle quelle, mais neutralisée : le résultat part dans la page. */
+const fmtDate = s => !s ? '—' : /^\d{4}-\d{2}-\d{2}$/.test(s) ? s.split('-').reverse().join('/') : esc(s);
 const fmtDateTime = ts => { const d = new Date(ts); return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
 const fmtSpeed = m => !m ? '—' : m >= 1000 ? `${+(m / 1000).toFixed(1)} Gb/s` : `${m} Mb/s`;
 const pct = (a, b) => b ? Math.round(a * 100 / b) : 0;
@@ -21,6 +22,9 @@ function mulberry32(a) {
   return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 }
 /* Téléchargement d'un fichier généré dans le navigateur */
+/* Cellule d'un fichier CSV, entre guillemets. Une valeur qui commence par = + - @ serait lue comme une formule par un tableur :
+   elle reçoit une apostrophe en tête, qui la fait traiter comme du texte. */
+const csvCell = v => { let s = String(v ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return `"${s.replace(/"/g, '""')}"`; };
 function download(name, content, mime = 'application/json') {
   const url = URL.createObjectURL(new Blob([content], { type: mime + ';charset=utf-8' }));
   const a = Object.assign(document.createElement('a'), { href: url, download: name });
@@ -43,4 +47,4 @@ function shade(hex, f) {
 }
 const luminance = hex => { const n = parseInt(hex.slice(1), 16); return (0.299 * (n >> 16) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) / 255; };
 
-export { $, $$, clamp, download, esc, fmtDate, fmtDateTime, fmtSpeed, groupBy, luminance, mulberry32, nextId, norm, pad2, pct, plural, setRandomIds, shade, sum, today, typeOf };
+export { $, $$, clamp, csvCell, download, esc, fmtDate, fmtDateTime, fmtSpeed, groupBy, luminance, mulberry32, nextId, norm, pad2, pct, plural, setRandomIds, shade, sum, today, typeOf };

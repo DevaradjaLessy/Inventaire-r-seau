@@ -76,7 +76,9 @@ adresse = "https://netcarto.exemple.interne:8443"
 Le bouton à votre nom (en haut à droite) ouvre : *Changer mon mot de passe*, *Page d'administration*, *Se déconnecter*.
 
 - **Mots de passe** : 12 caractères au moins, jamais enregistrés en clair (empreinte scrypt salée).
-- **Verrouillage** : 5 échecs de suite verrouillent le compte 15 minutes. Un administrateur peut le déverrouiller.
+- **Verrouillage** : 5 échecs de suite verrouillent le compte 15 minutes. Un administrateur peut le déverrouiller. La réponse est la même que le compte existe ou non, verrouillé ou non.
+- **Limite par adresse** : après 20 échecs en 10 minutes, l'adresse attend la fin de la fenêtre.
+- **Mots de passe courants refusés**, même allongés de chiffres.
 - **Sessions** : fermées après 2 heures d'inactivité, et au bout de 12 heures dans tous les cas.
 - **Journal d'audit** : chaque modification y est notée avec son auteur, la date, la valeur avant et la valeur après. Il ne peut être ni modifié ni effacé.
 - **Modifications concurrentes** : si un collègue a modifié le même élément entre-temps, votre modification est refusée, son nom s'affiche et les données sont rechargées.
@@ -124,7 +126,8 @@ node --disable-warning=ExperimentalWarning netcarto.js --config netcarto.toml
 | Dossier de l'interface | `web.dossier` | | |
 | Taille maximale d'une requête | `limites.corpsMaxMo` | | |
 | HTTPS | `https.actif`, `https.noms`, `https.certificat`, `https.cle` | | `--http` |
-| Sécurité | `securite.echecsMax`, `securite.verrouillageMinutes`, `securite.sessionHeures`, `securite.inactiviteMinutes` | | |
+| Sécurité | `securite.echecsMax`, `securite.verrouillageMinutes`, `securite.sessionHeures`, `securite.inactiviteMinutes`, `securite.tentativesParAdresse`, `securite.fenetreMinutes`, `securite.coutMotDePasse` | | |
+| Proxy inverse | `serveur.proxyDeConfiance` | | |
 | Courriel (facultatif) | `courriel.hote`, `courriel.port`, `courriel.securite`, `courriel.utilisateur`, `courriel.motDePasse`, `courriel.expediteur`, `courriel.adresse` | | |
 | Sauvegardes | `sauvegardes.actif`, `sauvegardes.heure`, `sauvegardes.conserver`, `sauvegardes.dossier` | | |
 | Supervision | `supervision.intervalle`, `[[supervision.sources]]` | | |
@@ -132,6 +135,20 @@ node --disable-warning=ExperimentalWarning netcarto.js --config netcarto.toml
 Priorité : argument, puis variable, puis fichier, puis valeur par défaut. Un chemin relatif écrit dans le fichier part du dossier de ce fichier.
 
 Aucun secret dans le fichier : une valeur `"env:NOM"` est lue dans la variable d'environnement `NOM`.
+
+## Sécurité
+
+L'audit de sécurité, les failles corrigées, les risques acceptés et les mesures à prendre à l'installation sont dans [`SECURITE.md`](../SECURITE.md).
+
+Le serveur écrit ses événements de sécurité dans son journal, une ligne par événement :
+
+```text
+SECURITE echec_connexion compte=alice adresse=192.0.2.15
+SECURITE compte_verrouille compte=alice adresse=192.0.2.15 minutes=15
+SECURITE adresse_bloquee adresse=192.0.2.15 minutes=10
+```
+
+Derrière un proxy inverse, mettez `proxyDeConfiance = true` dans la section `[serveur]` : sans cela, toutes les requêtes portent l'adresse du proxy, et la limite par adresse bloquerait tout le monde d'un coup. Ne l'activez pas si NetCarto est joignable directement, car l'en-tête se falsifie.
 
 ## La base de données
 
@@ -214,7 +231,7 @@ Préfixe : `/api/v1`. Tout est en JSON.
 | `GET`, `DELETE /sauvegardes/{nom}` | administrateur | télécharger, supprimer |
 | `POST /sauvegardes/restauration` | administrateur | `{ nom }` : restaure les données d'inventaire |
 
-La session tient dans un cookie `HttpOnly`, `SameSite=Strict` (et `Secure` en HTTPS).
+La session tient dans un cookie `HttpOnly`, `SameSite=Strict` (et `Secure`, avec le préfixe `__Host-`, en HTTPS). Une requête sans session est limitée à 64 Ko.
 
 Ressources : `sites`, `batiments`, `etages`, `pieces`, `baies`, `equipements`, `ports`, `prises`, `cables`, `catalogue`, `stock`, `vlans`, `journal`.
 

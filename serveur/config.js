@@ -7,9 +7,9 @@ const fs = require('fs'), path = require('path');
 const { parse } = require('smol-toml');
 
 const DEFAUTS = {
-  serveur: { hote: '127.0.0.1', port: 8443 },
+  serveur: { hote: '127.0.0.1', port: 8443, proxyDeConfiance: false },   // proxyDeConfiance : true seulement si NetCarto est derrière votre propre proxy inverse
   https: { actif: true, certificat: '', cle: '', noms: [] },   // sans fichiers fournis, un certificat auto-signé est créé dans le dossier de données
-  securite: { echecsMax: 5, verrouillageMinutes: 15, sessionHeures: 12, inactiviteMinutes: 120 },
+  securite: { echecsMax: 5, verrouillageMinutes: 15, sessionHeures: 12, inactiviteMinutes: 120, tentativesParAdresse: 20, fenetreMinutes: 10, coutMotDePasse: 17 },
   donnees: { dossier: 'donnees-locales' },
   courriel: { hote: '', port: 587, securite: 'starttls', utilisateur: '', motDePasse: '', expediteur: '', adresse: '' },   // sans hôte : aucun courriel n'est envoyé
   sauvegardes: { actif: true, heure: '02:30', conserver: 14, dossier: '' },   // dossier vide : « sauvegardes » dans le dossier de données
@@ -63,7 +63,9 @@ function chargerConfig({ env = process.env, args = process.argv.slice(2) } = {})
   if (typeof cfg.serveur.hote !== 'string' || !cfg.serveur.hote) throw new Error('Réglage « serveur.hote » invalide.');
   if (!Array.isArray(cfg.supervision.sources)) throw new Error('Réglage « supervision.sources » invalide : liste attendue.');
   if (args.includes('--http')) cfg.https.actif = false;
-  for (const k of ['echecsMax', 'verrouillageMinutes', 'sessionHeures', 'inactiviteMinutes']) if (!(cfg.securite[k] > 0)) throw new Error(`Réglage « securite.${k} » invalide : nombre positif attendu.`);
+  for (const k of ['echecsMax', 'verrouillageMinutes', 'sessionHeures', 'inactiviteMinutes', 'tentativesParAdresse', 'fenetreMinutes']) if (!(cfg.securite[k] > 0)) throw new Error(`Réglage « securite.${k} » invalide : nombre positif attendu.`);
+  if (!Number.isInteger(cfg.securite.coutMotDePasse) || cfg.securite.coutMotDePasse < 14 || cfg.securite.coutMotDePasse > 20) throw new Error('Réglage « securite.coutMotDePasse » invalide : nombre entier attendu entre 14 et 20 (17 recommandé).');
+  if (typeof cfg.serveur.proxyDeConfiance !== 'boolean') throw new Error('Réglage « serveur.proxyDeConfiance » invalide : true ou false attendu.');
   // Le mot de passe du serveur d'envoi ne s'écrit pas dans le fichier : "env:NOM" le lit dans l'environnement
   if (/^env:/.test(cfg.courriel.motDePasse || '')) cfg.courriel.motDePasse = env[cfg.courriel.motDePasse.slice(4)] || '';
   cfg.courriel.adresse = String(cfg.courriel.adresse || '').replace(/\/+$/, '');

@@ -5,7 +5,8 @@ const fs = require('fs'), path = require('path'), zlib = require('zlib'), crypto
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
 const DOSSIERS = ['css', 'js'], TEXTE = ['.html', '.css', '.js', '.svg'];
-const ENTETES = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY' };
+const ENTETES = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY', 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Resource-Policy': 'same-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=()' };
 
 /* Politique de sécurité du contenu de la page : tout vient de NetCarto lui-même.
    Les deux scripts écrits dans la page (carte d'import, thème) sont autorisés par leur empreinte, calculée sur la page servie :

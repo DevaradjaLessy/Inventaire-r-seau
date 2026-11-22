@@ -609,6 +609,29 @@ Le rapport complet est dans `AUDIT.md` : scénarios déroulés sur un vrai serve
 
 **Tests :** 5 scénarios serveur (`serveur/tests/administration.test.js`), 4 scénarios d'interface.
 
+### 3.28 Audit de sécurité avant déploiement en entreprise
+
+Rapport complet : `SECURITE.md`. Seize points trouvés : quatorze corrigés, deux acceptés et documentés.
+
+**Corrigé :**
+
+- **Injection dans la page (gravité haute) :** trois affichages inséraient un texte de la base sans le neutraliser (emplacement en tête des fiches de pièce et de baie, date d'installation). Corrigés. Un scénario charge une base où tous les textes libres portent une charge d'injection et visite tous les écrans : il doit rester vert après tout changement d'affichage.
+- **Contenu contrôlé par le serveur :** nouveaux types de champ `coul`, `img` et `date` dans `serveur/donnees/schema.js`. Une couleur est `#rrggbb`, une image est toujours intégrée (`data:image/…`, jamais une adresse extérieure, 8 Mo au plus), une date est `AAAA-MM-JJ`. Un texte libre fait 20 000 caractères au plus. `Store.validate` applique les mêmes règles.
+- **Limite par adresse** (`serveur/securite/limiteur.js`) : 20 échecs d'authentification en 10 minutes, puis attente. Couvre connexion, initialisation et récupération.
+- **Aucun indice sur les comptes :** une seule réponse (401, même texte, même temps de calcul) pour compte inconnu, mauvais mot de passe, compte verrouillé ou désactivé.
+- **Empreintes :** scrypt à N = 2^17 par défaut (`securite.coutMotDePasse`), relevées à la connexion quand elles sont plus faibles, deux calculs à la fois au plus. Les tests utilisent un coût réduit (14) pour rester rapides.
+- **Mots de passe courants refusés.**
+- **Requêtes sans session limitées à 64 Ko** ; version du serveur non donnée sans session.
+- **Exports CSV :** `csvCell` (`js/utils.js`) neutralise les valeurs qu'un tableur lirait comme une formule. Tout nouvel export doit passer par elle.
+- **En-têtes** ajoutés ; cookie `__Host-` en HTTPS ; TLS 1.2 au minimum ; délais de connexion courts.
+- **Fichiers en 600** (base, journal d'écriture, sauvegardes) : `umask` posé au démarrage.
+- **Événements de sécurité au journal du service** (`SECURITE …`), valeurs nettoyées de tout caractère de contrôle.
+- **Proxy inverse :** réglage `serveur.proxyDeConfiance`.
+
+**Accepté :** un tiers peut verrouiller un compte en échouant cinq fois (compensé par la limite par adresse et le déverrouillage) ; un technicien peut effacer l'historique affiché (le journal d'audit, lui, est inaltérable).
+
+**Règles à tenir désormais :** tout texte venu de la base passe par `esc()` avant d'entrer dans la page ; toute valeur insérée dans un attribut de style ou d'image a une forme imposée, côté interface et côté serveur ; toute route sans session passe par la limite par adresse.
+
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
@@ -661,6 +684,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | Essayer `installer.sh` sur Ubuntu, et l'installation en ligne sur une vraie machine | Utilisateur | ⏳ À faire |
 | Essayer les connecteurs avec un vrai PRTG ou de vrais switchs (SNMP) | Utilisateur | ⏳ À faire |
 | Essayer l'envoi de courriels avec votre vrai serveur de messagerie (réglage `[courriel]`) | Utilisateur | ⏳ À faire |
+| Avant le déploiement en entreprise : appliquer les cinq mesures de `SECURITE.md`, section 5 (certificat, sauvegardes hors machine, deux administrateurs, filtrage réseau, surveillance du journal) | Utilisateur | ⏳ À faire |
 
 **Réglage de l'effort :**
 - Moyen (medium) pour les petites corrections.
@@ -702,6 +726,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-20 | « Refais-moi le rapport d'analyse, en administrateur qui reçoit NetCarto et doit s'en servir en vrai » | ✅ `AUDIT.md` réécrit après un nouveau parcours complet sur un vrai serveur (premier jour, quotidien, urgence, sécurité, téléphone). Douze constats ; cinq corrections rapides proposées, non faites (section 6 du rapport). |
 | 2026-11-20 | « Une page d'administration centrale à l'adresse /admin (création des comptes, rôles, réinitialisation des mots de passe), connexion par adresse mail, récupération de compte par mail avec serveur SMTP facultatif, niveaux de droits étagés. À toi de structurer. » | ✅ Fait (voir 3.27). |
 | 2026-11-20 | « Oui, retire les anciennes fenêtres en doublon » | ✅ Fenêtres « Utilisateurs », « Journal d'audit » et « Sauvegardes » retirées du menu du compte ; tout passe par la page d'administration (voir 3.27). |
+| 2026-11-22 | « En RSSI senior : audite la solution, trouve les failles et applique les correctifs de sécurité, elle va être déployée en entreprise » | ✅ Rapport `SECURITE.md` ; 14 failles corrigées et testées, 2 risques acceptés (voir 3.28). Restent les mesures d'exploitation de la section 5 du rapport, à la charge de l'utilisateur. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---

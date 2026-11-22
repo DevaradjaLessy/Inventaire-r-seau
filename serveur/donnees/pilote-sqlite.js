@@ -8,8 +8,11 @@ const { DatabaseSync } = require('node:sqlite');
 function ouvrir(fichier) {
   if (fichier !== ':memory:') fs.mkdirSync(path.dirname(fichier), { recursive: true });
   const db = new DatabaseSync(fichier);
+  // La base contient les empreintes des mots de passe : lisible par le seul compte du service (sans effet sous Windows)
+  const proteger = () => { if (fichier !== ':memory:') for (const f of [fichier, fichier + '-wal', fichier + '-shm']) { try { fs.chmodSync(f, 0o600); } catch { /* fichier absent, ou droits non gérés */ } } };
   // Clés étrangères actives ; journal WAL pour que les lectures ne bloquent pas pendant une écriture
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;');
+  proteger();
   const cache = new Map();
   const prep = sql => { let s = cache.get(sql); if (!s) { s = db.prepare(sql); cache.set(sql, s); } return s; };
   const plat = l => (l ? { ...l } : null);   // objets ordinaires, sans prototype particulier

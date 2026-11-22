@@ -105,6 +105,8 @@ function commandeSauvegardes(args) {
 }
 
 (async () => {
+  // Tout fichier créé par NetCarto (base, sauvegardes, clé) n'est lisible que par le compte qui le lance
+  try { process.umask(0o077); } catch { /* sans effet sur ce système */ }
   const args = process.argv.slice(2);
   if (args.includes('--aide') || args.includes('--help')) { console.log(AIDE); return; }
   if (args[0] === 'sante') { try { console.log(`NetCarto est en marche (${await commandeSante(args)}).`); } catch (e) { console.error(`NetCarto ne répond pas : ${e.message}`); process.exit(1); } return; }

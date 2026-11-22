@@ -339,6 +339,81 @@ test('Déplacer un équipement câblé : le brassage est signalé, et peut être
   assert.deepStrictEqual(await etat(), { rack: 'BAIE-A2-01', cables: avant.cables }, 'câbles gardés si l\'on décoche');
 });
 
+/* ---------- Sécurité de l'interface ---------- */
+const CHARGE = '"\'><img src=x onerror="window.__xss=(window.__xss||0)+1"><svg onload="window.__xss=1"></svg>`;--';
+test('Sécurité : aucun texte saisi n\'est interprété comme du code, où qu\'il s\'affiche', async page => {
+  // Tous les champs de texte libre de la base reçoivent une charge d'injection ; les valeurs contrôlées (identifiants, couleurs, états) restent valides
+  const erreur = await page.evaluate(charge => {
+    const S = NetCarto.Store, d = JSON.parse(JSON.stringify(S.db)), T = (o, ks) => { for (const k of ks) if (typeof o[k] === 'string') o[k] = charge + o[k]; };
+    for (const x of d.sites) T(x, ['name', 'code', 'address']);
+    for (const x of d.buildings) T(x, ['name', 'code']);
+    for (const x of d.floors) T(x, ['name']);
+    for (const x of d.rooms) T(x, ['name']);
+    for (const x of d.racks) T(x, ['name', 'serial']);
+    for (const x of d.devices) T(x, ['hostname', 'serial', 'ip', 'mac', 'firmware', 'notes']);
+    for (const x of d.ports) T(x, ['name', 'mac', 'connected', 'description']);
+    for (const x of d.outlets) T(x, ['label']);
+    for (const x of d.cables) T(x, ['label']);
+    for (const x of d.vlans) T(x, ['name', 'subnet']);
+    for (const x of d.catalog) { T(x, ['brand', 'model', 'ref', 'firmware', 'description']); if (x.specs && typeof x.specs === 'object') for (const k of Object.keys(x.specs)) if (typeof x.specs[k] === 'string') x.specs[k] = charge; }
+    for (const x of d.stock) T(x, ['location']);
+    for (const x of d.history) T(x, ['text']);
+    const err = S.validate(d); if (err) return err;
+    S.save = () => {}; S.db = d; S.undoStack = []; S.reindex(); S.emit(); return null;
+  }, CHARGE);
+  assert.strictEqual(erreur, null, 'la base piégée doit rester une base valide');
+  // Les valeurs à forme imposée (couleur, image, date) sont refusées dès qu'elles sortent de leur forme
+  const refus = await page.evaluate(() => { const S = NetCarto.Store, essai = f => { const d = JSON.parse(JSON.stringify(S.db)); f(d); return !!S.validate(d); };
+    return [essai(d => { d.vlans[0].color = 'red" onmouseover="x'; }), essai(d => { d.cables[0].color = 'javascript:1'; }), essai(d => { d.floors[0].planImage = 'https://exemple.invalid/a.png'; }), essai(d => { d.floors[0].planImage = 'javascript:alert(1)'; }), essai(d => { d.devices[0].installDate = '<img src=x>'; })]; });
+  assert.deepStrictEqual(refus, [true, true, true, true, true], 'couleur, image ou date hors forme');
+  // Chaque écran est contrôlé ; les défauts sont rassemblés pour être tous signalés d'un coup, avec leur emplacement dans la page
+  const defauts = [];
+  const controle = async ou => {
+    await page.waitForTimeout(120);
+    const r = await page.evaluate(() => { const chemin = e => { const c = []; for (let x = e.parentElement; x && c.length < 4; x = x.parentElement) c.push(x.id ? '#' + x.id : x.className && typeof x.className === 'string' ? '.' + x.className.split(' ')[0] : x.tagName.toLowerCase()); return c.reverse().join(' > '); };
+      const l = [...document.querySelectorAll('img[src="x"], svg[onload], [onerror]')].map(chemin); const n = window.__xss || 0; window.__xss = 0; return { n, l: [...new Set(l)] }; });
+    if (r.n || r.l.length) defauts.push(`${ou} → ${r.l.join(' ; ') || 'code exécuté'}`);
+  };
+  const survoler = async () => { for (const el of (await page.$$('[data-tip]')).slice(0, 60)) { try { await el.hover({ timeout: 300, force: true }); } catch { /* élément masqué */ } } };
+  const ids = await page.evaluate(() => { const d = NetCarto.Store.db, sw = d.devices.find(x => x.hostname.endsWith('SW-A1-ACC-01')), p = d.ports.find(x => x.deviceId === sw.id && d.cables.some(c => c.a === x.id || c.b === x.id));
+    return { site: d.sites[0].id, bat: d.buildings[0].id, etage: d.floors[1].id, piece: d.rooms.find(r => r.floorId === d.floors[1].id).id, baie: sw.rackId, sw: sw.id, port: p.id, prise: d.outlets[0].id, ap: d.devices.find(x => x.roomId).id }; });
+  // Cartographie : chaque type d'objet, avec sa fiche, le plan, la baie et la topologie
+  for (const [nom, id] of Object.entries(ids)) { await page.evaluate(i => NetCarto.select(i), id); await controle('sélection ' + nom); }
+  await page.evaluate(i => NetCarto.select(i), ids.etage); await survoler(); await controle('survol du plan');
+  await page.evaluate(i => NetCarto.select(i), ids.sw); await survoler(); await controle('survol de la baie et de la fiche');
+  await page.click('[data-act=c-view][data-v=topo]'); await survoler(); await controle('topologie');
+  await page.evaluate(i => NetCarto.select(i), ids.prise); await page.click('#detail [data-act=trace]').catch(() => {}); await controle('traçage');
+  await page.fill('[data-inp=tree-filter]', 'img'); await controle('filtre de l\'arbre'); await page.fill('[data-inp=tree-filter]', '');
+  // Fenêtres : modification, déplacement, remplacement, impact, retrait, connexion, VLAN, impression
+  await page.evaluate(i => NetCarto.select(i), ids.sw);
+  // Une action peut être refusée (stock vide, par exemple) : le message de refus est contrôlé lui aussi
+  const fenetre = async act => { const b = page.locator(`#detail [data-act=${act}]`).first(); if (!(await b.count()) || !(await b.isEnabled())) return; await b.click(); await page.waitForSelector('.modal', { timeout: 1500 }).catch(() => {}); await controle('fenêtre ' + act); if (await page.locator('.modal').count()) await page.click('[data-act=modal-close]'); };
+  for (const act of ['dev-edit', 'dev-move', 'dev-replace', 'impact', 'dev-remove']) await fenetre(act);
+  await page.evaluate(i => NetCarto.select(i, { keep: true }), ids.port);
+  for (const act of ['connect', 'port-couper', 'vlans']) await fenetre(act);
+  await page.evaluate(i => NetCarto.select(i), ids.baie); await page.evaluate(() => { window.print = () => {}; }); await page.click('#detail [data-act=rack-print]'); await controle('document imprimé');
+  await fenetre('rack-edit');
+  // Recherche, inventaire, matériel, tableau de bord, historique
+  await page.fill('#gsearch', 'img'); await page.waitForTimeout(150); await controle('recherche globale'); await page.keyboard.press('Enter'); await controle('inventaire filtré');
+  await page.click('[data-tab=inv]'); await page.fill('#inv-q', ''); await survoler(); await controle('inventaire');
+  await page.click('[data-tab=mat]'); await survoler(); await page.locator('.mcard').first().click(); await controle('matériel');
+  await page.click('[data-tab=dash]'); await survoler(); await controle('tableau de bord');
+  await page.click('[data-act=historique]'); await controle('historique'); await page.click('[data-act=modal-close]');
+  // Une action dont le message reprend un nom piégé (notification et historique)
+  await page.evaluate(i => NetCarto.Store.commit('edit', 'Note sur ' + NetCarto.Store.idx.id.get(i).hostname, db => { db.devices[0].notes += '!'; }), ids.sw);
+  await page.keyboard.press('Control+z'); await controle('notification d\'annulation');
+  assert.strictEqual(defauts.length, 0, 'texte interprété comme du code : ' + defauts.join(' // '));
+});
+test('Sécurité : les exports CSV ne contiennent pas de formule exécutable par un tableur', async page => {
+  await page.evaluate(() => NetCarto.Store.commit('edit', 'Piège', db => { db.devices[0].hostname = '=HYPERLINK("http://exemple.invalid","clic")'; db.devices[1].serial = '+cmd|calc'; db.devices[2].firmware = '@SUM(A1)'; db.devices[3].serial = '-2+3'; }));
+  await page.click('[data-tab=inv]');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-act=inv-csv]')]);
+  const lignes = fs.readFileSync(await dl.path(), 'utf8').replace(/^﻿/, '').split('\r\n');
+  const cellules = lignes.flatMap(l => l.split(';').map(c => c.replace(/^"|"$/g, '')));
+  assert.ok(cellules.some(c => c.includes('HYPERLINK')), 'la valeur piégée doit figurer dans l\'export');
+  for (const c of cellules) assert.ok(!/^[=+@\t\r-]/.test(c), `cellule exécutable : ${c.slice(0, 40)}`);
+});
+
 /* ---------- Interventions d'urgence (audit d'usage) ---------- */
 test('Panne d\'un switch : l\'impact est chiffré, détaillé par pièce, exportable', async page => {
   await choisir(page, 'SW-A1-ACC-01');
@@ -878,6 +953,19 @@ test('Sécurité : l\'administrateur voit l\'état du serveur et exporte le jour
   const csv = fs.readFileSync(await dl.path(), 'utf8');
   assert.match(csv, /date;identifiant;action;objet;libelle;avant;apres;adresse/); assert.match(csv, /echec_connexion/); assert.ok(csv.split('\n').length > 4);
 }, { serveur: true, erreursAttendues: /401/ });
+test('Sécurité : dans la page d\'administration non plus, aucun texte venu d\'un compte ou d\'une tentative de connexion n\'est interprété', async (page, { app }) => {
+  await app.securite.creerUtilisateur({ identifiant: 'piege', nom: CHARGE, courriel: 'piege@exemple.test', role: 'lecture', motDePasse: MDP });
+  // Une tentative de connexion avec un identifiant piégé laisse une trace dans le journal d'audit
+  await page.evaluate(c => fetch('/api/v1/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identifiant: c, motDePasse: 'mauvais-mot-de-passe' }) }), CHARGE.slice(0, 60));
+  for (let i = 0; i < 5; i++) await page.evaluate(() => fetch('/api/v1/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identifiant: 'piege', motDePasse: 'mauvais-mot-de-passe' }) }));
+  const propre = async ou => { await page.waitForTimeout(150); assert.deepStrictEqual(await page.evaluate(() => [window.__xss || 0, document.querySelectorAll('img[src="x"], svg[onload], [onerror]').length]), [0, 0], ou); };
+  await rubrique(page, 'comptes'); await page.waitForSelector('#users-list [data-ident=piege]'); await propre('comptes');
+  await page.click('#users-list [data-act=user-courriel][data-ident=piege]'); await propre('fenêtre courriel'); await page.click('[data-act=modal-close]');
+  await rubrique(page, 'audit'); await page.waitForSelector('#audit-list .a-row'); await propre('journal d\'audit');
+  await rubrique(page, 'securite'); await page.locator('#sec-etat .sec-row').first().waitFor(); await propre('sécurité');
+  assert.match(await page.locator('#sec-etat').innerText(), /verrouillé/);
+  await page.click('[data-tab=dash]'); await page.locator('.dcard .sec-row').first().waitFor(); await propre('tableau de bord');
+}, { serveur: true, erreursAttendues: /401|429/ });
 test('Comptes : session expirée en cours de travail → on se reconnecte sans perdre la page', async page => {
   const dev = await page.evaluate(() => { const x = NetCarto.Store.db.devices.find(d => d.hostname === 'SW-A1-ACC-01'); NetCarto.select(x.id); return x; });
   await api(page, '/session', 'DELETE');
@@ -903,7 +991,7 @@ test('Comptes : session expirée en cours de travail → on se reconnecte sans p
     let app = null, dossier = null, adresse = base;
     if (opts.serveur) {
       dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'netcarto-e2e-'));
-      app = await demarrer({ serveur: { hote: '127.0.0.1', port: 0 }, donnees: { dossier }, web: { dossier: RACINE }, https: { actif: false }, supervision: { intervalle: 30, sources: opts.supervision || [] }, demo: true }, { journal: () => {} });
+      app = await demarrer({ serveur: { hote: '127.0.0.1', port: 0 }, donnees: { dossier }, web: { dossier: RACINE }, https: { actif: false }, supervision: { intervalle: 30, sources: opts.supervision || [] }, securite: { coutMotDePasse: 14 }, demo: true }, { journal: () => {} });
       adresse = `http://127.0.0.1:${app.port}/`;
       // Trois comptes de test ; la page s'ouvre déjà connectée (administrateur par défaut), sauf demande contraire
       if (!opts.sansComptes) {

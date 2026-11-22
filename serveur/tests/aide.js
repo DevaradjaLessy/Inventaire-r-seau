@@ -34,7 +34,7 @@ const MDP = 'Mot-de-passe-de-test-1';   // mot de passe des comptes créés pour
 async function serveurDeTest(t, { dossier = null, config = {}, comptes = true, options = {} } = {}) {
   const { demarrer } = require('../app');
   dossier = dossier || dossierTemporaire(t);
-  const app = await demarrer({ serveur: { hote: '127.0.0.1', port: 0 }, donnees: { dossier }, web: { dossier: RACINE }, https: { actif: false }, ...config }, { journal: () => {}, ...options });
+  const app = await demarrer({ serveur: { hote: '127.0.0.1', port: 0 }, donnees: { dossier }, web: { dossier: RACINE }, https: { actif: false }, ...config, securite: { coutMotDePasse: 14, ...(config.securite || {}) } }, { journal: () => {}, ...options });   // coût réduit : les tests créent des dizaines de comptes
   t.after(() => app.arreter());
   const base = `http://127.0.0.1:${app.port}`, api = base + '/api/v1', r = { app, base, api, dossier };
   if (comptes) {

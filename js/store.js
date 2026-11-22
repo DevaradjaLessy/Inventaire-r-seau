@@ -77,15 +77,16 @@ const Store = {
     if (d.meta.schemaVersion > APP.schemaVersion) return 'Ce fichier vient d\'une version plus récente de NetCarto.';
     for (const k of Object.keys(emptyDb())) if (k !== 'meta' && !Array.isArray(d[k])) return `Section « ${k} » absente ou invalide.`;
     // Contrôle du contenu : ces valeurs sont insérées dans la page, elles doivent donc avoir une forme sûre
-    const ID = /^[A-Za-z0-9_-]{1,64}$/, COLOR = /^#[0-9a-fA-F]{3,8}$/, IMG = /^(data:image\/(png|jpeg|jpg|webp|gif|svg\+xml)[;,]|https?:\/\/)/;
+    const ID = /^[A-Za-z0-9_-]{1,64}$/, COLOR = /^#[0-9a-fA-F]{3,8}$/, IMG = /^data:image\/(png|jpeg|jpg|webp|gif|svg\+xml)[;,]/, DATE = /^\d{4}-\d{2}-\d{2}$/;   // une image est toujours intégrée : jamais d'adresse extérieure
     const id = v => typeof v === 'string' && ID.test(v), ref = v => v == null || v === '' || id(v), col = v => v == null || v === '' || (typeof v === 'string' && COLOR.test(v));
+    const date = v => v == null || v === '' || (typeof v === 'string' && DATE.test(v));
     const nb = v => v == null || (typeof v === 'number' && Number.isFinite(v)), img = v => v == null || v === '' || (typeof v === 'string' && IMG.test(v));
     const RULES = {
       sites: e => id(e.id), buildings: e => id(e.id) && id(e.siteId),
       floors: e => id(e.id) && id(e.buildingId) && e.width > 0 && e.height > 0 && img(e.planImage),
       rooms: e => id(e.id) && id(e.floorId) && [e.x, e.y, e.w, e.h].every(v => typeof v === 'number' && Number.isFinite(v)),
-      racks: e => id(e.id) && id(e.roomId) && id(e.catalogId) && e.heightU > 0 && nb(e.x) && nb(e.y) && e.status in DEVICE_STATUS,
-      devices: e => id(e.id) && id(e.catalogId) && ref(e.rackId) && ref(e.roomId) && nb(e.x) && nb(e.y) && nb(e.u) && e.status in DEVICE_STATUS,
+      racks: e => id(e.id) && id(e.roomId) && id(e.catalogId) && e.heightU > 0 && nb(e.x) && nb(e.y) && e.status in DEVICE_STATUS && date(e.installDate),
+      devices: e => id(e.id) && id(e.catalogId) && ref(e.rackId) && ref(e.roomId) && nb(e.x) && nb(e.y) && nb(e.u) && e.status in DEVICE_STATUS && date(e.installDate),
       ports: e => id(e.id) && id(e.deviceId) && e.status in PORT_STATUS && e.kind in PORT_KIND && e.role in PORT_ROLE && e.poe && typeof e.poe === 'object' && nb(e.poe.watts) && (e.vlan == null || Number.isInteger(e.vlan)),
       outlets: e => id(e.id) && id(e.roomId) && nb(e.x) && nb(e.y) && e.usage in OUTLET_USAGE,
       cables: e => id(e.id) && id(e.a) && id(e.b) && col(e.color),

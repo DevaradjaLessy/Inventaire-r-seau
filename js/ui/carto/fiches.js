@@ -16,6 +16,7 @@ import { structButtons } from './structure.js';
 /* ---------- Fiche de détails ---------- */
 const kv = rows => `<dl class="kv">${rows.filter(r => r && r[1] !== '' && r[1] != null).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
 const li = (id, text, small = '', icon = null) => `<div class="li" data-act="sel" data-id="${id}">${ico(icon || iconOf(id))}<span>${esc(text)}</span>${small ? `<small>${small}</small>` : ''}</div>`;
+/* En-tête d'une fiche. « sub » est du HTML : tout texte venu de la base doit y être passé par esc() */
 const dHead = (icon, title, sub) => `<div class="d-head"><div class="dico">${ico(icon)}</div><div style="min-width:0"><h2>${esc(title)}</h2><div class="sub">${sub}</div></div></div>`;
 const sec = (title, body) => body ? `<div class="d-sec">${title ? `<div class="sec-t">${title}</div>` : ''}${body}</div>` : '';
 const opt = (v, l, cur) => `<option value="${esc(v)}" ${String(v) === String(cur) ? 'selected' : ''}>${esc(l)}</option>`;
@@ -68,7 +69,7 @@ const Detail = {
   room(e) {
     const I = Store.idx, racks = I.racksByRoom.get(e.id) || [], devs = I.devByRoom.get(e.id) || [], outs = I.outByRoom.get(e.id) || [];
     const st = groupBy(outs, o => outletInfo(o.id).status);
-    return dHead('room', e.name, `${ROOM_TYPES[e.type]?.label || ''} · ${locLabel(e.floorId)}`) +
+    return dHead('room', e.name, `${ROOM_TYPES[e.type]?.label || ''} · ${esc(locLabel(e.floorId))}`) +
       sec('', structButtons(e)) +
       sec('Résumé', kv([['Surface', `${Math.round(e.w * e.h)} m²`], ['Dimensions', `${e.w} × ${e.h} m`], ['Baies', racks.length], ['Équipements', devs.length], ['Prises murales', outs.length], outs.length ? ['Prises actives', `${(st.get('up') || []).length} / ${outs.length}`] : null])) +
       sec('Baies', racks.map(r => li(r.id, r.name, `${rackUsage(r.id).pct} %`)).join('')) +
@@ -77,7 +78,7 @@ const Detail = {
   },
   rack(e) {
     const u = rackUsage(e.id), c = catOf(e);
-    return dHead('rack', e.name, locLabel(e.roomId)) +
+    return dHead('rack', e.name, esc(locLabel(e.roomId))) +
       sec('Occupation', `<div class="row"><div class="bar grow"><i style="width:${u.pct}%;background:${u.pct >= RACK_FULL_PCT ? COL.serious : 'var(--accent)'}"></i></div><b>${u.used}/${u.total} U</b></div>`) +
       sec('', `<div class="btns"><button class="btn sm pri" data-act="c-view" data-v="rack">${ico('cube')}Vue 3D</button><button class="btn sm" data-act="rack-edit" data-id="${e.id}">${ico('edit')}Modifier</button><button class="btn sm" data-act="rack-print" data-id="${e.id}" data-tip="Imprimer|Fiche de la baie et plan de brassage">${ico('list')}Imprimer</button><button class="btn sm danger" data-act="rack-del" data-id="${e.id}">${ico('trash')}Retirer</button></div>`) +
       sec('Caractéristiques', kv([['Modèle', esc(`${c.brand} ${c.model}`)], ['Hauteur', `${e.heightU} U`], ['N° de série', mono(e.serial)], ['Installée le', fmtDate(e.installDate)], ['Statut', stDev(e.status)]])) +

@@ -1,29 +1,32 @@
 /* Correspondance entre le modèle JSON de NetCarto (celui de l'interface et des exports) et les tables.
    Pour chaque collection : la table, la clé, et la liste des champs [propriété JSON, colonne, type].
    Types : id, ref (identifiant d'un autre objet), ref? (ou vide), txt, txt! (non vide), num, num?, int, int?,
-   bool, json. Un type suivi de « ~ » est facultatif : la propriété est absente du JSON quand la colonne est vide.
+   bool, json, et trois textes à forme imposée parce qu'ils sont insérés dans la page : coul (couleur #rrggbb, ou vide),
+   img (image intégrée « data:image/… », ou vide), date (AAAA-MM-JJ, ou vide). Un type suivi de « ~ » est facultatif : la propriété est absente du JSON quand la colonne est vide.
    Une propriété « a.b » désigne un objet imbriqué. */
 'use strict';
 const { ErreurMetier } = require('./erreurs');
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
+/* Formes imposées aux valeurs que l'interface insère dans la page, et longueur maximale d'un texte libre */
+const COULEUR = /^#[0-9a-fA-F]{3,8}$/, IMAGE = /^data:image\/(png|jpeg|jpg|webp|gif|svg\+xml)[;,]/, DATE = /^\d{4}-\d{2}-\d{2}$/, IMAGE_MAX = 8 * 1048576, TEXTE_MAX = 20000;
 const COLLECTIONS = {
-  vlans:     { table: 'vlans', cle: 'id', ordre: 'id', champs: [['id', 'id', 'int'], ['name', 'nom', 'txt!'], ['color', 'couleur', 'txt'], ['subnet', 'sous_reseau', 'txt']] },
+  vlans:     { table: 'vlans', cle: 'id', ordre: 'id', champs: [['id', 'id', 'int'], ['name', 'nom', 'txt!'], ['color', 'couleur', 'coul'], ['subnet', 'sous_reseau', 'txt']] },
   sites:     { table: 'sites', cle: 'id', champs: [['id', 'id', 'id'], ['name', 'nom', 'txt!'], ['code', 'code', 'txt'], ['address', 'adresse', 'txt']] },
   buildings: { table: 'batiments', cle: 'id', champs: [['id', 'id', 'id'], ['siteId', 'site_id', 'ref'], ['code', 'code', 'txt!'], ['name', 'nom', 'txt!']] },
-  floors:    { table: 'etages', cle: 'id', champs: [['id', 'id', 'id'], ['buildingId', 'batiment_id', 'ref'], ['level', 'niveau', 'int'], ['name', 'nom', 'txt!'], ['width', 'largeur', 'num'], ['height', 'profondeur', 'num'], ['planImage', 'image_plan', 'txt']] },
+  floors:    { table: 'etages', cle: 'id', champs: [['id', 'id', 'id'], ['buildingId', 'batiment_id', 'ref'], ['level', 'niveau', 'int'], ['name', 'nom', 'txt!'], ['width', 'largeur', 'num'], ['height', 'profondeur', 'num'], ['planImage', 'image_plan', 'img']] },
   rooms:     { table: 'pieces', cle: 'id', champs: [['id', 'id', 'id'], ['floorId', 'etage_id', 'ref'], ['name', 'nom', 'txt!'], ['type', 'type', 'txt!'], ['x', 'x', 'num'], ['y', 'y', 'num'], ['w', 'largeur', 'num'], ['h', 'profondeur', 'num']] },
   catalog:   { table: 'catalogue', cle: 'id', enfants: 'ports', champs: [['id', 'id', 'id'], ['category', 'categorie', 'txt!'], ['brand', 'marque', 'txt'], ['model', 'modele', 'txt!'], ['ref', 'reference', 'txt'], ['template', 'gabarit', 'txt!'], ['mount', 'montage', 'txt!'], ['heightU', 'hauteur_u', 'int'], ['layer', 'niveau', 'txt?'],
                ['poeBudgetW', 'budget_poe_w', 'num'], ['poeDrawW', 'conso_poe_w', 'num'], ['powerW', 'puissance_w', 'num'], ['firmware', 'firmware', 'txt'], ['specs', 'caracteristiques', 'json'],
-               ['visual.color', 'couleur', 'txt'], ['visual.accent', 'accent', 'txt'], ['visual.logo', 'logo', 'txt'], ['visual.frontImage', 'image_facade', 'txt'], ['visual.width', 'largeur_m', 'num~'], ['visual.depth', 'profondeur_m', 'num~'], ['description', 'description', 'txt']] },
+               ['visual.color', 'couleur', 'coul'], ['visual.accent', 'accent', 'coul'], ['visual.logo', 'logo', 'txt'], ['visual.frontImage', 'image_facade', 'img'], ['visual.width', 'largeur_m', 'num~'], ['visual.depth', 'profondeur_m', 'num~'], ['description', 'description', 'txt']] },
   stock:     { table: 'stock', cle: 'catalogId', champs: [['catalogId', 'catalogue_id', 'id'], ['available', 'disponible', 'int'], ['threshold', 'seuil', 'int'], ['location', 'lieu', 'txt']] },
-  racks:     { table: 'baies', cle: 'id', champs: [['id', 'id', 'id'], ['roomId', 'piece_id', 'ref'], ['catalogId', 'catalogue_id', 'ref'], ['name', 'nom', 'txt!'], ['heightU', 'hauteur_u', 'int'], ['x', 'x', 'num'], ['y', 'y', 'num'], ['serial', 'serie', 'txt'], ['installDate', 'date_installation', 'txt'], ['status', 'statut', 'txt!']] },
+  racks:     { table: 'baies', cle: 'id', champs: [['id', 'id', 'id'], ['roomId', 'piece_id', 'ref'], ['catalogId', 'catalogue_id', 'ref'], ['name', 'nom', 'txt!'], ['heightU', 'hauteur_u', 'int'], ['x', 'x', 'num'], ['y', 'y', 'num'], ['serial', 'serie', 'txt'], ['installDate', 'date_installation', 'date'], ['status', 'statut', 'txt!']] },
   devices:   { table: 'equipements', cle: 'id', champs: [['id', 'id', 'id'], ['catalogId', 'catalogue_id', 'ref'], ['hostname', 'nom_hote', 'txt!'], ['rackId', 'baie_id', 'ref?'], ['u', 'u', 'int?'], ['roomId', 'piece_id', 'ref?'], ['x', 'x', 'num?'], ['y', 'y', 'num?'], ['serial', 'serie', 'txt'], ['ip', 'ip', 'txt'], ['mac', 'mac', 'txt'],
-               ['firmware', 'firmware', 'txt'], ['installDate', 'date_installation', 'txt'], ['status', 'statut', 'txt!'], ['layer', 'niveau', 'txt~'], ['notes', 'notes', 'txt']] },
+               ['firmware', 'firmware', 'txt'], ['installDate', 'date_installation', 'date'], ['status', 'statut', 'txt!'], ['layer', 'niveau', 'txt~'], ['notes', 'notes', 'txt']] },
   ports:     { table: 'ports', cle: 'id', ordre: 'rowid', champs: [['id', 'id', 'id'], ['deviceId', 'equipement_id', 'ref'], ['idx', 'idx', 'int'], ['name', 'nom', 'txt!'], ['kind', 'type', 'txt!'], ['role', 'role', 'txt!'], ['speed', 'debit', 'num'], ['status', 'etat', 'txt!'], ['vlan', 'vlan', 'int?'],
                ['poe.capable', 'poe_possible', 'bool'], ['poe.watts', 'poe_watts', 'num'], ['mac', 'mac', 'txt'], ['connected', 'connecte', 'txt'], ['description', 'description', 'txt']] },
   outlets:   { table: 'prises', cle: 'id', champs: [['id', 'id', 'id'], ['roomId', 'piece_id', 'ref'], ['label', 'repere', 'txt!'], ['x', 'x', 'num'], ['y', 'y', 'num'], ['usage', 'usage', 'txt!']] },
-  cables:    { table: 'cables', cle: 'id', extremites: true, champs: [['id', 'id', 'id'], ['type', 'type', 'txt!'], ['length', 'longueur', 'num'], ['color', 'couleur', 'txt'], ['label', 'libelle', 'txt']] },
+  cables:    { table: 'cables', cle: 'id', extremites: true, champs: [['id', 'id', 'id'], ['type', 'type', 'txt!'], ['length', 'longueur', 'num'], ['color', 'couleur', 'coul'], ['label', 'libelle', 'txt']] },
   history:   { table: 'journal', cle: 'id', ordre: 'date DESC, rowid DESC', champs: [['id', 'id', 'id'], ['ts', 'date', 'int'], ['type', 'type', 'txt!'], ['text', 'texte', 'txt'], ['ref', 'ref', 'ref?']] },
 };
 /* Ordre d'écriture qui respecte les dépendances (utile pour un remplacement complet) */
@@ -37,6 +40,7 @@ const lire = (o, chemin) => chemin.split('.').reduce((x, k) => (x == null ? unde
 function ecrire(o, chemin, v) { const ks = chemin.split('.'); let x = o; for (const k of ks.slice(0, -1)) x = x[k] || (x[k] = {}); x[ks.at(-1)] = v; }
 const refus = (ou, prop, quoi) => new ErreurMetier('invalide', `${ou} : ${quoi} pour « ${prop} ».`);
 
+const court = (v, prop, ou) => { if (v.length > TEXTE_MAX) throw refus(ou, prop, `texte trop long (${TEXTE_MAX} caractères au plus)`); return v; };
 /* Contrôle et convertit une valeur JSON vers sa valeur de colonne */
 function versColonne(v, type, prop, ou) {
   const facultatif = type.endsWith('~'), t = facultatif ? type.slice(0, -1) : type;
@@ -46,9 +50,12 @@ function versColonne(v, type, prop, ou) {
     case 'id': if (typeof v !== 'string' || !ID.test(v)) throw refus(ou, prop, 'identifiant invalide (lettres, chiffres, tirets ; 64 caractères au plus)'); return v;
     case 'ref': if (typeof v !== 'string' || !ID.test(v)) throw refus(ou, prop, 'référence manquante ou invalide'); return v;
     case 'ref?': if (vide || v === '') return null; if (typeof v !== 'string' || !ID.test(v)) throw refus(ou, prop, 'référence invalide'); return v;
-    case 'txt': if (typeof v !== 'string') throw refus(ou, prop, 'texte attendu'); return v;
-    case 'txt!': if (typeof v !== 'string' || !v.trim()) throw refus(ou, prop, 'valeur manquante'); return v;
-    case 'txt?': if (vide) return null; if (typeof v !== 'string') throw refus(ou, prop, 'texte attendu'); return v;
+    case 'txt': if (typeof v !== 'string') throw refus(ou, prop, 'texte attendu'); return court(v, prop, ou);
+    case 'txt!': if (typeof v !== 'string' || !v.trim()) throw refus(ou, prop, 'valeur manquante'); return court(v, prop, ou);
+    case 'txt?': if (vide) return null; if (typeof v !== 'string') throw refus(ou, prop, 'texte attendu'); return court(v, prop, ou);
+    case 'coul': if (vide || v === '') return ''; if (typeof v !== 'string' || !COULEUR.test(v)) throw refus(ou, prop, 'couleur attendue au format #rrggbb'); return v;
+    case 'img': if (vide || v === '') return ''; if (typeof v !== 'string' || !IMAGE.test(v) || v.length > IMAGE_MAX) throw refus(ou, prop, 'image intégrée attendue (PNG, JPEG, WebP, GIF ou SVG, 8 Mo au plus)'); return v;
+    case 'date': if (vide || v === '') return ''; if (typeof v !== 'string' || !DATE.test(v) || Number.isNaN(Date.parse(v)) || new Date(v).toISOString().slice(0, 10) !== v) throw refus(ou, prop, 'date attendue au format AAAA-MM-JJ'); return v;
     case 'num': if (typeof v !== 'number' || !Number.isFinite(v)) throw refus(ou, prop, 'nombre attendu'); return v;
     case 'num?': if (vide) return null; if (typeof v !== 'number' || !Number.isFinite(v)) throw refus(ou, prop, 'nombre attendu'); return v;
     case 'int': if (!Number.isInteger(v)) throw refus(ou, prop, 'nombre entier attendu'); return v;

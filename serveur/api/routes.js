@@ -28,6 +28,7 @@ const fs = require('fs'), zlib = require('zlib');
 const { ErreurMetier, RESSOURCES } = require('../donnees');
 
 const VERSION = require('../package.json').version, COOKIE = 'netcarto_session', SEUIL_COMPRESSION = 2048;
+const MAX_SANS_SESSION = 64 * 1024;   // une requête sans session (connexion, mot de passe perdu) n'a aucune raison d'être grosse
 
 class ErreurHttp extends Error { constructor(statut, message) { super(message); this.statut = statut; } }
 /* Réponse qui porte aussi des en-têtes (cookie de session) */
@@ -48,11 +49,13 @@ function lireJson(req, maxOctets) {
     });
   });
 }
-const jetonDe = req => (req.headers.cookie || '').split(';').map(x => x.trim().split('=')).find(([k]) => k === COOKIE)?.[1] || '';
+/* En HTTPS, le cookie porte le préfixe « __Host- » : le navigateur refuse alors qu'un autre site du même domaine le pose ou le remplace */
+const nomCookie = https => (https ? '__Host-' : '') + COOKIE;
+const jetonDe = (req, https) => (req.headers.cookie || '').split(';').map(x => x.trim().split('=')).find(([k]) => k === nomCookie(https))?.[1] || '';
 
 function creerApi({ depot, sauvegardes, releveur, securite, config, https, certificat = null }) {
-  const max = config.limites.corpsMaxMo * 1048576;
-  const cookie = (jeton, duree) => `${COOKIE}=${jeton}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${duree}${https ? '; Secure' : ''}`;
+  const maxConnecte = config.limites.corpsMaxMo * 1048576;
+  const cookie = (jeton, duree) => `${nomCookie(https)}=${jeton}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${duree}${https ? '; Secure' : ''}`;
   const methode = (req, ...permises) => { if (!permises.includes(req.method)) throw Object.assign(new ErreurHttp(405, `Méthode non permise (attendu : ${permises.join(', ')}).`), { permises }); };
   const exiger = (u, ...roles) => {
     if (!u) throw new ErreurMetier('acces', 'Connexion requise.');
@@ -62,25 +65,34 @@ function creerApi({ depot, sauvegardes, releveur, securite, config, https, certi
   async function traiter(req, chemin, recherche) {
     const [a, b, ...reste] = chemin.split('/').filter(Boolean);
     if (reste.length) throw new ErreurHttp(404, 'Adresse inconnue.');
-    const jeton = jetonDe(req), moi = securite.session(jeton), ip = req.socket.remoteAddress || '', ctx = { utilisateur: moi, ip };
+    // Adresse du poste : celle de la liaison, ou, derrière un proxy déclaré de confiance, la dernière ajoutée par ce proxy à X-Forwarded-For
+    const transmise = config.serveur.proxyDeConfiance ? String(req.headers['x-forwarded-for'] || '').split(',').pop().trim() : '';
+    const jeton = jetonDe(req, https), moi = securite.session(jeton), ip = (/^[0-9a-fA-F:.]{3,45}$/.test(transmise) ? transmise : req.socket.remoteAddress) || '', ctx = { utilisateur: moi, ip };
+    const max = moi ? maxConnecte : MAX_SANS_SESSION;
+    /* Routes d'authentification : l'adresse qui a trop échoué attend ; chaque refus compte */
+    const sensible = async fn => {
+      const attente = securite.limiteur.attente(ip);
+      if (attente) throw Object.assign(new ErreurMetier('verrouille', `Trop de tentatives depuis cette adresse. Réessayez dans ${Math.ceil(attente / 60)} minute(s).`), { attente });
+      try { return await fn(); } catch (e) { if (e instanceof ErreurMetier) securite.limiteur.echec(ip); throw e; }
+    };
     // --- Sans connexion ---
     if (a === 'sante' && !b) { methode(req, 'GET'); return { ok: depot.sain(), base: 'ok' }; }
-    if (a === 'info' && !b) { methode(req, 'GET'); return { app: 'NetCarto', version: VERSION, mode: 'serveur', ...(moi ? { schema: depot.versionSchema(), revision: depot.revision(), vide: depot.estVide() } : {}) }; }
+    if (a === 'info' && !b) { methode(req, 'GET'); return { app: 'NetCarto', mode: 'serveur', ...(moi ? { version: VERSION, schema: depot.versionSchema(), revision: depot.revision(), vide: depot.estVide() } : {}) }; }
     if (a === 'initialisation' && !b) {
       methode(req, 'POST');
-      const v = await lireJson(req, max), u = await securite.initialiser(v), s = await securite.connecter(u.identifiant, v.motDePasse, { ip });
+      const v = await lireJson(req, max), s = await sensible(async () => { const u = await securite.initialiser(v); return securite.connecter(u.identifiant, v.motDePasse, { ip }); });
       return new Reponse({ connecte: true, utilisateur: s.utilisateur }, { 'Set-Cookie': cookie(s.jeton, s.dureeSecondes) });
     }
     if (a === 'session' && !b) {
       methode(req, 'GET', 'POST', 'DELETE');
       if (req.method === 'GET') return moi ? { connecte: true, utilisateur: moi, initialisation: false } : { connecte: false, initialisation: securite.aInitialiser(), recuperationParCourriel: securite.recuperationParCourriel() };
       if (req.method === 'DELETE') { securite.deconnecter(jeton); return new Reponse({ connecte: false }, { 'Set-Cookie': cookie('', 0) }); }
-      const v = await lireJson(req, max), s = await securite.connecter(v.identifiant, v.motDePasse, { ip });
+      const v = await lireJson(req, max), s = await sensible(() => securite.connecter(v.identifiant, v.motDePasse, { ip }));
       return new Reponse({ connecte: true, utilisateur: s.utilisateur }, { 'Set-Cookie': cookie(s.jeton, s.dureeSecondes) });
     }
     // Mot de passe perdu : la demande ne dit jamais si le compte existe ; le lien reçu permet d'en choisir un nouveau
-    if (a === 'recuperation' && !b) { methode(req, 'POST'); const v = await lireJson(req, max); securite.demanderReinitialisation(v.compte, { ip }); return { ok: true }; }
-    if (a === 'recuperation' && b === 'mot-de-passe') { methode(req, 'POST'); const v = await lireJson(req, max); return { ok: true, ...(await securite.reinitialiser(v.jeton, v.motDePasse, { ip })) }; }
+    if (a === 'recuperation' && !b) { methode(req, 'POST'); const v = await lireJson(req, max); await sensible(async () => { securite.limiteur.echec(ip); securite.demanderReinitialisation(v.compte, { ip }); }); return { ok: true }; }
+    if (a === 'recuperation' && b === 'mot-de-passe') { methode(req, 'POST'); const v = await lireJson(req, max); return { ok: true, ...(await sensible(() => securite.reinitialiser(v.jeton, v.motDePasse, { ip }))) }; }
     // --- Compte connecté ---
     exiger(moi);
     if (a === 'recuperation' && b === 'lien') { methode(req, 'POST'); exiger(moi, 'administrateur'); const v = await lireJson(req, max); return securite.lienReinitialisation(v.id, moi); }
@@ -132,7 +144,7 @@ function creerApi({ depot, sauvegardes, releveur, securite, config, https, certi
   }
   return async function api(req, res, chemin, recherche) {
     const repondre = (statut, corps, entetes = {}) => {
-      const tete = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...(https ? { 'Strict-Transport-Security': 'max-age=31536000' } : {}), ...entetes };
+      const tete = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY', 'Cross-Origin-Resource-Policy': 'same-origin', ...(https ? { 'Strict-Transport-Security': 'max-age=31536000' } : {}), ...entetes };
       const texte = JSON.stringify(corps);
       // Une réponse volumineuse (la base entière, par exemple) voyage compressée si le navigateur l'accepte
       if (texte.length < SEUIL_COMPRESSION || !/\bgzip\b/.test(req.headers['accept-encoding'] || '')) { res.writeHead(statut, tete); return res.end(texte); }
@@ -147,13 +159,13 @@ function creerApi({ depot, sauvegardes, releveur, securite, config, https, certi
     try {
       const r = await traiter(req, chemin, recherche);
       if (r instanceof Fichier) {
-        res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': fs.statSync(r.chemin).size, 'Content-Disposition': `attachment; filename="${r.nom}"`, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+        res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': fs.statSync(r.chemin).size, 'Content-Disposition': `attachment; filename="${r.nom}"`, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY', 'Cross-Origin-Resource-Policy': 'same-origin' });
         return fs.createReadStream(r.chemin).on('error', () => res.destroy()).pipe(res);
       }
       if (r instanceof Reponse) repondre(200, r.corps, r.entetes); else repondre(200, r);
     }
     catch (e) {
-      if (e instanceof ErreurMetier) return repondre(e.statut, { erreur: e.message, code: e.code });
+      if (e instanceof ErreurMetier) return repondre(e.statut, { erreur: e.message, code: e.code }, e.attente ? { 'Retry-After': String(e.attente) } : {});
       if (e instanceof ErreurHttp) return repondre(e.statut, { erreur: e.message, code: 'http' }, e.permises ? { Allow: e.permises.join(', ') } : {});
       config.journal?.(`Erreur interne : ${e.stack || e.message}`);
       repondre(500, { erreur: 'Erreur interne du serveur.', code: 'interne' });

@@ -6,6 +6,7 @@
 [serveur]
 hote = "0.0.0.0"        # toutes les interfaces : NetCarto est joignable depuis le réseau
 port = 8443
+# proxyDeConfiance = true   # seulement si NetCarto est derrière VOTRE proxy inverse : l'adresse du poste est alors lue dans X-Forwarded-For
 
 [https]
 actif = true            # sans fichiers ci-dessous, un certificat auto-signé est créé dans /var/lib/netcarto/certificats
@@ -18,6 +19,9 @@ echecsMax = 5           # échecs de connexion avant verrouillage du compte
 verrouillageMinutes = 15
 sessionHeures = 12      # durée maximale d'une session
 inactiviteMinutes = 120 # une session inactive est fermée
+tentativesParAdresse = 20  # échecs d'authentification tolérés par adresse…
+fenetreMinutes = 10        # …sur cette durée ; au-delà, l'adresse attend la fin de la fenêtre
+coutMotDePasse = 17        # coût des empreintes (scrypt, N = 2^17) ; ne le baissez pas
 
 [donnees]
 dossier = "/var/lib/netcarto"

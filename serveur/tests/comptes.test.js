@@ -49,7 +49,7 @@ test('connexion, session et déconnexion', async t => {
   assert.strictEqual((await requete('GET', api + '/base', undefined, cookie)).code, 401);
   // /info et /sante restent publics (surveillance), sans rien révéler de la base
   assert.strictEqual((await requete('GET', api + '/sante')).code, 200);
-  assert.deepStrictEqual(Object.keys((await requete('GET', api + '/info')).json).sort(), ['app', 'mode', 'version']);
+  assert.deepStrictEqual(Object.keys((await requete('GET', api + '/info')).json).sort(), ['app', 'mode'], 'sans session, la version du serveur n\'est pas divulguée');
 });
 
 test('verrouillage après cinq échecs, levé avec le temps ou par un administrateur', async t => {
@@ -58,7 +58,7 @@ test('verrouillage après cinq échecs, levé avec le temps ou par un administra
   const essai = mdp => requete('POST', api + '/session', { identifiant: 'tech', motDePasse: mdp });
   for (let i = 0; i < 5; i++) assert.strictEqual((await essai('Mauvais-mot-de-passe')).code, 401);
   const bloque = await essai(MDP);
-  assert.strictEqual(bloque.code, 429); assert.match(bloque.json.erreur, /verrouillé/);
+  assert.strictEqual(bloque.code, 401, 'même réponse qu\'un mauvais mot de passe : rien ne dit que le compte existe'); assert.match(bloque.json.erreur, /verrouillé/);
   maintenant += 16 * 60000;
   assert.strictEqual((await essai(MDP)).code, 200, 'le verrou tombe après 15 minutes');
   for (let i = 0; i < 5; i++) await essai('Mauvais-mot-de-passe');

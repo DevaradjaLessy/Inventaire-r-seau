@@ -11,7 +11,7 @@ NetCarto est un logiciel serveur, avec sa propre base de données ; son interfac
 | Données | Base SQLite sur le serveur | Fictives, gardées dans le navigateur |
 | Comment | Installer : [`installation/README.md`](installation/README.md) (Docker, ou Debian et Ubuntu). Essayer sur son poste : [`serveur/README.md`](serveur/README.md) | Page GitHub Pages, ou la section ci-dessous |
 
-Le serveur apporte les comptes et les rôles, le journal d'audit, le HTTPS, les sauvegardes automatiques et la restauration. Il s'installe avec Docker ou sur Debian et Ubuntu, et fonctionne sans accès à Internet. Le suivi du projet est dans `SUIVI.md`. Un rapport d'usage et d'audit, du point de vue d'un administrateur, est dans `AUDIT.md`.
+Le serveur apporte les comptes et les rôles, le journal d'audit, le HTTPS, les sauvegardes automatiques et la restauration. Il s'installe avec Docker ou sur Debian et Ubuntu, et fonctionne sans accès à Internet. Le suivi du projet est dans `SUIVI.md`. Un rapport d'usage et d'audit, du point de vue d'un administrateur, est dans `AUDIT.md`. L'audit de sécurité est dans `SECURITE.md`.
 
 ## Ouvrir la démonstration
 

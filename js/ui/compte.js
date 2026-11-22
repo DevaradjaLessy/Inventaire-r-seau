@@ -1,6 +1,6 @@
 /* Interface — comptes (mode serveur) : écran de connexion et de première initialisation,
    menu du compte, gestion des utilisateurs et consultation du journal d'audit. */
-import { $, download, esc, fmtDateTime, today } from '../utils.js';
+import { $, csvCell, download, esc, fmtDateTime, today } from '../utils.js';
 import { ico } from '../icones.js';
 import { Store } from '../store.js';
 import { Sync } from '../sync.js';
@@ -174,7 +174,7 @@ let minuterieFiltre = 0;
 Inputs['audit-filtre'] = el => { clearTimeout(minuterieFiltre); minuterieFiltre = setTimeout(() => { Audit.identifiant = el.value.trim(); chargerAudit().catch(e => toast(e.message, 'err')); }, 250); };
 /* Export des entrées affichées, pour un rapport ou une enquête */
 Actions['audit-csv'] = () => {
-  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`, j = v => (v == null ? '' : JSON.stringify(v));
+  const q = csvCell, j = v => (v == null ? '' : JSON.stringify(v));
   const lignes = Audit.lignes.map(a => [new Date(a.date).toISOString(), a.identifiant, a.action, a.collection, a.libelle, j(a.avant), j(a.apres), a.ip].map(q).join(';'));
   download(`netcarto-audit-${today()}.csv`, '\ufeff' + ['date;identifiant;action;objet;libelle;avant;apres;adresse', ...lignes].join('\r\n'), 'text/csv');
 };
