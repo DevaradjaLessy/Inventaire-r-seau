@@ -226,7 +226,7 @@ Préfixe : `/api/v1`. Tout est en JSON.
 | `POST /lots` | technicien, administrateur | lot de modifications, tout ou rien |
 | `PUT /base` | administrateur | remplace toute la base |
 | `GET`, `POST /utilisateurs` ; `PUT`, `DELETE /utilisateurs/{id}` | administrateur | gestion des comptes |
-| `GET /audit` | administrateur | journal d'audit (filtres : `cle`, `collection`, `identifiant`, `action`, `avant`, `limite`) |
+| `GET /audit` | administrateur | journal d'audit (filtres : `cle`, `collection`, `identifiant`, `action`, `actions` pour plusieurs à la fois, `avant`, `limite`). Chaque lot y a une ligne `operation` qui porte son libellé |
 | `GET`, `POST /sauvegardes` | administrateur | liste et réglages ; sauvegarde immédiate |
 | `GET`, `DELETE /sauvegardes/{nom}` | administrateur | télécharger, supprimer |
 | `POST /sauvegardes/restauration` | administrateur | `{ nom }` : restaure les données d'inventaire |

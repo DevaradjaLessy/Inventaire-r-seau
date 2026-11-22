@@ -40,10 +40,12 @@ function creerComptes(p) {
     // Journal d'audit
     ajouterAudit: a => p.lancer('INSERT INTO audit (date, utilisateur_id, identifiant, action, collection, cle, libelle, avant, apres, lot, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [a.date, a.utilisateur_id || null, a.identifiant || '', a.action, a.collection || '', a.cle || '', a.libelle || '', json(a.avant), json(a.apres), a.lot ?? null, a.ip || '']),
-    /* filtres : { cle, collection, identifiant, action, avant (identifiant de ligne), limite } ; du plus récent au plus ancien */
+    /* filtres : { cle, collection, identifiant, action, actions (liste séparée par des virgules), avant (identifiant de ligne), limite } ; du plus récent au plus ancien */
     listerAudit(f = {}) {
       const ou = [], params = [];
       for (const k of ['cle', 'collection', 'identifiant', 'action']) if (f[k] !== undefined && f[k] !== '') { ou.push(`${k} = ?${k === 'identifiant' ? ' COLLATE NOCASE' : ''}`); params.push(String(f[k])); }
+      const actions = String(f.actions || '').split(',').map(a => a.trim()).filter(Boolean).slice(0, 30);
+      if (actions.length) { ou.push(`action IN (${actions.map(() => '?').join(', ')})`); params.push(...actions); }
       if (f.avant) { ou.push('id < ?'); params.push(+f.avant); }
       const limite = Math.min(500, Math.max(1, +f.limite || 100));
       return p.tous(`SELECT * FROM audit${ou.length ? ' WHERE ' + ou.join(' AND ') : ''} ORDER BY id DESC LIMIT ${limite}`, params)

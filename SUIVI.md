@@ -133,7 +133,7 @@ js/demo.js                 jeu de données fictif (graine fixe)
 js/store.js                état, index, annulation, sauvegarde
 js/stockage.js             stockage local du mode démonstration (IndexedDB), copies de secours
 js/ecarts.js               écart entre deux états : changements à envoyer, retour en arrière
-js/services/               requetes, cablage, topologie, tracage, connexion, recherche, installation, impact, remplacement, doublons, import-csv
+js/services/               requetes, cablage, topologie, tracage, connexion, recherche, installation, impact, remplacement, doublons, import-csv, securite, adressage, cycle-de-vie
 js/3d/                     three (chargement), facades, viewer, objets
 js/ui/socle.js             onglets, fenêtres, infobulles, notifications
 js/ui/carto/               carto, plan, fiches, baie, tracage, connexion, topologie
@@ -651,6 +651,23 @@ Après l'audit (3.28), une campagne de 40 attaques a été menée contre un serv
 
 Chaque attaque réussie a son scénario dans `serveur/tests/securite.test.js`. Risques restants : `SECURITE.md`, 8.4.
 
+### 3.30 Audit par profils et améliorations d'usage
+
+Cinq profils ont déroulé leurs tâches dans l'application : administrateur réseau en exploitation, administrateur réseau en conception, RSSI, DSI, technicien sur téléphone. Rapport : `AUDIT.md`, section 7.
+
+**Décisions :**
+- **Journal d'audit.** Le serveur écrit une ligne `operation` par lot, avec le libellé de l'entrée d'historique du lot (`donnees/depot.js`). L'interface regroupe les lignes d'un même lot (`operations`, `ligneOperation` dans `js/ui/compte.js`). Filtre `actions` (liste) sur `GET /audit`.
+- **Alertes de sécurité.** `js/services/securite.js` garde l'état rendu par `/securite` et en tire des alertes ; `computeAlerts` les ajoute. L'état n'est chargé que pour un administrateur, au démarrage puis toutes les cinq minutes. Une alerte peut porter une action (`act`) au lieu d'un objet à ouvrir.
+- **Plan d'adressage.** `js/services/adressage.js` : IPv4 seulement, calculé depuis les adresses des équipements. Alerte à 90 % (`SEUIL_PLEIN_PCT`).
+- **Âge du parc.** `js/services/cycle-de-vie.js`, depuis la date d'installation, hors éléments passifs. Seuil de renouvellement : `RENOUVELLEMENT_ANS` (7) dans `js/config.js`.
+- **Synthèse imprimable.** `js/ui/synthese.js`, par le mécanisme d'impression existant (`imprimer`, exporté par `js/ui/impression.js`). Les alertes de sécurité du serveur n'y figurent pas : le document est fait pour circuler.
+- **Téléphone.** Barre d'outils du plan et de la vue 3D repliée (`Carto.outils`, bouton `tl-plus`) ; un bouton marqué `tl-garde` reste visible replié (« Stock » sur le plan, « Effacer le tracé »). Indicateurs de l'inventaire sur une ligne.
+- **Stock vide.** `entreeRapide` (`js/ui/materiel/palette.js`) : entrée en stock depuis la palette ou une U libre, puis reprise de l'installation.
+
+**Défaut corrigé au passage :** la rubrique « Sécurité du serveur » et la carte du tableau de bord portaient le même identifiant ; seule la première était remplie. Les deux portent maintenant la classe `sec-etat`.
+
+**Non fait, noté dans `AUDIT.md` 7.3 :** garantie et fin de support, seuil de renouvellement par type, alertes envoyées, réservation d'adresses, IPv6, étiquettes, lecture de code-barres.
+
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
@@ -747,6 +764,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-20 | « Oui, retire les anciennes fenêtres en doublon » | ✅ Fenêtres « Utilisateurs », « Journal d'audit » et « Sauvegardes » retirées du menu du compte ; tout passe par la page d'administration (voir 3.27). |
 | 2026-11-22 | « En RSSI senior : audite la solution, trouve les failles et applique les correctifs de sécurité, elle va être déployée en entreprise » | ✅ Rapport `SECURITE.md` ; 14 failles corrigées et testées, 2 risques acceptés (voir 3.28). Restent les mesures d'exploitation de la section 5 du rapport, à la charge de l'utilisateur. |
 | 2026-11-22 | « Applique les correctifs, puis teste en te mettant dans le rôle d'un attaquant, évalue les risques et corrige-les » | ✅ Campagne de 40 attaques (`npm run attaques`) : 3 défenses cédaient sous rafale, plus 6 points trouvés en chemin, tous corrigés et testés. Risques restants notés dans `SECURITE.md`, 8.4 (voir 3.29). |
+| 2026-11-22 | « Peaufine encore la solution côté utilisation : mets-toi à la place d'un administrateur réseau (deux visions), d'un RSSI, d'un DSI et d'un technicien, audite et améliore » | ✅ Audit par cinq profils (`AUDIT.md`, section 7) : journal d'audit regroupé par opération, alertes de sécurité dans la liste, plan d'adressage, âge du parc et synthèse imprimable, barre d'outils repliée sur téléphone, entrée en stock depuis la baie (voir 3.30). Demandes restantes en 7.3. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---

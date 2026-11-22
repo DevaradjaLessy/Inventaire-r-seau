@@ -2,7 +2,9 @@
 import { CATEGORIES, POE_STEPS, POE_WARN_PCT, RACK_FULL_PCT, VLAN_GREY } from '../config.js';
 import { pct, sum, typeOf } from '../utils.js';
 import { Cache, Store } from '../store.js';
+import { planAdressage, SEUIL_PLEIN_PCT } from './adressage.js';
 import { Live } from './mesures.js';
+import { alertesSecurite } from './securite.js';
 
 const byId = id => Store.idx.id.get(id);
 const catOf = e => Store.idx.cat.get(e.catalogId);
@@ -83,6 +85,10 @@ function computeAlerts() {
     for (const s of d.stock) { const c = Store.idx.cat.get(s.catalogId); if (c && s.available <= s.threshold && s.threshold > 0) out.push({ level: s.available === 0 ? 'serious' : 'warn', kind: 'stock', icon: 'box', text: `Stock bas : ${c.brand} ${c.model}`, sub: `${s.available} disponible(s), seuil ${s.threshold}`, ref: c.id }); }
     // Supervision : équipements que la source mesure comme injoignables
     for (const [id, m] of Live.dev) { const x = byId(id); if (x && m.state === 'down' && x.status !== 'fault') out.push({ level: 'crit', kind: 'live', icon: deviceIcon(x), text: `Équipement injoignable (supervision) : ${x.hostname}`, sub: m.message || locLabel(x.id), ref: x.id }); }
+    // Plan d'adressage : sous-réseaux presque pleins
+    for (const v of planAdressage().vlans) if (v.pct >= SEUIL_PLEIN_PCT) out.push({ level: 'serious', kind: 'ip', icon: 'floor', text: `Sous-réseau presque plein : VLAN ${v.vlan.id} ${v.vlan.name} (${v.utilisees}/${v.hotes} adresses)`, sub: v.libre ? `Prochaine adresse libre : ${v.libre}` : 'Plus aucune adresse libre', act: 'vlans', ref: '' });
+    // Sécurité du serveur (administrateur seulement : l'état n'est chargé que pour lui)
+    out.push(...alertesSecurite());
     const order = { crit: 0, serious: 1, warn: 2 };
     return out.sort((a, b) => order[a.level] - order[b.level]);
   });

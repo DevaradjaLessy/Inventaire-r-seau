@@ -5,7 +5,7 @@ import { ico } from '../../icones.js';
 import { Store } from '../../store.js';
 import { byId, labelOf } from '../../services/requetes.js';
 import { roomAt } from '../../services/cablage.js';
-import { freeSlots, installFromStock, stockOf } from '../../services/installation.js';
+import { freeSlots, installFromStock, stockMove, stockOf } from '../../services/installation.js';
 import { Actions, Modal, run, Tip, toast, undoAction } from '../socle.js';
 import { Carto, K, renderCarto, select } from '../carto/carto.js';
 import { svgPoint } from '../carto/plan.js';
@@ -22,8 +22,29 @@ function renderPalette(kind) {
   if (!list.some(c => c.id === Carto.arme)) Carto.arme = null;
   host.innerHTML = `<div class="palette ${Carto.arme ? 'arme-on' : ''}"><h4>${ico('box')}Stock disponible<button class="btn sm icon" style="margin-left:auto" data-act="palette">${ico('x')}</button></h4>
     <div class="muted" style="padding:7px 11px 0;font-size:11.5px">${kind === 'rack' ? 'Glissez un modèle sur une U libre de l\'élévation, ou touchez-le puis touchez la U.' : 'Glissez un modèle sur une pièce du plan, ou touchez-le puis touchez la pièce.'}</div>
-    <div class="list">${list.map(c => `<div class="pal-it ${Carto.arme === c.id ? 'arme' : ''}" draggable="true" data-act="pal-arme" data-cat="${c.id}" data-tip="${esc(c.brand)} ${esc(c.model)}|${c.mount === 'rack' ? (c.heightU || 1) + ' U' : CATEGORIES[c.category].one}">${ico(CATEGORIES[c.category].icon)}<div><b>${esc(c.model)}</b><small>${esc(c.brand)}${c.mount === 'rack' ? ` · ${c.heightU || 1} U` : ''}</small></div><span class="q">${stockOf(c.id).available}</span><span class="pal-grip" aria-hidden="true">${ico('move')}</span></div>`).join('') || '<div class="empty">Rien en stock pour cette vue</div>'}</div></div>`;
+    <div class="list">${list.map(c => `<div class="pal-it ${Carto.arme === c.id ? 'arme' : ''}" draggable="true" data-act="pal-arme" data-cat="${c.id}" data-tip="${esc(c.brand)} ${esc(c.model)}|${c.mount === 'rack' ? (c.heightU || 1) + ' U' : CATEGORIES[c.category].one}">${ico(CATEGORIES[c.category].icon)}<div><b>${esc(c.model)}</b><small>${esc(c.brand)}${c.mount === 'rack' ? ` · ${c.heightU || 1} U` : ''}</small></div><span class="q">${stockOf(c.id).available}</span><span class="pal-grip" aria-hidden="true">${ico('move')}</span></div>`).join('') || '<div class="empty">Rien en stock pour cette vue.<br>Enregistrez d\'abord le matériel reçu.</div>'}</div>
+    <div class="pal-pied"><button class="btn sm" data-act="stock-rapide" data-kind="${kind}" data-tip="Entrée en stock|Enregistrer du matériel reçu, sans quitter cette vue">${ico('plus')}Entrée en stock</button></div></div>`;
 };
+/* Entrée en stock sans quitter la vue : le modèle choisi est armé, prêt à être posé.
+   suite(cat) : action à enchaîner à la place (clic sur une U libre alors que rien n'est en stock). */
+function entreeRapide(kind, suite = null) {
+  const liste = Store.db.catalog.filter(c => (kind === 'rack' ? c.mount === 'rack' : !['rack', 'none'].includes(c.mount))).sort((a, b) => `${a.brand} ${a.model}`.localeCompare(`${b.brand} ${b.model}`));
+  Modal.open({ title: 'Entrée en stock', ok: 'Ajouter au stock',
+    body: `<p class="muted" style="margin:0 0 12px">${suite ? 'Aucun modèle en stock ne tient à cet emplacement. ' : ''}Un équipement s'installe depuis le stock : enregistrez d'abord le matériel reçu.</p>
+      <div class="form-grid"><label class="f"><span>Modèle</span><select name="cat" autofocus>${liste.map(c => `<option value="${c.id}">${esc(c.brand)} ${esc(c.model)}${c.mount === 'rack' ? ` — ${c.heightU || 1} U` : ''} — ${stockOf(c.id).available} en stock</option>`).join('')}</select></label>
+      <label class="f"><span>Quantité reçue</span><input type="number" name="qty" min="1" max="999" value="1"></label></div>`,
+    onOk(v) {
+      const c = Store.idx.cat.get(v.cat), n = Math.floor(+v.qty);
+      if (!c) throw new Error('Choisissez un modèle.');
+      if (!(n >= 1 && n <= 999)) throw new Error('Quantité invalide (1 à 999).');
+      stockMove(c.id, n, 'entrée rapide');
+      Carto.palette = true; Carto.arme = c.id; renderCarto();
+      toast(`${n} × ${c.model} en stock`, 'ok', undoAction);
+      if (suite) setTimeout(() => run(() => suite(c)), 0);
+      return true;
+    } });
+}
+Actions['stock-rapide'] = el => entreeRapide(el.dataset.kind === 'rack' ? 'rack' : 'plan');
 /* Pose un modèle du stock à l'endroit visé : une U libre de l'élévation, ou un point du plan.
    Renvoie false si l'endroit n'est ni l'un ni l'autre. Commun à la souris (glisser-déposer), au doigt et au « toucher puis poser ». */
 function poser(cat, cible, clientX, clientY) {
@@ -123,7 +144,8 @@ document.addEventListener('pointerdown', e => {
 Actions['elev-free'] = el => {
   const u = +el.dataset.u, rackId = el.parentElement.dataset.rack;
   const list = Store.db.catalog.filter(c => c.mount === 'rack' && stockOf(c.id).available > 0 && freeSlots(rackId, c.heightU || 1).includes(u - (c.heightU || 1) + 1));
-  if (!list.length) throw new Error('Aucun modèle en stock ne tient à cet emplacement.');
+  // Rien en stock pour cette U : proposer l'entrée en stock, puis reprendre l'installation au même endroit si le modèle y tient
+  if (!list.length) return entreeRapide('rack', c => { if (freeSlots(rackId, c.heightU || 1).includes(u - (c.heightU || 1) + 1)) openInstall({ catId: c.id, rackId, u: u - (c.heightU || 1) + 1 }); else toast(`${c.model} (${c.heightU || 1} U) ne tient pas en U${u} : choisissez une autre U.`, 'warn'); });
   Modal.open({ title: `Installer en U${u} — ${esc(byId(rackId).name)}`, ok: 'Continuer',
     body: `<label class="f"><span>Modèle du stock (la U${u} sera la plus haute occupée)</span><select name="cat" autofocus>${list.map(c => opt(c.id, `${c.brand} ${c.model} — ${c.heightU || 1} U — ${stockOf(c.id).available} en stock`, '')).join('')}</select></label>`,
     onOk(v) { const c = Store.idx.cat.get(v.cat); setTimeout(() => run(() => openInstall({ catId: c.id, rackId, u: u - (c.heightU || 1) + 1 })), 0); return true; } });

@@ -18,7 +18,7 @@
      GET|POST /utilisateurs, PUT|DELETE /utilisateurs/{id}
      POST   /recuperation/lien          { id } : lien de réinitialisation à remettre à un collègue
      GET    /securite                   état de sécurité du serveur (échecs de connexion, comptes, sauvegarde, certificat)
-     GET    /audit                      journal d'audit (filtres : cle, collection, identifiant, action, avant, limite)
+     GET    /audit                      journal d'audit (filtres : cle, collection, identifiant, action, actions, avant, limite)
      GET    /sauvegardes                réglages et liste des sauvegardes
      POST   /sauvegardes                sauvegarde immédiate
      GET|DELETE /sauvegardes/{nom}      télécharger ou supprimer une sauvegarde

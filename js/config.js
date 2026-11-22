@@ -76,8 +76,9 @@ const HISTORY_TYPES = { add: 'Ajout', move: 'Déplacement', remove: 'Retrait', e
 const LAYERS = { perimeter: 'Périmètre', core: 'Cœur', distribution: 'Distribution', access: 'Accès', endpoint: 'Terminaux' };
 const RACK_FULL_PCT = 90;   // seuil d'alerte « baie pleine »
 const POE_WARN_PCT = 80;    // seuil d'alerte du budget PoE
+const RENOUVELLEMENT_ANS = 7;   // âge à partir duquel un équipement est proposé au renouvellement
 const U_M = 0.04445;        // hauteur d'une unité de baie, en mètres
 /* Préfixe d'identifiant → type d'objet */
 const PREFIX_TYPE = { site: 'site', bld: 'building', flr: 'floor', room: 'room', rack: 'rack', dev: 'device', p: 'port', o: 'outlet', cab: 'cable', cat: 'catalog', h: 'history' };
 
-export { APP, CABLE_TYPES, CATEGORIES, COL, DEVICE_STATUS, HISTORY_TYPES, LAYERS, OUTLET_USAGE, POE_STEPS, POE_WARN_PCT, PORT_KIND, PORT_ROLE, PORT_STATUS, PREFIX_TYPE, RACK_FULL_PCT, ROOM_TYPES, U_M, VLAN_GREY, VLANS_DEF };
+export { APP, CABLE_TYPES, CATEGORIES, COL, DEVICE_STATUS, HISTORY_TYPES, LAYERS, OUTLET_USAGE, POE_STEPS, POE_WARN_PCT, PORT_KIND, PORT_ROLE, PORT_STATUS, PREFIX_TYPE, RACK_FULL_PCT, RENOUVELLEMENT_ANS, ROOM_TYPES, U_M, VLAN_GREY, VLANS_DEF };

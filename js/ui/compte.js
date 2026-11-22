@@ -141,34 +141,66 @@ Actions['user-lien'] = el => {
 };
 
 /* --- Journal d'audit (administrateur) --- */
-const ACTIONS = { sauvegarde_telecharger: 'Sauvegarde téléchargée', lien_reinitialisation: 'Lien de réinitialisation', demande_reinitialisation: 'Mot de passe oublié', mot_de_passe_reinitialise: 'Mot de passe réinitialisé', sauvegarde: 'Sauvegarde', sauvegarde_supprimer: 'Sauvegarde supprimée', restauration: 'Restauration', creer: 'Création', modifier: 'Modification', supprimer: 'Suppression', remplacement: 'Remplacement de la base', connexion: 'Connexion', echec_connexion: 'Échec de connexion', utilisateur_creer: 'Compte créé', utilisateur_modifier: 'Compte modifié', utilisateur_supprimer: 'Compte supprimé', mot_de_passe: 'Mot de passe changé' };
+const ACTIONS = { operation: 'Opération', sauvegarde_telecharger: 'Sauvegarde téléchargée', lien_reinitialisation: 'Lien de réinitialisation', demande_reinitialisation: 'Mot de passe oublié', mot_de_passe_reinitialise: 'Mot de passe réinitialisé', sauvegarde: 'Sauvegarde', sauvegarde_supprimer: 'Sauvegarde supprimée', restauration: 'Restauration', creer: 'Création', modifier: 'Modification', supprimer: 'Suppression', remplacement: 'Remplacement de la base', connexion: 'Connexion', echec_connexion: 'Échec de connexion', utilisateur_creer: 'Compte créé', utilisateur_modifier: 'Compte modifié', utilisateur_supprimer: 'Compte supprimé', mot_de_passe: 'Mot de passe changé' };
 const OBJETS = { sites: 'site', buildings: 'bâtiment', floors: 'étage', rooms: 'pièce', racks: 'baie', devices: 'équipement', ports: 'port', outlets: 'prise', cables: 'câble', catalog: 'modèle', stock: 'stock', vlans: 'VLAN', utilisateurs: 'compte' };
 const court = v => { const s = v === null || v === undefined || v === '' ? '∅' : typeof v === 'object' ? JSON.stringify(v) : String(v); return s.length > 60 ? s.slice(0, 57) + '…' : s; };
+/* Noms des champs les plus courants, tels que l'interface les affiche ; un champ absent d'ici garde son nom technique */
+const CHAMPS = { hostname: 'nom', name: 'nom', label: 'repère', ip: 'adresse IP', mac: 'adresse MAC', serial: 'n° de série', firmware: 'firmware', installDate: 'installé le', status: 'statut', notes: 'notes', description: 'description', u: 'position (U)', rackId: 'baie', roomId: 'pièce', floorId: 'étage', catalogId: 'modèle', vlan: 'VLAN', speed: 'débit', connected: 'terminal', subnet: 'sous-réseau', color: 'couleur', available: 'disponible', threshold: 'seuil d\'alerte', location: 'lieu de stockage', length: 'longueur', type: 'type', usage: 'usage', address: 'adresse' };
 /* Champs qui diffèrent entre la valeur avant et la valeur après */
 function ecarts(avant, apres) {
   const plat = o => Object.fromEntries(Object.entries(o || {}).flatMap(([k, v]) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.entries(v).map(([k2, v2]) => [`${k}.${k2}`, v2]) : [[k, v]])));
   const a = plat(avant), b = plat(apres);
-  return [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(k => JSON.stringify(a[k]) !== JSON.stringify(b[k])).map(k => `<span class="a-chg"><b>${esc(k)}</b> : ${esc(court(a[k]))} → ${esc(court(b[k]))}</span>`);
+  return [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(k => JSON.stringify(a[k]) !== JSON.stringify(b[k])).map(k => `<span class="a-chg"><b>${esc(CHAMPS[k] || k)}</b> : ${esc(court(a[k]))} → ${esc(court(b[k]))}</span>`);
 }
-const Audit = { identifiant: '', lignes: [] };
+/* Noms au pluriel, pour les décomptes */
+const PLURIELS = { sites: 'sites', buildings: 'bâtiments', floors: 'étages', rooms: 'pièces', racks: 'baies', devices: 'équipements', ports: 'ports', outlets: 'prises', cables: 'câbles', catalog: 'modèles', stock: 'lignes de stock', vlans: 'VLAN', history: 'actions d\'historique' };
+const compte = (c, n) => `${n} ${n > 1 ? PLURIELS[c] || c : OBJETS[c] || c}`;
+/* Familles d'actions proposées dans le filtre */
+const FAMILLES = {
+  acces: ['Connexions et échecs', ['connexion', 'echec_connexion']],
+  donnees: ['Données', ['operation', 'creer', 'modifier', 'supprimer', 'remplacement', 'restauration']],
+  comptes: ['Comptes', ['utilisateur_creer', 'utilisateur_modifier', 'utilisateur_supprimer', 'mot_de_passe', 'lien_reinitialisation', 'demande_reinitialisation', 'mot_de_passe_reinitialise']],
+  sauvegardes: ['Sauvegardes', ['sauvegarde', 'sauvegarde_supprimer', 'sauvegarde_telecharger', 'restauration']],
+};
+const Audit = { identifiant: '', famille: '', lignes: [] };
 function ligneAudit(a) {
-  const detail = a.action === 'modifier' ? ecarts(a.avant, a.apres).join('') : a.action === 'remplacement' || a.action === 'restauration' ? esc(Object.entries(a.apres || {}).filter(([, n]) => n).map(([k, n]) => `${n} ${k}`).join(', ')) : a.action === 'utilisateur_modifier' ? esc(Object.entries(a.apres || {}).map(([k, v]) => `${k} : ${v}`).join(', ')) : '';
+  const detail = a.action === 'modifier' ? ecarts(a.avant, a.apres).join('') : a.action === 'remplacement' || a.action === 'restauration' ? esc(Object.entries(a.apres || {}).filter(([, n]) => n).map(([k, n]) => compte(k, n)).join(', ')) : a.action === 'utilisateur_modifier' ? esc(Object.entries(a.apres || {}).map(([k, v]) => `${k} : ${v}`).join(', ')) : '';
   return `<div class="a-row"><span class="muted">${fmtDateTime(a.date)}</span><b>${esc(a.identifiant || 'système')}</b><span class="chip">${ACTIONS[a.action] || esc(a.action)}</span>
     <div><span>${a.collection && OBJETS[a.collection] ? OBJETS[a.collection] + ' ' : ''}<b>${esc(a.libelle)}</b></span>${detail ? `<div class="a-detail">${detail}</div>` : ''}</div></div>`;
 }
+/* Regroupe les lignes d'un même lot : une opération faite d'un seul geste (un remplacement, un import) tient en une ligne */
+function operations(lignes) {
+  const groupes = [];
+  for (const a of lignes) { const g = groupes.at(-1); if (g && a.lot != null && g[0].lot === a.lot && g[0].identifiant === a.identifiant) g.push(a); else groupes.push([a]); }
+  return groupes;
+}
+function ligneOperation(g) {
+  const tete = g.find(a => a.action === 'operation'), ch = g.filter(a => a !== tete), a0 = g[0];
+  // Décompte par action : « Création : 28 ports, 6 câbles »
+  const parAction = new Map();
+  for (const a of ch) { const m = parAction.get(a.action) || parAction.set(a.action, new Map()).get(a.action); m.set(a.collection, (m.get(a.collection) || 0) + 1); }
+  const resume = [...parAction].map(([act, m]) => `${ACTIONS[act] || esc(act)} : ${[...m].map(([c, n]) => compte(c, n)).join(', ')}`).join(' · ');
+  const etiquette = parAction.size === 1 ? ACTIONS[ch[0].action] || esc(ch[0].action) : 'Opération';
+  const titre = tete ? `<b>${esc(tete.libelle)}</b>` : `<b>${ch.length} changements</b>`;
+  // Un seul changement : son détail suit le titre. Plusieurs : le décompte, et le détail se déplie.
+  const corps = ch.length === 1 ? `<div class="a-detail"><span>${OBJETS[ch[0].collection] ? OBJETS[ch[0].collection] + ' ' : ''}<b>${esc(ch[0].libelle)}</b></span>${ch[0].action === 'modifier' ? ecarts(ch[0].avant, ch[0].apres).join('') : ''}</div>`
+    : `<details class="a-plus"><summary>${tete ? `${ch.length} changements — ` : ''}${resume}</summary>${ch.map(ligneAudit).join('')}</details>`;
+  return `<div class="a-row a-op"><span class="muted">${fmtDateTime(a0.date)}</span><b>${esc(a0.identifiant || 'système')}</b><span class="chip">${etiquette}</span><div>${titre}${corps}</div></div>`;
+}
 async function chargerAudit(suite = false) {
   const dernier = suite ? Audit.lignes.at(-1)?.id : null;
-  const lignes = await Sync.appel('GET', `/audit?limite=100${Audit.identifiant ? '&identifiant=' + encodeURIComponent(Audit.identifiant) : ''}${dernier ? '&avant=' + dernier : ''}`);
+  const lignes = await Sync.appel('GET', `/audit?limite=100${Audit.identifiant ? '&identifiant=' + encodeURIComponent(Audit.identifiant) : ''}${Audit.famille ? '&actions=' + FAMILLES[Audit.famille][1].join(',') : ''}${dernier ? '&avant=' + dernier : ''}`);
   Audit.lignes = suite ? [...Audit.lignes, ...lignes] : lignes;
   const hote = $('#audit-list');
   if (!hote) return;
-  hote.innerHTML = Audit.lignes.map(ligneAudit).join('') || '<div class="empty">Aucune entrée</div>';
+  hote.innerHTML = operations(Audit.lignes).map(g => (g.length > 1 ? ligneOperation(g) : ligneAudit(g[0]))).join('') || '<div class="empty">Aucune entrée</div>';
   $('#audit-suite').classList.toggle('hidden', lignes.length < 100);
 }
-const corpsAudit = () => `<div class="row" style="margin-bottom:12px"><input type="search" id="audit-filtre" data-inp="audit-filtre" placeholder="Filtrer par identifiant" style="flex:1"><button class="btn" data-act="audit-csv" data-tip="Exporter|Télécharger les entrées affichées (CSV)">${ico('download')}CSV</button><span class="muted">Qui, quand, quoi, valeur avant → après. Ce journal ne se modifie pas.</span></div>
+const corpsAudit = () => `<div class="row" style="margin-bottom:12px"><input type="search" id="audit-filtre" data-inp="audit-filtre" placeholder="Filtrer par identifiant" style="flex:1"><select id="audit-famille" data-chg="audit-famille" data-tip="Famille d'actions"><option value="">Toutes les actions</option>${Object.entries(FAMILLES).map(([k, [t]]) => `<option value="${k}">${t}</option>`).join('')}</select><button class="btn" data-act="audit-csv" data-tip="Exporter|Télécharger les entrées affichées (CSV)">${ico('download')}CSV</button><span class="muted">Qui, quand, quoi, valeur avant → après. Ce journal ne se modifie pas.</span></div>
       <div id="audit-list"><div class="empty">Chargement…</div></div><div style="text-align:center;margin-top:10px"><button class="btn hidden" id="audit-suite" data-act="audit-suite">Entrées plus anciennes</button></div>`;
 /* Remet le journal à zéro avant de l'afficher (rubrique de la page d'administration) */
-const ouvrirAudit = () => { Audit.identifiant = ''; Audit.lignes = []; return chargerAudit(); };
+const ouvrirAudit = () => { Audit.identifiant = ''; Audit.famille = ''; Audit.lignes = []; return chargerAudit(); };
+Changes['audit-famille'] = el => { Audit.famille = FAMILLES[el.value] ? el.value : ''; chargerAudit().catch(e => toast(e.message, 'err')); };
 /* Le filtre s'applique pendant la saisie, après une courte pause */
 let minuterieFiltre = 0;
 Inputs['audit-filtre'] = el => { clearTimeout(minuterieFiltre); minuterieFiltre = setTimeout(() => { Audit.identifiant = el.value.trim(); chargerAudit().catch(e => toast(e.message, 'err')); }, 250); };

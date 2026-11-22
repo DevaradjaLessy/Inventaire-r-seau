@@ -99,15 +99,15 @@ function renderPlan() {
   if (!Carto.vbs[floor.id]) Carto.vbs[floor.id] = fitVb(floor);
   const floorsOpt = Store.db.buildings.map(b => `<optgroup label="${esc(b.name)}">${(Store.idx.floorsByBld.get(b.id) || []).map(f => `<option value="${f.id}" ${f.id === floor.id ? 'selected' : ''}>${esc(b.code)} — ${esc(f.name)}</option>`).join('')}</optgroup>`).join('');
   host.innerHTML = `<svg class="plan ${Carto.edit ? 'editing' : ''} ${Carto.draw ? 'drawing' : ''}" xmlns="http://www.w3.org/2000/svg">${planSvg(floor, false)}</svg>
-    <div class="overlay tl"><select data-chg="plan-floor" data-tip="Changer d'étage">${floorsOpt}</select>
+    <div class="overlay tl ${Carto.outils ? 'ouvert' : ''}"><select data-chg="plan-floor" data-tip="Changer d'étage">${floorsOpt}</select><button class="btn m-only tl-plus ${Carto.outils ? 'on' : ''}" data-act="tl-plus" data-tip="Outils|Afficher ou replier les outils de la vue">${ico('list')}Outils</button>
       <button class="btn icon" data-act="plan-fit" data-tip="Ajuster|Recadrer le plan sur l'étage">${ico('fit')}</button>
       <button class="btn icon" data-act="plan-image" data-tip="Image|Télécharger le plan de l'étage en image (PNG)">${ico('download')}</button>
       <button class="btn icon" data-act="plan-zoom" data-k="0.7" data-tip="Zoom avant">${ico('plus')}</button><button class="btn icon" data-act="plan-zoom" data-k="1.43" data-tip="Zoom arrière">${ico('minus')}</button>
       <button class="btn ${Carto.wifi ? 'on' : ''}" data-act="plan-wifi" data-tip="Couverture Wi-Fi|Portée indicative des bornes (9 m)">${ico('ap')}Wi-Fi</button>
       <button class="btn ${Carto.edit ? 'on' : ''}" data-act="plan-edit" data-tip="Mode Édition|Déplacer les prises, bornes, caméras, téléphones et baies à la souris">${ico('move')}Édition</button>
       <button class="btn ${Carto.draw ? 'on' : ''}" data-act="plan-draw" data-tip="Dessiner une pièce|Tracez un rectangle à la souris ; il s'aligne tous les 50 cm">${ico('room')}Pièce</button>
-      <button class="btn ${Carto.palette ? 'on' : ''}" data-act="palette" data-tip="Stock|Glisser un modèle du stock sur le plan pour l'installer">${ico('box')}Stock</button>
-      ${Carto.trace ? `<button class="btn on" data-act="trace-clear">${ico('x')}Effacer le tracé</button>` : ''}</div>
+      <button class="btn tl-garde ${Carto.palette ? 'on' : ''}" data-act="palette" data-tip="Stock|Glisser un modèle du stock sur le plan pour l'installer">${ico('box')}Stock</button>
+      ${Carto.trace ? `<button class="btn on tl-garde" data-act="trace-clear">${ico('x')}Effacer le tracé</button>` : ''}</div>
     <div class="overlay bl legend"><b>Prises</b>${['up', 'down', 'disabled', 'error'].map(s => `<span><i style="background:${STATE_COL[s]}"></i>${STATE_LABEL[s]}</span>`).join('')}<span><i style="border:1px solid var(--txt3)"></i>Non brassée</span>
       <b>Équipements</b>${['ap', 'camera', 'phone'].map(c => `<span><i style="background:${CATEGORIES[c].color};border-radius:50%"></i>${CATEGORIES[c].one}</span>`).join('')}<span><i style="border:1.5px solid var(--txt2);height:13px;width:9px"></i>Baie</span></div>
     <div id="palette-host"></div>`;

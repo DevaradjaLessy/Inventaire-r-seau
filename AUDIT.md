@@ -13,9 +13,9 @@
 | Est-ce que l'outil m'aide quand un switch tombe ? | Oui depuis le premier audit : impact chiffré, remplacement en trois actions |
 | Est-ce que je peux lui confier mes vraies données ? | Oui côté logiciel (comptes, audit, HTTPS, cloisonnement). Non tant que les sauvegardes restent sur la même machine |
 | Est-ce que mon équipe peut s'en servir sans formation ? | Presque : le premier jour demande une explication (stock à zéro), et un compte en lecture seule voit des boutons qu'il ne peut pas utiliser |
-| Est-ce que je peux m'en servir au téléphone dans le local technique ? | Pour consulter et installer, oui. La vue 3D y est peu exploitable |
+| Est-ce que je peux m'en servir au téléphone dans le local technique ? | Oui pour consulter et installer. La vue 3D y est dégagée depuis le 22 novembre ; à confirmer sur un vrai téléphone |
 
-Douze constats sont détaillés en section 4. Aucun n'est une faille de sécurité ; trois gênent vraiment l'usage.
+Douze constats sont détaillés en section 4. Aucun n'est une faille de sécurité ; trois gênaient vraiment l'usage. Les cinq premiers sont corrigés, et un audit par profils (section 7) a ajouté le plan d'adressage, l'âge du parc et une synthèse imprimable.
 
 ## 2. Comment l'analyse a été faite
 
@@ -85,15 +85,15 @@ Classés par gêne pour l'usage. Aucun n'expose de données.
 | # | Constat | Gravité | Preuve |
 |---|---|---|---|
 | 1 | *(corrigé le 20 novembre : ces boutons ne sont plus proposés)* **Un compte en lecture seule voit tous les boutons d'action** (Modifier, Déplacer, Remplacer, Retirer), non grisés. « Remplacer » ouvre même la fenêtre ; le refus n'arrive qu'à la validation. | Gênant | Relevé sur le compte `lecteur` |
-| 2 | **Premier jour : stock à zéro, sans explication.** Installer un premier équipement à la main demande une entrée en stock préalable, que rien ne suggère. | Gênant | Stock initial relevé : 0 pour tous les modèles |
-| 3 | **Vue 3D peu exploitable sur téléphone.** La barre d'outils prend un tiers de la hauteur ; le bouton « Stock » est en double. | Gênant | 149 px sur 435 |
-| 4 | **Les alertes de sécurité sont hors de vue.** Carte en bas du tableau de bord, absente de la liste des alertes et de la pastille de l'onglet. | Moyen | « HTTPS désactivé » non compté parmi les 10 alertes |
-| 5 | **Journal d'audit bavard.** Un remplacement y écrit 43 lignes (28 créations de ports, 6 câbles, 6 ports…), sans ligne de synthèse. Relire une journée d'interventions devient pénible. | Moyen | 43 lignes pour une transaction |
+| 2 | *(corrigé le 22 novembre : la palette et la U libre proposent l'entrée en stock)* **Premier jour : stock à zéro, sans explication.** Installer un premier équipement à la main demande une entrée en stock préalable, que rien ne suggère. | Gênant | Stock initial relevé : 0 pour tous les modèles |
+| 3 | *(corrigé le 22 novembre : barre repliée, bouton en double retiré)* **Vue 3D peu exploitable sur téléphone.** La barre d'outils prend un tiers de la hauteur ; le bouton « Stock » est en double. | Gênant | 149 px sur 435 |
+| 4 | *(corrigé le 22 novembre : elles figurent dans la liste et la pastille)* **Les alertes de sécurité sont hors de vue.** Carte en bas du tableau de bord, absente de la liste des alertes et de la pastille de l'onglet. | Moyen | « HTTPS désactivé » non compté parmi les 10 alertes |
+| 5 | *(corrigé le 22 novembre : une ligne par opération, détail dépliable)* **Journal d'audit bavard.** Un remplacement y écrit 43 lignes (28 créations de ports, 6 câbles, 6 ports…), sans ligne de synthèse. Relire une journée d'interventions devient pénible. | Moyen | 43 lignes pour une transaction |
 | 6 | **Sauvegardes sur la même machine, non chiffrées.** | Moyen (exploitation) | Par conception, voir `SUIVI.md` 3.18 |
 | 7 | **Aucune alerte envoyée.** Sauvegarde en échec, compte verrouillé, équipement en panne : il faut ouvrir la page pour le savoir. | Moyen | Fonction absente |
 | 8 | **Pas de double authentification** pour les administrateurs. | Moyen | Fonction absente |
 | 9 | **Connecteurs non éprouvés sur du vrai matériel.** | Moyen | Testés contre des simulateurs seulement |
-| 10 | **Pas de plan d'adressage** ni de dates de garantie. | Faible | Fonctions absentes |
+| 10 | *(plan d'adressage ajouté le 22 novembre ; la garantie reste à faire)* **Pas de plan d'adressage** ni de dates de garantie. | Faible | Fonctions absentes |
 | 11 | **Face arrière des baies et alimentation électrique non modélisées.** On ne sait pas quel équipement dépend de quel onduleur. | Faible | Fonction absente |
 | 12 | **Pas d'étiquettes à imprimer** pour les câbles et les prises. | Faible | Fonction absente |
 
@@ -104,12 +104,12 @@ Classés par gêne pour l'usage. Aucun n'expose de données.
 | Recherche et navigation | Très bien | Trois actions pour tout retrouver, clavier compris |
 | Plan 2D | Bien | Clair ; les prises sont minuscules sur téléphone tant qu'on n'a pas zoomé |
 | Vue 3D sur ordinateur | Bien | Lisible depuis l'isolement des cordons et l'étiquette du port |
-| Vue 3D sur téléphone | Insuffisant | Barre d'outils trop haute, baie trop petite |
+| Vue 3D sur téléphone | Correct | Barre d'outils repliée depuis le 22 novembre ; à confirmer sur un vrai téléphone |
 | Câblage et traçage | Très bien | Suit le câble à travers panneaux et prises |
-| Inventaire, import, export | Bien | Complet ; manque garantie et plan d'adressage |
+| Inventaire, import, export | Bien | Complet, avec plan d'adressage et âge du parc ; manque la garantie |
 | Interventions d'urgence | Bien | Impact et remplacement font gagner le plus de temps |
 | Comptes et rôles | Bien | Contrôle solide côté serveur ; interface à ajuster pour la lecture seule |
-| Journal d'audit | Bien | Fiable et non modifiable, mais bavard |
+| Journal d'audit | Très bien | Fiable, non modifiable, une ligne par opération |
 | Sauvegardes | Bien | Automatiques et vérifiées ; à sortir de la machine |
 | Installation et mise à jour | Très bien | Une commande, retour arrière automatique |
 | Supervision (PRTG, SNMP) | À confirmer | Prête, jamais branchée sur du réel |
@@ -123,7 +123,7 @@ Classés par gêne pour l'usage. Aucun n'expose de données.
 3. Renseigner `https.noms`, ou fournir le certificat de votre autorité interne.
 4. Créer un second compte administrateur.
 
-**Corrections rapides dans le logiciel**
+**Corrections rapides dans le logiciel** *(toutes faites : la 5 le 20 novembre, les 6 à 9 le 22 novembre)*
 
 5. Masquer ou griser les boutons d'action pour un compte en lecture seule (constat 1).
 6. Proposer l'entrée en stock au moment où l'installation échoue faute de stock (constat 2).
@@ -138,8 +138,50 @@ Classés par gêne pour l'usage. Aucun n'expose de données.
 12. Chiffrement des sauvegardes.
 13. Plan d'adressage, dates de garantie, étiquettes, alimentation électrique.
 
-## 7. Où trouver les preuves
+## 7. Audit par profils (22 novembre 2026)
 
-- Scénarios automatiques : `tests/netcarto.test.js` (58 scénarios, dont le bloc « Interventions d'urgence ») et `serveur/tests/` (51 scénarios).
+Cinq utilisateurs types ont déroulé leurs tâches dans l'application réelle : serveur NetCarto, jeu de démonstration, trois comptes, écran d'ordinateur et écran de téléphone de 390 px. Chaque constat ci-dessous a été relevé à l'écran, puis corrigé et couvert par un scénario automatique.
+
+### 7.1 Ce que chaque profil cherchait, et ce qu'il a trouvé
+
+| Profil | Sa question | Ce qui le gênait | Ce qui a été fait |
+|---|---|---|---|
+| **Administrateur réseau — exploitation** | « Qui a fait quoi hier soir ? » | Un remplacement écrivait 43 lignes dans le journal d'audit, sans titre. Les champs et les objets y portaient leur nom technique (`installDate`, `devices`). | Une ligne par opération, avec le libellé donné dans l'interface (« Remplacement de… ») ; le détail se déplie. Noms en français. Filtre par famille d'actions. |
+| **Administrateur réseau — conception** | « Reste-t-il des adresses dans ce VLAN ? Quelle est la prochaine ? » | Aucune vue de l'adressage : il fallait trier l'inventaire par adresse et compter. | Carte « Plan d'adressage » : occupation de chaque sous-réseau, prochaine adresse libre, adresses hors plan, sous-réseaux qui se chevauchent. Alerte à 90 % d'occupation. |
+| **RSSI** | « Y a-t-il un problème de sécurité sur le serveur ? » | Les signaux existaient, mais dans une carte en bas du tableau de bord, hors de la liste des alertes et de la pastille de l'onglet. La rubrique « Sécurité du serveur » restait sur « Chargement… » si l'on était passé par le tableau de bord avant. | Les alertes de sécurité (HTTPS désactivé, sauvegarde trop ancienne, compte verrouillé, rafale d'échecs, certificat qui expire) rejoignent la liste et la pastille, pour l'administrateur seulement. Un clic mène à la rubrique. Défaut d'affichage corrigé. |
+| **DSI** | « Quel est l'état du parc, et que faut-il prévoir au budget ? » | Des graphiques, mais rien sur l'âge du matériel ni de document à emporter en comité. | Carte « Âge du parc » : tranches d'âge, âge moyen, équipements de plus de 7 ans. Bouton « Synthèse » : document d'une à deux pages, à imprimer ou à enregistrer en PDF. |
+| **Technicien de terrain** | « Je suis devant la baie avec mon téléphone. » | La barre d'outils couvrait un tiers de la vue 3D, avec le bouton « Stock » en double. Les indicateurs de l'inventaire occupaient tout le premier écran. Avec un stock à zéro, rien ne disait quoi faire pour installer. | Barre repliée sur une ligne, bouton « Outils » pour la déplier. Indicateurs sur une ligne qui défile. La palette et le clic sur une U libre proposent l'entrée en stock, puis reprennent l'installation au même endroit. |
+
+### 7.2 Relevés avant et après
+
+| Mesure | Avant | Après |
+|---|---|---|
+| Lignes du journal d'audit pour une opération | Une par changement (43 pour un remplacement) | 1, dépliable |
+| Hauteur de la barre d'outils 3D sur téléphone | 149 px sur 435 | Moins de 100 px, problème signalé compris |
+| Hauteur des indicateurs de l'inventaire sur téléphone | 4 rangées, environ 300 px | 1 rangée, moins de 110 px |
+| Alertes de sécurité dans la pastille de l'onglet (administrateur, HTTPS désactivé) | 0 | 1 |
+| Connaître la prochaine adresse libre d'un VLAN | Tri de l'inventaire et comptage à la main | Lue dans l'onglet Tableau |
+| Installer quand le stock est vide | Quitter la baie, onglet Matériel, entrée en stock, revenir | Entrée en stock puis pose, sans quitter la baie |
+
+### 7.3 Ce que les profils demandent encore
+
+Ces points ont été relevés pendant l'audit et ne sont pas faits. Ils demandent une décision ou un changement du modèle de données.
+
+| Profil | Demande | Pourquoi ce n'est pas fait |
+|---|---|---|
+| DSI | Date de fin de garantie et de fin de support par équipement ; coût d'achat | Nouveaux champs : migration de la base, formulaires, import CSV. L'âge calculé depuis la date d'installation en tient lieu pour l'instant. |
+| DSI | Seuil de renouvellement réglable (7 ans aujourd'hui, pour tout le parc) | Réglage unique dans `js/config.js` ; un seuil par type de matériel serait plus juste. |
+| RSSI | Alertes envoyées par courriel ou webhook | Le module d'envoi existe ; il reste à décider quelles alertes, à qui, à quelle fréquence. |
+| RSSI | Double authentification des administrateurs | Voir `SECURITE.md`, section 7. |
+| Administrateur — conception | Réserver une adresse sans équipement (passerelle, plage DHCP) | Le plan ne connaît que les adresses des équipements : la « prochaine adresse libre » peut être celle de la passerelle. À vérifier avant de l'attribuer. |
+| Administrateur — conception | Adressage IPv6 | Le plan ne traite que l'IPv4. |
+| Technicien | Étiquettes à imprimer pour les câbles et les prises | Fonction absente (constat 12). |
+| Technicien | Lecture d'un code-barres ou d'un QR code pour retrouver un équipement | Demande l'accès à l'appareil photo, donc HTTPS et un essai sur un vrai téléphone. |
+
+**Limite de cet audit.** Les profils sont joués par un automate qui suit des parcours écrits à l'avance. Il mesure ce que l'écran affiche, pas ce qu'une personne ressent après une semaine d'usage. Un essai par de vrais utilisateurs reste à faire.
+
+## 8. Où trouver les preuves
+
+- Scénarios automatiques : `tests/netcarto.test.js` (71 scénarios, dont les blocs « Interventions d'urgence » et « Audit par profils ») et `serveur/tests/` (77 scénarios).
 - Essais d'installation réels : `installation/tests/` (image Docker, Debian 12 avec systemd).
 - Décisions et limites connues : `SUIVI.md`, sections 3.14 à 3.26.

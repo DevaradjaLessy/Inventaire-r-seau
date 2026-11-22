@@ -37,13 +37,16 @@ import './ui/clavier.js';
 import './ui/interventions.js';
 import './ui/administration.js';
 import { impactOf } from './services/impact.js';
+import { planAdressage } from './services/adressage.js';
+import { ageDuParc } from './services/cycle-de-vie.js';
 import './ui/recherche.js';
 import './ui/materiel/catalogue.js';
 import './ui/materiel/installation.js';
 import './ui/materiel/palette.js';
 import './ui/materiel/modele.js';
-import './ui/tableau-de-bord.js';
+import { chargerSecurite } from './ui/tableau-de-bord.js';
 import './ui/sources.js';
+import './ui/synthese.js';
 import { ouvrirSession } from './ui/compte.js';
 import { Live } from './services/mesures.js';
 import { addRoom, deleteStructure, deleteVlan } from './services/structure.js';
@@ -62,6 +65,8 @@ catch (e) {
 }
 if (api && /^\/admin\/?$/.test(location.pathname)) UI.tab = 'admin';   // adresse de la page d'administration
 showTab(UI.tab);
+// Administrateur : l'état de sécurité du serveur alimente les alertes, puis se rafraîchit toutes les cinq minutes
+if (api) { const securite = () => chargerSecurite().catch(() => { /* serveur injoignable : l'étiquette d'état le dit déjà */ }); securite(); setInterval(securite, 300000); }
 Live.load();
 Live.start();   // relevés de supervision, si une source est configurée
-window.NetCarto = { impactOf, Sync, addRoom, deleteStructure, deleteVlan, Live, Store, UI, Views, Views3D, Carto, trace, topology, connect, disconnect, installFromStock, removeDevice, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic
+window.NetCarto = { impactOf, planAdressage, ageDuParc, Sync, addRoom, deleteStructure, deleteVlan, Live, Store, UI, Views, Views3D, Carto, trace, topology, connect, disconnect, installFromStock, removeDevice, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic

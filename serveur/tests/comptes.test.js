@@ -130,6 +130,28 @@ test('changer son propre mot de passe coupe les autres sessions', async t => {
   assert.strictEqual((await requete('POST', api + '/session', { identifiant: 'tech', motDePasse: 'Encore-un-autre-mdp-3' })).code, 200);
 });
 
+test('journal d\'audit : chaque opération a sa ligne de synthèse, et le journal se filtre par famille d\'actions', async t => {
+  const { api, admin, tech } = await serveurDeTest(t), d = await demo();
+  await requete('PUT', api + '/base', d, admin);
+  const [a, b] = d.devices, h = { id: 'h-audit-1', ts: Date.now(), type: 'edit', text: 'Notes de deux équipements', ref: a.id };
+  const rep = await requete('POST', api + '/lots', { type: 'edit', changements: [
+    { collection: 'devices', op: 'modifier', cle: a.id, avant: a, apres: { ...a, notes: 'un' } }, { collection: 'devices', op: 'modifier', cle: b.id, avant: b, apres: { ...b, notes: 'deux' } },
+    { collection: 'history', op: 'creer', cle: h.id, apres: h }] }, tech);
+  assert.strictEqual(rep.code, 200, rep.texte);
+  const tout = (await requete('GET', api + '/audit?limite=50', undefined, admin)).json, lot = tout.filter(x => x.lot === rep.json.revision);
+  // La synthèse est la première ligne lue (la plus récente) : le libellé de l'opération, son auteur, le nombre de changements
+  assert.deepStrictEqual([lot.length, lot[0].action, lot[0].libelle, lot[0].identifiant, lot[0].apres.changements], [3, 'operation', 'Notes de deux équipements', 'tech', 2]);
+  assert.ok(!tout.some(x => x.collection === 'history'), 'l\'historique affiché n\'est pas recopié dans le journal');
+  // Un lot sans libellé (appel direct à l'API) n'a pas de synthèse, mais ses changements restent tracés
+  const site = { id: 'site-audit-2', name: 'Annexe', code: 'ANX', address: '' };
+  const brut = await requete('POST', api + '/lots', { changements: [{ collection: 'sites', op: 'creer', cle: site.id, apres: site }] }, tech);
+  assert.deepStrictEqual((await requete('GET', api + '/audit?limite=50', undefined, admin)).json.filter(x => x.lot === brut.json.revision).map(x => x.action), ['creer']);
+  // Filtre par famille : plusieurs actions à la fois
+  await requete('POST', api + '/session', { identifiant: 'tech', motDePasse: 'Mauvais-mot-de-passe' });
+  const acces = (await requete('GET', api + '/audit?actions=connexion,echec_connexion&limite=50', undefined, admin)).json;
+  assert.ok(acces.length >= 3 && acces.every(x => ['connexion', 'echec_connexion'].includes(x.action)) && acces.some(x => x.action === 'echec_connexion'));
+  assert.deepStrictEqual((await requete('GET', api + '/audit?actions=', undefined, admin)).json.length > 0, true, 'filtre vide : tout');
+});
 test('journal d\'audit : qui, quand, quoi, valeur avant et après ; il ne se modifie pas', async t => {
   const { api, admin, tech, dossier } = await serveurDeTest(t), d = await demo(), debut = Date.now();
   await requete('PUT', api + '/base', d, admin);

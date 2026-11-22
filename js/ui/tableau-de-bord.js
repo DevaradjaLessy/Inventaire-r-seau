@@ -1,12 +1,15 @@
 /* Onglet Tableau de bord : indicateurs, barres, matrice, alertes, historique. */
-import { CATEGORIES, COL, HISTORY_TYPES, POE_WARN_PCT, PORT_STATUS, RACK_FULL_PCT } from '../config.js';
-import { $, clamp, esc, fmtDateTime, groupBy, pct, plural, sum } from '../utils.js';
+import { CATEGORIES, COL, HISTORY_TYPES, POE_WARN_PCT, PORT_STATUS, RACK_FULL_PCT, RENOUVELLEMENT_ANS } from '../config.js';
+import { $, clamp, esc, fmtDate, fmtDateTime, groupBy, pct, plural, sum } from '../utils.js';
 import { ico } from '../icones.js';
 import { Cache, Store } from '../store.js';
 import { cablesOf, catOf, computeAlerts, isPassive, locLabel, locOf, poeUsage, portsOf, rackUsage } from '../services/requetes.js';
 import { effStatus, isNetDev, outletInfo } from '../services/cablage.js';
+import { planAdressage, SEUIL_PLEIN_PCT } from '../services/adressage.js';
+import { ageDuParc } from '../services/cycle-de-vie.js';
+import { Securite } from '../services/securite.js';
 import { Sync } from '../sync.js';
-import { Actions, levelColor, showTab, UI, Views } from './socle.js';
+import { Actions, estAdmin, levelColor, renderActive, renderShell, showTab, UI, Views, vlanChip } from './socle.js';
 import { Inv } from './inventaire.js';
 
 /* Statistiques globales (hors équipements hors service) */
@@ -47,7 +50,7 @@ function donut(parts, total, center, sub) {
 /* En-tête d'une carte : icône, titre, et un élément à droite */
 const titre = (icon, t, right = '') => `<div class="dt"><span class="ti">${ico(icon)}</span><h3>${t}</h3><span class="grow"></span>${right}</div>`;
 /* Versions de firmware par modèle : plusieurs versions pour un même modèle signalent un parc à mettre à niveau */
-function firmwareCard() {
+function versionsFirmware() {
   const parModele = new Map();
   for (const d of Store.db.devices) {
     const c = catOf(d);
@@ -55,20 +58,49 @@ function firmwareCard() {
     const m = parModele.get(c.id) || parModele.set(c.id, { c, v: new Map() }).get(c.id);
     m.v.set(d.firmware, (m.v.get(d.firmware) || 0) + 1);
   }
-  const lignes = [...parModele.values()].sort((a, b) => b.v.size - a.v.size || `${a.c.brand} ${a.c.model}`.localeCompare(`${b.c.brand} ${b.c.model}`));
+  return [...parModele.values()].sort((a, b) => b.v.size - a.v.size || `${a.c.brand} ${a.c.model}`.localeCompare(`${b.c.brand} ${b.c.model}`));
+}
+function firmwareCard() {
+  const lignes = versionsFirmware();
   const ecarts = lignes.filter(l => l.v.size > 1).length;
-  return `<div class="dcard c5">${titre('gauge', 'Firmware par modèle', `<span class="muted">${ecarts ? `${plural(ecarts, 'modèle')} avec plusieurs versions` : 'parc homogène'}</span>`)}
+  return `<div class="dcard c4">${titre('gauge', 'Firmware par modèle', `<span class="muted">${ecarts ? `${plural(ecarts, 'modèle')} avec plusieurs versions` : 'parc homogène'}</span>`)}
     <div class="scroll">${lignes.map(l => `<div class="fw-row" data-act="fw-inv" data-q="${esc(l.c.model)}" data-tip="${esc(l.c.brand)} ${esc(l.c.model)}|Clic : voir ces équipements dans l'Inventaire">
       <b>${esc(l.c.model)}</b><span>${[...l.v].sort((a, b) => b[1] - a[1]).map(([v, n]) => `${esc(v)} <small>× ${n}</small>`).join(' · ')}</span>${l.v.size > 1 ? `<span class="chip warn">${l.v.size} versions</span>` : '<span></span>'}</div>`).join('') || '<div class="empty">Aucune version de firmware saisie</div>'}</div></div>`;
 }
+/* Âge du parc : répartition par tranche, âge moyen, et les plus anciens (un clic y mène) */
+function ageCard() {
+  const a = ageDuParc(), dates = a.total - a.inconnu, max = Math.max(1, ...a.tranches.map(t => t.n)), an = n => n.toFixed(1).replace('.', ',');
+  const anciens = a.anciens.slice(0, 3);
+  return `<div class="dcard c4" id="age-card">${titre('history', 'Âge du parc', `<span class="muted">${dates ? `âge moyen : ${an(a.moyen)} ans` : 'aucune date saisie'}</span>`)}
+    <div class="hb">${a.tranches.map(t => `<span class="l">${t.label}</span><div class="tr" data-tip="${t.label}|${plural(t.n, 'équipement')} (${pct(t.n, dates)} %)"><i style="width:${t.n * 100 / max}%;${t.vieux && t.n ? `background:${COL.serious}` : ''}"></i></div><span class="n">${t.vieux && t.n ? `<span style="color:${COL.serious}">${ico('alert')}</span>` : ''}${t.n}</span>`).join('')}</div>
+    <div class="age-anciens">${anciens.map(x => `<div class="fw-row" data-act="go" data-id="${x.dev.id}" data-tip="${esc(x.dev.hostname)}|Clic : ouvrir la fiche"><b>${esc(x.dev.hostname)}</b><span>installé le ${fmtDate(x.dev.installDate)}</span><span class="chip ${x.ans >= RENOUVELLEMENT_ANS ? 'warn' : ''}">${an(x.ans)} ans</span></div>`).join('')}</div>
+    <div class="dnote">${a.aRenouveler ? `<span style="color:${COL.serious}">${ico('alert')}</span>${plural(a.aRenouveler, 'équipement')} à renouveler (plus de ${RENOUVELLEMENT_ANS} ans)` : `Aucun équipement de plus de ${RENOUVELLEMENT_ANS} ans`}${a.inconnu ? ` · ${a.inconnu} sans date d'installation` : ''}</div></div>`;
+}
+/* Plan d'adressage : occupation de chaque sous-réseau de VLAN et prochaine adresse libre */
+function adressageCard() {
+  const p = planAdressage();
+  const lignes = p.vlans.map(v => `<div class="ip-row" data-tip="VLAN ${v.vlan.id} ${esc(v.vlan.name)} — ${esc(v.vlan.subnet)}|${v.utilisees} adresses attribuées sur ${v.hotes} (${v.pct} %)|${v.libre ? 'Prochaine adresse libre : ' + v.libre : 'Plus aucune adresse libre'}">
+      ${vlanChip(v.vlan.id)}<span class="mono">${esc(v.vlan.subnet)}</span><div class="tr"><i style="width:${v.pct}%;${v.pct >= SEUIL_PLEIN_PCT ? `background:${COL.serious}` : ''}"></i></div><span class="n">${v.utilisees} / ${v.hotes}</span>
+      <span class="lib">${v.chevauche.length ? `<span class="chip warn" data-tip="Chevauchement|Ce sous-réseau recouvre celui du VLAN ${v.chevauche.join(', ')}">chevauche ${v.chevauche.join(', ')}</span>` : v.libre ? `libre : <span class="mono">${v.libre}</span>` : '<span class="chip warn">plein</span>'}</span></div>`).join('');
+  return `<div class="dcard c5" id="ip-card">${titre('floor', 'Plan d\'adressage', `<span class="muted">${plural(p.vlans.length, 'sous-réseau', 'sous-réseaux')}</span>`)}
+    <div class="scroll">${lignes || '<div class="empty">Aucun sous-réseau saisi : ouvrez « VLAN » pour en indiquer un par VLAN</div>'}</div>
+    <div class="dnote">${p.hors.length ? `<span style="color:${COL.serious}">${ico('alert')}</span><span>${plural(p.hors.length, 'adresse')} hors de tout sous-réseau : ${p.hors.slice(0, 4).map(x => `<a data-act="go" data-id="${x.id}">${esc(x.hostname)}</a> (${esc(x.ip)})`).join(', ')}${p.hors.length > 4 ? '…' : ''}</span>` : 'Toutes les adresses saisies sont dans un sous-réseau connu'}${p.sansReseau.length ? ` · ${plural(p.sansReseau.length, 'VLAN')} sans sous-réseau` : ''}</div></div>`;
+}
 Actions['fw-inv'] = el => { Object.assign(Inv, { q: el.dataset.q, group: '', type: '', bld: '', status: '', brand: '', page: 0 }); UI.dirty.add('inv'); showTab('inv'); };
 /* État de sécurité du serveur (mode serveur, administrateur) : la carte se remplit dès que le serveur a répondu */
+/* Charge l'état de sécurité pour l'administrateur : ses alertes rejoignent la liste des alertes et la pastille de l'onglet */
+const chargerSecurite = () => (estAdmin() ? Sync.appel('GET', '/securite').then(e => { Securite.poser(e); return e; }) : Promise.resolve(null));
+Securite.on(() => {
+  renderShell(); UI.dirty.add('dash');
+  if (UI.tab === 'dash' && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '') && !$('#modal-root').classList.contains('on')) renderActive();
+});
 function remplirSecurite() {
-  Sync.appel('GET', '/securite').then(e => {
-    const hote = $('#sec-etat'); if (!hote) return;
+  chargerSecurite().then(e => {
+    // L'état s'affiche à deux endroits (carte du tableau de bord, rubrique de la page d'administration) : les deux sont remplis
+    const hotes = document.querySelectorAll('.sec-etat'); if (!hotes.length || !e) return;
     const l = (niveau, texte) => `<div class="sec-row"><i style="background:${{ ok: COL.up, warn: COL.warn, crit: COL.crit }[niveau]}"></i><span>${texte}</span></div>`;
     const liste = a => a.map(esc).join(', '), s = e.sauvegarde;
-    hote.innerHTML = [
+    const html = [
       l(e.echecs24h >= 10 ? 'crit' : e.echecs24h ? 'warn' : 'ok', `${plural(e.echecs24h, 'échec')} de connexion en 24 h${e.verrouilles.length ? ` — ${plural(e.verrouilles.length, 'compte')} verrouillé${e.verrouilles.length > 1 ? 's' : ''} : ${liste(e.verrouilles)}` : ''}`),
       l(s.derniere == null || s.ageHeures > 48 ? 'crit' : s.ageHeures > 26 ? 'warn' : 'ok', s.derniere == null ? 'Dernière sauvegarde : aucune' : `Dernière sauvegarde : il y a ${s.ageHeures < 1 ? 'moins d\'une heure' : `${Math.round(s.ageHeures)} h`}${s.automatique ? '' : ' — sauvegarde automatique désactivée'}`),
       e.https.actif ? l(e.https.joursRestants < 30 ? 'warn' : 'ok', `HTTPS actif — certificat ${e.https.autoSigne ? 'auto-signé' : 'fourni'}, valable encore ${e.https.joursRestants} jours`) : l('crit', 'HTTPS désactivé : les mots de passe circulent en clair'),
@@ -77,12 +109,13 @@ function remplirSecurite() {
       e.jamaisConnectes.length ? l('warn', `Comptes jamais connectés : ${liste(e.jamaisConnectes)}`) : '',
       e.inactifs90j.length ? l('warn', `Comptes inactifs depuis 90 jours : ${liste(e.inactifs90j)}`) : '',
     ].join('');
-  }).catch(err => { const hote = $('#sec-etat'); if (hote) hote.innerHTML = `<div class="empty">${esc(err.message)}</div>`; });
+    for (const h of hotes) h.innerHTML = html;
+  }).catch(err => { for (const h of document.querySelectorAll('.sec-etat')) h.innerHTML = `<div class="empty">${esc(err.message)}</div>`; });
 }
 function securiteCard() {
   if (Store.mode !== 'serveur' || Sync.utilisateur?.role !== 'administrateur') return '';
   remplirSecurite();
-  return `<div class="dcard c7">${titre('alert', 'Sécurité du serveur', `<button class="btn sm" data-act="compte-audit">${ico('history')}Journal d'audit</button>`)}<div id="sec-etat"><div class="empty">Chargement…</div></div></div>`;
+  return `<div class="dcard c7">${titre('alert', 'Sécurité du serveur', `<button class="btn sm" data-act="compte-audit">${ico('history')}Journal d'audit</button>`)}<div class="sec-etat"><div class="empty">Chargement…</div></div></div>`;
 }
 Views.dash = {
   render() {
@@ -105,7 +138,7 @@ Views.dash = {
     const pill = l => nLevel(l) ? `<span class="pill" style="--c:${levelColor(l)}"><i></i>${nLevel(l)} ${LEVEL_LABEL[l].toLowerCase()}${nLevel(l) > 1 ? 's' : ''}</span>` : '';
     const site = d.sites[0];
     $('#tab-dash').innerHTML = `<div class="dash">
-      <div class="dhead c12"><div><h2>Tableau de bord</h2><div class="muted">${esc(site ? site.name : 'Aucun site')} · ${plural(d.buildings.length, 'bâtiment')} · ${plural(d.floors.length, 'étage')} · mis à jour le ${fmtDateTime(d.meta.updatedAt)}</div></div><span class="grow"></span><button class="btn" data-act="vlans" data-tip="VLAN|Ajouter, renommer, recolorer ou supprimer un VLAN">${ico('floor')}VLAN (${d.vlans.length})</button></div>
+      <div class="dhead c12"><div><h2>Tableau de bord</h2><div class="muted">${esc(site ? site.name : 'Aucun site')} · ${plural(d.buildings.length, 'bâtiment')} · ${plural(d.floors.length, 'étage')} · mis à jour le ${fmtDateTime(d.meta.updatedAt)}</div></div><span class="grow"></span><button class="btn" data-act="synthese" data-tip="Synthèse du parc|Document d'une à deux pages à imprimer ou à enregistrer en PDF : chiffres clés, âge du parc, capacité, adressage">${ico('list')}Synthèse</button><button class="btn" data-act="vlans" data-tip="VLAN|Ajouter, renommer, recolorer ou supprimer un VLAN">${ico('floor')}VLAN (${d.vlans.length})</button></div>
       ${kpi('box', 'Équipements', s.devices, `dont ${s.active} actifs · ${plural(d.racks.length, 'baie')}`)}
       ${kpi('switch', 'Ports occupés', `${pct(s.portsUsed, s.ports)}<small> %</small>`, `${s.portsUsed} sur ${s.ports} ports`, pct(s.portsUsed, s.ports))}
       ${kpi('rack', 'Baies', `${pct(s.uUsed, s.uTotal)}<small> %</small>`, `${s.uUsed} U sur ${s.uTotal}`, pct(s.uUsed, s.uTotal))}
@@ -113,7 +146,7 @@ Views.dash = {
       ${kpi('outlet', 'Prises brassées', `${pct(s.patched, s.outlets)}<small> %</small>`, `${s.patched} sur ${s.outlets} · ${s.outletsUp} actives`, pct(s.patched, s.outlets))}
       ${kpi('alert', 'Alertes', alerts.length, crit ? `dont ${crit} critique${crit > 1 ? 's' : ''}` : 'aucune critique', null, alerts.length ? (crit ? COL.crit : COL.serious) : null)}
       <div class="dcard c5">${title('alert', 'Alertes', `<span class="row" style="gap:6px">${pill('crit')}${pill('serious')}${pill('warn')}</span>`)}
-        <div class="scroll alist">${alerts.map(a => `<div class="al" style="--c:${levelColor(a.level)}" data-act="go" data-id="${a.ref}"><span class="ai">${ico(a.icon)}</span><div><b>${esc(a.text)}</b><small>${esc(a.sub)}</small></div><span class="lv">${LEVEL_LABEL[a.level]}</span></div>`).join('') || '<div class="empty">Aucune alerte</div>'}</div></div>
+        <div class="scroll alist">${alerts.map(a => `<div class="al" style="--c:${levelColor(a.level)}" data-act="${a.act || 'go'}" data-id="${a.ref}"><span class="ai">${ico(a.icon)}</span><div><b>${esc(a.text)}</b><small>${esc(a.sub)}</small></div><span class="lv">${LEVEL_LABEL[a.level]}</span></div>`).join('') || '<div class="empty">Aucune alerte</div>'}</div></div>
       <div class="dcard c4">${title('box', 'Parc par type', `<span class="muted">${s.devices} équipements</span>`)}${hbars(catRows, Math.max(...catRows.map(r => r.v), 1), r => r.v)}</div>
       <div class="dcard c3">${title('switch', 'États des ports')}
         ${donut(states, s.ports || 1, s.ports, 'ports réseau')}
@@ -123,12 +156,12 @@ Views.dash = {
         <div class="rgs">${racks.map(x => `<div class="rg ${x.pct >= RACK_FULL_PCT ? 'warn' : ''}" data-act="go" data-id="${x.r.id}" data-tip="${esc(x.r.name)}|${x.used} U occupées sur ${x.total}|${esc(locLabel(x.r.roomId))}"><b>${x.pct} %</b><div class="tube"><i style="height:${x.pct}%"></i></div><span>${esc(x.r.name.replace(/^(BAIE|COFFRET)-/, ''))}</span><small>${x.used}/${x.total} U</small></div>`).join('')}</div>
         <div class="dnote">${racks.some(x => x.pct >= RACK_FULL_PCT) ? `<span style="color:${COL.serious}">${ico('alert')}</span>En orange : baie remplie à ${RACK_FULL_PCT} % ou plus` : 'Aucune baie proche de la saturation'}</div></div>
       <div class="dcard c4">${title('bolt', 'Budget PoE par switch')}<div class="scroll">${hbars(poeRows, 100, r => `${r.raw.used}/${r.raw.budget} W`)}</div></div>
-      <div class="dcard c5">${title('building', 'Type × bâtiment')}${matrix}</div>
-      ${firmwareCard()}${securiteCard()}
+      <div class="dcard c4">${title('building', 'Type × bâtiment')}${matrix}</div>
+      ${firmwareCard()}${ageCard()}${adressageCard()}${securiteCard()}
       <div class="dcard c7">${title('history', 'Dernières actions', `<button class="btn sm" data-act="historique" data-tip="Historique|Filtrer toutes les actions, revenir à un état antérieur">${ico('list')}Tout voir (${d.history.length})</button>`)}
         <div class="scroll tline">${d.history.slice(0, 40).map(h => `<div class="tli"><span class="td">${ico(HIST_ICON[h.type] || 'edit')}</span><div><b>${esc(h.text)}</b><small>${HISTORY_TYPES[h.type] || h.type} · ${fmtDateTime(h.ts)}</small></div></div>`).join('') || '<div class="empty">Aucune action</div>'}</div></div>
     </div>`;
   },
 };
 
-export { remplirSecurite };
+export { chargerSecurite, computeStats, remplirSecurite, versionsFirmware };

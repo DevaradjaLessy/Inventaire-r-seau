@@ -265,7 +265,7 @@ test('Téléphone : glisser au doigt un modèle du stock vers le plan, et dépla
   assert.strictEqual(await page.evaluate(() => NetCarto.Store.idx.id.get(NetCarto.Store.db.devices.at(-1).roomId).name), 'Bureaux DSI');
   assert.strictEqual(await page.locator('.pal-fantome').count(), 0, 'l\'image qui suit le doigt disparaît');
   // Mode Édition : une prise suit le doigt
-  await page.tap('.palette [data-act=palette]'); await page.tap('[data-act=plan-edit]');
+  await page.tap('.palette [data-act=palette]'); await page.tap('[data-act=tl-plus]'); await page.tap('[data-act=plan-edit]');   // « Édition » est rangé derrière « Outils » sur téléphone
   // Comme sur un vrai téléphone, on zoome d'abord sur la zone : à l'échelle de l'étage entier, une prise est trop petite pour le doigt
   const prise = await page.evaluate(() => { const C = NetCarto.Carto, o = NetCarto.Store.db.outlets.find(x => NetCarto.Store.idx.id.get(x.roomId).name === 'Bureaux DSI'), vb = C.vbs[C.floorId], w = 200, h = w * vb.h / vb.w;
     Object.assign(vb, { x: o.x * 20 - w / 2, y: o.y * 20 - h / 2, w, h }); return { id: o.id, x: o.x, y: o.y }; });
@@ -337,6 +337,88 @@ test('Déplacer un équipement câblé : le brassage est signalé, et peut être
   await page.keyboard.press('Control+z'); assert.deepStrictEqual(await etat(), avant);
   await deplacer(true); await page.click('[data-act=modal-ok]'); await page.waitForTimeout(150);
   assert.deepStrictEqual(await etat(), { rack: 'BAIE-A2-01', cables: avant.cables }, 'câbles gardés si l\'on décoche');
+});
+
+/* ---------- Audit par profils : technicien ---------- */
+test('Stock vide : la palette et une U libre proposent l\'entrée en stock, sans quitter la baie', async page => {
+  await page.evaluate(() => NetCarto.Store.commit('stock', 'Stock remis à zéro', db => { for (const s of db.stock) s.available = 0; }));
+  await choisir(page, 'BAIE-A1-01'); await pret3D(page);
+  await page.click('#r3d-tools [data-act=palette]');
+  assert.match(await page.locator('#palette-host-r .palette').innerText(), /Rien en stock/);
+  await page.click('#palette-host-r [data-act=stock-rapide]'); await page.waitForSelector('.modal');
+  const modeles = await page.locator('.modal [name=cat] option').allInnerTexts();
+  assert.ok(modeles.length > 3 && modeles.every(m => /U — 0 en stock/.test(m)), 'seuls les modèles qui se montent en baie sont proposés');
+  const id = await page.evaluate(() => NetCarto.Store.db.catalog.find(c => c.category === 'switch' && c.mount === 'rack' && (c.heightU || 1) === 1).id);
+  await page.selectOption('.modal [name=cat]', id); await page.fill('.modal [name=qty]', '2'); await page.click('[data-act=modal-ok]');
+  await page.waitForSelector('#palette-host-r .pal-it.arme');   // le modèle reçu est prêt à être posé
+  assert.strictEqual((await page.locator('#palette-host-r .pal-it .q').innerText()).trim(), '2');
+  assert.strictEqual(await page.evaluate(i => NetCarto.Store.db.stock.find(s => s.catalogId === i).available, id), 2);
+  // Clic sur une U libre alors que plus rien n'est en stock : la fenêtre d'entrée s'ouvre, puis l'installation reprend au même endroit
+  await page.evaluate(() => NetCarto.Store.commit('stock', 'Stock remis à zéro', db => { for (const s of db.stock) s.available = 0; }));
+  await page.click('#palette-host-r [data-act=palette]');
+  await page.locator('#elev .eu.free[data-u="20"]').click(); await page.waitForSelector('.modal');
+  assert.match(await page.locator('.modal').innerText(), /Aucun modèle en stock ne tient à cet emplacement/);
+  await page.selectOption('.modal [name=cat]', id); await page.click('[data-act=modal-ok]');
+  await page.waitForFunction(() => /Installer|installer/.test(document.querySelector('.modal h3, .modal .head, .modal')?.innerText || '') && !/Entrée en stock/.test(document.querySelector('.modal')?.innerText.split('\n')[0] || ''));
+});
+test('Téléphone : la barre d\'outils de la baie et du plan est repliée, les indicateurs de l\'inventaire tiennent sur une ligne', async page => {
+  await choisir(page, 'BAIE-A1-01'); await pret3D(page);
+  const visibles = () => page.evaluate(() => [...document.querySelectorAll('#r3d-tools [data-act]')].filter(b => b.offsetParent).map(b => b.dataset.act));
+  assert.ok((await page.locator('#r3d-tools').boundingBox()).height < 100, 'barre repliée');
+  assert.deepStrictEqual((await visibles()).filter(a => a !== 'r3d-aller'), ['tl-plus']);
+  await page.tap('#r3d-tools [data-act=tl-plus]');
+  const ouverts = await visibles();
+  assert.ok(ouverts.includes('r3d-cables') && ouverts.includes('r3d-isoler') && !ouverts.includes('palette'), 'outils dépliés, sans le bouton Stock en double');
+  await page.tap('#r3d-tools [data-act=tl-plus]');
+  await page.evaluate(() => NetCarto.select(NetCarto.Store.db.floors[1].id)); await page.waitForSelector('svg.plan');
+  assert.ok((await page.locator('#plan-host .overlay.tl, .overlay.tl').first().boundingBox()).height < 60, 'plan : barre sur une ligne');
+  await page.tap('[data-tab=inv]');
+  assert.ok((await page.locator('#inv-kpi').boundingBox()).height < 110, 'indicateurs sur une ligne');
+  assert.ok((await page.locator('#tab-inv table, .inv table').first().boundingBox()).y < 800 * 1.2, 'la liste commence près du premier écran');
+}, { mobile: true });
+
+/* ---------- Audit par profils : conception du réseau, direction ---------- */
+test('Plan d\'adressage : occupation de chaque sous-réseau, prochaine adresse libre, adresses hors plan, alerte quand il est presque plein', async page => {
+  const avant = await page.evaluate(() => NetCarto.planAdressage());
+  assert.ok(avant.vlans.length >= 5 && avant.vlans.every(v => v.pct < 90 && v.libre), 'démonstration : aucun sous-réseau saturé');
+  const plan = await page.evaluate(() => {
+    NetCarto.Store.commit('edit', 'Adresses d\'essai', db => { db.vlans.find(v => v.id === 10).subnet = '192.168.77.0/29'; const ds = db.devices.filter(d => d.status !== 'retired'); ds[0].ip = '192.168.77.1'; ds[1].ip = '192.168.77.2'; ds[2].ip = '192.168.77.4'; ds[3].ip = '172.31.0.9'; ds[4].ip = 'pas une adresse'; });
+    return NetCarto.planAdressage(); });
+  const v10 = plan.vlans.find(v => v.vlan.id === 10);
+  assert.deepStrictEqual([v10.hotes, v10.utilisees, v10.pct, v10.libre], [6, 3, 50, '192.168.77.3']);
+  assert.deepStrictEqual(plan.hors.map(d => d.ip), ['172.31.0.9'], 'une adresse mal écrite n\'est pas comptée');
+  await page.click('[data-tab=dash]');
+  const ligne = page.locator('#ip-card .ip-row', { hasText: '192.168.77.0/29' });
+  assert.match((await ligne.innerText()).replace(/\s+/g, ' '), /10 DATA.*3 \/ 6.*libre : 192\.168\.77\.3/);
+  assert.match(await page.locator('#ip-card .dnote').innerText(), /1 adresse hors de tout sous-réseau/);
+  // Presque plein : l'alerte arrive dans la liste ; plein : plus d'adresse proposée
+  const alertesAvant = await page.locator('.alist .al').count();
+  await page.evaluate(() => NetCarto.Store.commit('edit', 'Sous-réseau rempli', db => { const ds = db.devices.filter(d => d.status !== 'retired'); ['3', '5', '6'].forEach((n, i) => { ds[10 + i].ip = '192.168.77.' + n; }); }));
+  await page.waitForSelector('.alist .al:has-text("Sous-réseau presque plein : VLAN 10 DATA (6/6 adresses)")');
+  assert.strictEqual(await page.locator('.alist .al').count(), alertesAvant + 1);
+  assert.match(await page.locator('#ip-card .ip-row', { hasText: '192.168.77.0/29' }).innerText(), /plein/);
+  // Deux VLAN sur le même sous-réseau : le chevauchement est signalé
+  await page.evaluate(() => NetCarto.Store.commit('edit', 'Chevauchement', db => { db.vlans.find(v => v.id === 20).subnet = '192.168.77.0/24'; }));
+  await page.waitForSelector('#ip-card .ip-row:has-text("chevauche 20")');
+});
+test('Direction : âge du parc, équipements à renouveler, et synthèse imprimable', async page => {
+  const r = await page.evaluate(() => {
+    const sw = NetCarto.Store.db.devices.find(d => d.hostname === 'SW-A1-ACC-01');
+    NetCarto.Store.commit('edit', 'Dates d\'essai', db => { db.devices.find(d => d.id === sw.id).installDate = '2015-03-01'; db.devices.find(d => d.hostname === 'SW-A1-ACC-02').installDate = ''; });
+    const a = NetCarto.ageDuParc(); return { n: a.aRenouveler, premier: a.anciens[0].dev.hostname, ans: a.anciens[0].ans, inconnu: a.inconnu, somme: a.tranches.reduce((s, t) => s + t.n, 0), total: a.total }; });
+  assert.deepStrictEqual([r.n, r.premier, r.inconnu, r.somme], [1, 'SW-A1-ACC-01', 1, r.total - 1]);
+  assert.ok(r.ans > 11 && r.ans < 40);
+  await page.click('[data-tab=dash]');
+  const carte = await page.locator('#age-card').innerText();
+  assert.match(carte, /âge moyen : \d+,\d ans/); assert.match(carte, /1 équipement à renouveler \(plus de 7 ans\)/); assert.match(carte, /1 sans date d'installation/);
+  // La synthèse reprend tout sur un document imprimable
+  await page.evaluate(() => { window.__imprime = 0; window.print = () => { window.__imprime++; }; });
+  await page.click('[data-act=synthese]');
+  const doc = await page.locator('#print-root').evaluate(e => e.textContent.replace(/\s+/g, ' '));
+  assert.strictEqual(await page.evaluate(() => window.__imprime), 1);
+  for (const attendu of [/Synthèse du parc réseau/, /Campus Démo/, /Chiffres clés/, /Parc par type/, /Âge du parc/, /À renouveler plus de 7 ans/, /SW-A1-ACC-01.*01\/03\/2015/, /Capacité/, /COFFRET-B1-01.*93 %/, /Firmware/, /Plan d'adressage/, /10 DATA/, /Alertes critiques/, /Port en erreur/]) assert.match(doc, attendu);
+  // Un clic sur le plus ancien ouvre sa fiche
+  await page.click('#age-card .fw-row >> nth=0'); await page.waitForSelector('#detail:has-text("SW-A1-ACC-01")');
 });
 
 /* ---------- Sécurité de l'interface ---------- */
@@ -923,6 +1005,39 @@ test('Comptes : le journal d\'audit montre qui a fait quoi, avec la valeur avant
   assert.match(texte, /admin/); assert.match(texte, /Modification/); assert.match(texte, /notes/); assert.match(texte, /baie réorganisée/);
   await page.fill('#audit-filtre', 'tech'); await page.waitForFunction(() => !document.querySelector('#audit-list .a-row') || [...document.querySelectorAll('#audit-list .a-row')].every(r => /tech/.test(r.textContent)), null, { timeout: 4000 });
   assert.strictEqual(await page.locator('#audit-list .a-row', { hasText: 'SW-A1-ACC-01' }).count(), 0, 'le filtre par personne s\'applique');
+}, S);
+test('Journal d\'audit : une opération tient en une ligne, son détail se déplie, et le journal se filtre par famille', async page => {
+  await page.evaluate(() => NetCarto.Store.commit('edit', 'Notes de deux équipements', db => { db.devices[0].notes = 'un'; db.devices[1].notes = 'deux'; })); await synchro(page);
+  await rubrique(page, 'audit'); await page.waitForSelector('#audit-list .a-row');
+  const op = page.locator('#audit-list > .a-row.a-op', { hasText: 'Notes de deux équipements' });
+  assert.strictEqual(await op.count(), 1, 'une seule ligne pour l\'opération');
+  assert.match(await op.locator('summary').innerText(), /2 changements — Modification : 2 équipements/);
+  assert.strictEqual(await op.locator('details').evaluate(d => d.open), false, 'détail replié');
+  await op.locator('summary').click();
+  assert.strictEqual(await op.locator('details .a-row').count(), 2); assert.match(await op.locator('details').innerText(), /notes : .* → un/);
+  // Le chargement initial de la démonstration se lit en français
+  assert.match(await page.locator('#audit-list .a-row', { hasText: 'Remplacement de toute la base' }).innerText(), /102 équipements, 972 ports/);
+  // Famille « Connexions et échecs » : plus aucune ligne de données
+  await page.selectOption('#audit-famille', 'acces');
+  await page.waitForFunction(() => { const l = [...document.querySelectorAll('#audit-list > .a-row .chip')]; return l.length && l.every(c => /Connexion|Échec/.test(c.textContent)); }, null, { timeout: 4000 });
+  await page.selectOption('#audit-famille', 'donnees'); await page.waitForSelector('#audit-list .a-op');
+}, S);
+test('Alertes : l\'administrateur voit celles de la sécurité du serveur dans la liste et la pastille ; un technicien, non', async (page, { app }) => {
+  await page.waitForFunction(() => /10/.test(document.querySelector('#tabs [data-tab=dash] .badge')?.textContent || ''), null, { timeout: 5000 });   // 9 alertes du parc + HTTPS désactivé
+  await page.click('[data-tab=dash]');
+  const al = page.locator('.alist .al', { hasText: 'HTTPS désactivé' }); await al.waitFor();
+  assert.match(await al.innerText(), /mots de passe circulent en clair/);
+  assert.strictEqual(await page.locator('.alist .al', { hasText: 'Un seul administrateur' }).count(), 1);
+  await al.click(); await page.waitForSelector('#tab-admin.on #sec-etat .sec-row');   // un clic mène à la rubrique « Sécurité du serveur »
+  // Technicien : mêmes alertes de parc, aucune de sécurité
+  const ctx = await page.context().browser().newContext({ viewport: { width: 1600, height: 900 } });
+  const r = await fetch(`http://127.0.0.1:${app.port}/api/v1/session`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identifiant: 'tech', motDePasse: MDP }) });
+  await ctx.addCookies([{ name: 'netcarto_session', value: r.headers.getSetCookie()[0].split(';')[0].split('=')[1], url: `http://127.0.0.1:${app.port}/` }]);
+  const p2 = await ctx.newPage(); await p2.goto(`http://127.0.0.1:${app.port}/`); await p2.waitForFunction(() => window.NetCarto?.Store.db);
+  await p2.click('[data-tab=dash]'); await p2.waitForSelector('.alist .al'); await p2.waitForTimeout(400);
+  assert.strictEqual(await p2.locator('.alist .al', { hasText: 'HTTPS' }).count(), 0);
+  assert.strictEqual((await p2.locator('#tabs [data-tab=dash] .badge').innerText()).trim(), '9');
+  await ctx.close();
 }, S);
 test('Sauvegardes : l\'administrateur sauvegarde, puis restaure l\'inventaire après une erreur', async page => {
   const ouvrir = async () => { await rubrique(page, 'sauvegardes'); await page.waitForSelector('#sv-reglages b'); };

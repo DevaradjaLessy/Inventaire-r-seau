@@ -101,6 +101,9 @@ function creerDepot(pilote, versionSchema) {
         if (c !== 'history') tracer(ctx, ch.op, c, cle, String(nomDe(c, ch.apres || ch.avant)), ch.op === 'creer' ? null : courant, ch.op === 'supprimer' ? null : ch.apres, r);
       }
       ecrire(() => controler(touchees));
+      // Ligne de synthèse : le libellé que l'interface donne à l'opération (« Remplacement de… »), écrite en dernier pour être lue en premier
+      const titre = lot.changements.find(ch => ch.collection === 'history' && ch.op === 'creer')?.apres?.text, n = lot.changements.filter(ch => ch.collection !== 'history').length;
+      if (typeof titre === 'string' && titre && n) tracer(ctx, 'operation', '', '', titre.slice(0, 300), null, { changements: n }, r);
       poserMeta('revision', r); poserMeta('maj', Date.now());
       return { revision: r, changements: lot.changements.length };
     });

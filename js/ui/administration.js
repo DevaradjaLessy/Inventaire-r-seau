@@ -12,7 +12,7 @@ const RUBRIQUES = {
   comptes: { t: 'Comptes et rôles', i: 'user', corps: corpsUtilisateurs, charger: chargerUtilisateurs },
   audit: { t: 'Journal d\'audit', i: 'history', corps: corpsAudit, charger: ouvrirAudit },
   sauvegardes: { t: 'Sauvegardes', i: 'download', corps: corpsSauvegardes, charger: chargerSauvegardes },
-  securite: { t: 'Sécurité du serveur', i: 'alert', corps: () => '<div id="sec-etat"><div class="empty">Chargement…</div></div>', charger: async () => remplirSecurite() },
+  securite: { t: 'Sécurité du serveur', i: 'alert', corps: () => '<div id="sec-etat" class="sec-etat"><div class="empty">Chargement…</div></div>', charger: async () => remplirSecurite() },
 };
 const Adm = { r: 'comptes' };
 function rubrique() {
@@ -37,6 +37,6 @@ Actions['compte-admin'] = () => { Modal.close(); showTab('admin'); };
 
 /* Raccourcis vers une rubrique, depuis le reste de l'application (carte « Sécurité » du tableau de bord) et après une action
    faite dans la page (mot de passe changé, sauvegarde supprimée) : il n'existe plus de fenêtres séparées pour ces écrans. */
-for (const [action, r] of [['compte-utilisateurs', 'comptes'], ['compte-audit', 'audit'], ['compte-sauvegardes', 'sauvegardes']]) {
+for (const [action, r] of [['compte-utilisateurs', 'comptes'], ['compte-audit', 'audit'], ['compte-sauvegardes', 'sauvegardes'], ['compte-securite', 'securite']]) {
   Actions[action] = () => { Modal.close(); Adm.r = r; if (UI.tab !== 'admin') showTab('admin'); if (UI.tab === 'admin' && $('#adm-corps')) rubrique(); };
 }

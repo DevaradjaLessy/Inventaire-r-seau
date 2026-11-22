@@ -45,4 +45,4 @@ function imprimer(html) {
 }
 Actions['rack-print'] = el => { const rack = byId(el.dataset.id); imprimer(ficheBaie(rack) + planBrassage(rack)); };
 
-export { ficheBaie, planBrassage };
+export { ficheBaie, imprimer, planBrassage };

@@ -19,6 +19,7 @@ const Carto = {
   filter: '',
   vbs: {},              // cadrage du plan, par étage
   edit: false, wifi: false, palette: false,
+  outils: false,        // téléphone : barre d'outils du plan et de la vue 3D dépliée
   draw: false,          // tracé d'une nouvelle pièce à la souris
   arme: null,           // modèle du stock choisi dans la palette, à poser au prochain appui
   trace: null,          // chemin de câblage affiché
@@ -53,6 +54,7 @@ Actions['m-panel'] = el => { const c = $('.carto'), p = el.dataset.p; c.classLis
 Actions.psel = el => select(el.dataset.id, { keep: true });
 Actions['tree-toggle'] = (el, e) => { e.stopPropagation(); const id = el.dataset.id; Carto.open.has(id) ? Carto.open.delete(id) : Carto.open.add(id); renderTree(); };
 Actions['c-view'] = el => { Carto.view = el.dataset.v; renderCarto(); };
+Actions['tl-plus'] = () => { Carto.outils = !Carto.outils; renderCarto(); };
 Inputs['tree-filter'] = el => { Carto.filter = norm(el.value.trim()); renderTree(); };
 
 Views.carto = {

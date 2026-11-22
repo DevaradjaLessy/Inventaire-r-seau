@@ -52,14 +52,15 @@ function renderRackView() {
       ...rackUsage(rack.id).devices.flatMap(d => portsOf(d.id).filter(p => p.role !== 'pp' && effStatus(p) === 'error').map(p => ({ id: p.id, t: `${d.hostname} · ${p.name}` })))];
     const alertes = pbs.length ? `<div class="r3d-alertes" id="r3d-alertes"><span class="muted">${ico('alert')}${pbs.length > 1 ? 'Problèmes' : 'Problème'}</span>${pbs.slice(0, 6).map(x => `<button class="chip" data-act="r3d-aller" data-id="${x.id}" data-tip="${esc(x.t)}|Clic : aller au port">${esc(x.t)}</button>`).join('')}${pbs.length > 6 ? `<span class="muted">+ ${pbs.length - 6}</span>` : ''}</div>` : '';
     const modes = [['none', 'Réel'], ['status', 'État'], ['vlan', 'VLAN'], ['poe', 'PoE']];
-    $('#r3d-tools').innerHTML = `<select data-chg="rack-pick" data-tip="Changer de baie">${racksOpt(rack.id)}</select>
+    $('#r3d-tools').classList.toggle('ouvert', Carto.outils);
+    $('#r3d-tools').innerHTML = `<select data-chg="rack-pick" data-tip="Changer de baie">${racksOpt(rack.id)}</select><button class="btn m-only tl-plus ${Carto.outils ? 'on' : ''}" data-act="tl-plus" data-tip="Outils|Afficher ou replier les outils de la vue">${ico('list')}Outils</button>
       <div class="seg" data-tip="Coloration des ports">${modes.map(([m, lb]) => `<button data-act="r3d-mode" data-m="${m}" class="${View3D.mode === m ? 'on' : ''}">${lb}</button>`).join('')}</div>
       <button class="btn ${View3D.cables ? 'on' : ''}" data-act="r3d-cables" data-tip="Cordons|Afficher ou masquer les cordons de brassage">${ico('cable')}Cordons</button>
       <button class="btn ${v.isoler ? 'on' : ''}" data-act="r3d-isoler" data-tip="Isoler la sélection|Quand un port ou un équipement est choisi, les autres cordons s'effacent pour dégager la vue">${ico('trace')}Isoler</button>
       <button class="btn icon" data-act="r3d-face" data-tip="Vue de face|Bien droit devant le port ou l'équipement choisi, sinon devant toute la baie">${ico('rack')}</button>
       <button class="btn icon" data-act="r3d-fit" data-tip="Recentrer|Recadrer la vue sur toute la baie">${ico('fit')}</button>
       <button class="btn ${Carto.palette ? 'on' : ''}" data-act="palette" data-tip="Stock|Glisser un modèle du stock sur une U libre de l'élévation">${ico('box')}Stock</button>
-      ${Carto.trace ? `<button class="btn on" data-act="trace-clear">${ico('x')}Effacer le tracé</button>` : ''}${alertes}`;
+      ${Carto.trace ? `<button class="btn on tl-garde" data-act="trace-clear">${ico('x')}Effacer le tracé</button>` : ''}${alertes}`;
     // Étiquette accrochée au port choisi
     const et = $('#r3d-etiquette'), port = t === 'port' && l.rack?.id === rack.id ? byId(sel) : null;
     et.classList.toggle('hidden', !port);
