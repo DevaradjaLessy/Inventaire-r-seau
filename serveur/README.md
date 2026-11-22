@@ -231,7 +231,9 @@ Préfixe : `/api/v1`. Tout est en JSON.
 | `GET`, `DELETE /sauvegardes/{nom}` | administrateur | télécharger, supprimer |
 | `POST /sauvegardes/restauration` | administrateur | `{ nom }` : restaure les données d'inventaire |
 
-La session tient dans un cookie `HttpOnly`, `SameSite=Strict` (et `Secure`, avec le préfixe `__Host-`, en HTTPS). Une requête sans session est limitée à 64 Ko.
+La session tient dans un cookie `HttpOnly`, `SameSite=Strict` (et `Secure`, avec le préfixe `__Host-`, en HTTPS). Une requête est limitée à 64 Ko, sauf l'envoi d'un lot et le remplacement de la base (25 Mo, avec session). Un compte garde vingt sessions au plus : la plus ancienne est fermée.
+
+La commande `npm run attaques` rejoue la campagne d'attaques de `SECURITE.md` (section 8) contre un serveur de test qu'elle démarre elle-même.
 
 Ressources : `sites`, `batiments`, `etages`, `pieces`, `baies`, `equipements`, `ports`, `prises`, `cables`, `catalogue`, `stock`, `vlans`, `journal`.
 

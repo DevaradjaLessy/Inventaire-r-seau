@@ -152,3 +152,88 @@ test('Fichiers du serveur lisibles par le seul compte du service ; TLS 1.2 au mi
   assert.strictEqual((await requete('GET', `https://127.0.0.1:${app.port}/api/v1/revision`, undefined, cookieDe(r), { ca })).code, 200);
   await assert.rejects(new Promise((ok, ko) => { const c = tls.connect({ host: '127.0.0.1', port: app.port, ca, maxVersion: 'TLSv1.1', minVersion: 'TLSv1' }, ok); c.on('error', ko); }), /protocol|version|alert/i);
 });
+
+/* ---------- Attaques rejouées (campagne du 22 novembre 2026) ---------- */
+test('Attaque par rafale : des connexions lancées en même temps ne dépassent pas la limite par adresse', async t => {
+  const s = await serveurDeTest(t, { config: { securite: { tentativesParAdresse: 20, echecsMax: 1000 } } });
+  const rafale = await Promise.all(Array.from({ length: 80 }, (_, i) => connexion(s, 'inconnu' + i, 'mauvais-mot-de-passe')));
+  const evalues = rafale.filter(r => r.code === 401).length;
+  assert.ok(evalues <= 20, `${evalues} tentatives évaluées pour une limite de 20`);
+  assert.strictEqual(rafale.filter(r => r.code === 429).length, 80 - evalues);
+});
+
+test('Attaque par rafale sur un compte : le verrou tient, le bon mot de passe glissé dans la rafale est refusé', async t => {
+  const s = await serveurDeTest(t, { config: { securite: { tentativesParAdresse: 100000, echecsMax: 5 } } });
+  const mots = Array.from({ length: 60 }, (_, i) => (i === 45 ? MDP : 'mauvais-mot-de-passe-' + i));
+  const rafale = await Promise.all(mots.map(m => connexion(s, 'lecteur', m)));
+  assert.strictEqual(rafale.filter(r => r.code === 200).length, 0, 'aucune connexion ne doit aboutir');
+  assert.strictEqual(s.app.securite.trouver('lecteur').verrouille, true);
+  // Une connexion légitime isolée, sur un autre compte, n'est pas gênée par la rafale
+  assert.strictEqual((await connexion(s, 'tech', MDP)).code, 200);
+});
+
+test('Session volée : après cinq mauvais « mot de passe actuel », le compte est verrouillé et ses sessions fermées', async t => {
+  const s = await serveurDeTest(t, { config: { securite: { tentativesParAdresse: 100000, echecsMax: 5 } } });
+  const codes = [];
+  for (let i = 0; i < 8; i++) codes.push((await requete('PUT', s.api + '/session/mot-de-passe', { actuel: 'mauvais-' + i, nouveau: 'Nouveau-mot-de-passe-2' }, s.tech)).code);
+  assert.deepStrictEqual(codes.slice(0, 5), [403, 403, 403, 403, 403]); assert.deepStrictEqual(codes.slice(5), [401, 401, 401], 'la session est fermée : plus aucun essai possible');
+  assert.strictEqual(s.app.securite.trouver('tech').verrouille, true);
+  assert.strictEqual((await connexion(s, 'tech', MDP)).code, 401, 'le mot de passe n\'a pas changé, et le compte attend la fin du verrou');
+  // Les essais comptent aussi dans la limite par adresse
+  const s2 = await serveurDeTest(t, { config: { securite: { tentativesParAdresse: 3, echecsMax: 50 } } });
+  for (let i = 0; i < 3; i++) await requete('PUT', s2.api + '/session/mot-de-passe', { actuel: 'mauvais-' + i, nouveau: 'Nouveau-mot-de-passe-2' }, s2.tech);
+  assert.strictEqual((await requete('PUT', s2.api + '/session/mot-de-passe', { actuel: MDP, nouveau: 'Nouveau-mot-de-passe-2' }, s2.tech)).code, 429);
+});
+
+test('Adresse de courriel : ni balise, ni retour à la ligne, ni commande pour le serveur d\'envoi', async t => {
+  const s = await serveurDeTest(t);
+  for (const mauvais of ['"><img/src=x/onerror=alert(1)>@exemple.test', 'a@exemple.test\r\nBcc:victime@exemple.test', 'a@exemple.test>\r\nRCPT TO:<b@exemple.test', 'a<b@exemple.test', 'a@exemple.test;b@exemple.test', "a'@exemple.test", 'a@exemple..test'])
+    assert.strictEqual((await requete('POST', s.api + '/utilisateurs', { identifiant: 'c' + mauvais.length, courriel: mauvais, role: 'lecture', motDePasse: MDP }, s.admin)).code, 422, JSON.stringify(mauvais));
+  for (const bon of ['prenom.nom+netcarto@exemple-entreprise.test', 'a_b-c@sous.domaine.exemple.test'])
+    assert.strictEqual((await requete('POST', s.api + '/utilisateurs', { identifiant: 'ok' + bon.length, courriel: bon, role: 'lecture', motDePasse: MDP }, s.admin)).code, 200, bon);
+});
+
+/* ---------- Seconde passe : un attaquant plus patient ---------- */
+test('Limite par adresse : une plage IPv6 entière compte pour une seule adresse, et une adresse IPv4 n\'a qu\'une écriture', () => {
+  const { creerLimiteur, cleAdresse } = require('../securite/limiteur');
+  assert.strictEqual(cleAdresse('::ffff:192.0.2.7'), '192.0.2.7'); assert.strictEqual(cleAdresse('192.0.2.7'), '192.0.2.7');
+  assert.strictEqual(cleAdresse('2001:db8:1:2:aaaa:bbbb:cccc:dddd'), cleAdresse('2001:db8:1:2::1'), 'même réseau /64');
+  assert.notStrictEqual(cleAdresse('2001:db8:1:2::1'), cleAdresse('2001:db8:1:3::1'));
+  assert.strictEqual(cleAdresse('::1'), cleAdresse('0:0:0:0:0:0:0:1'));
+  const l = creerLimiteur({ max: 3, fenetreMs: 60000 });
+  for (let i = 0; i < 3; i++) assert.strictEqual(l.entrer(`2001:db8:1:2::${i + 1}`), 0);
+  assert.ok(l.entrer('2001:db8:1:2:ffff::9') > 0, 'changer d\'adresse dans la même plage ne remet pas le compteur à zéro');
+});
+
+test('Téléchargement d\'une sauvegarde : inscrit au journal d\'audit (la base entière sort du serveur)', async t => {
+  const s = await serveurDeTest(t, { config: { demo: true } });
+  const { nom } = (await requete('POST', s.api + '/sauvegardes', {}, s.admin)).json;
+  assert.strictEqual((await requete('GET', s.api + '/sauvegardes/' + nom, undefined, s.admin)).code, 200);
+  const a = (await requete('GET', s.api + '/audit?action=sauvegarde_telecharger', undefined, s.admin)).json;
+  assert.strictEqual(a.length, 1); assert.strictEqual(a[0].identifiant, 'admin'); assert.match(a[0].libelle, new RegExp(nom.replace(/\./g, '\\.')));
+});
+
+test('Corps de requête : 25 Mo seulement pour un lot ou une base ; 64 Ko pour tout le reste, même connecté', async t => {
+  const s = await serveurDeTest(t);
+  const gros = 'x'.repeat(200000);
+  assert.strictEqual((await requete('PUT', s.api + '/session/mot-de-passe', { actuel: gros, nouveau: gros }, s.lecteur)).code, 413);
+  assert.strictEqual((await requete('POST', s.api + '/utilisateurs', { identifiant: 'x', nom: gros, role: 'lecture', motDePasse: MDP }, s.admin)).code, 413);
+  assert.strictEqual((await requete('POST', s.api + '/lots', { type: 'edit', texte: gros, changements: [] }, s.lecteur)).code, 403, 'le rôle est contrôlé avant de lire le corps');
+  assert.notStrictEqual((await requete('POST', s.api + '/lots', { type: 'edit', texte: gros.slice(0, 1000), changements: [], bourrage: gros }, s.tech)).code, 413);
+});
+
+test('Sessions par compte : vingt au plus, les plus anciennes sont fermées', async t => {
+  const s = await serveurDeTest(t, { config: { securite: { tentativesParAdresse: 100000 } } });
+  const premiere = cookieDe(await connexion(s, 'tech', MDP));
+  for (let i = 0; i < 21; i++) assert.strictEqual((await connexion(s, 'tech', MDP)).code, 200);
+  assert.strictEqual((await requete('GET', s.api + '/revision', undefined, premiere)).code, 401, 'la plus ancienne session a été fermée');
+  assert.ok(s.app.depot.comptes.nombreSessionsDe(s.app.securite.trouver('tech').id) <= 20);
+});
+
+test('Connexion muette : coupée par le serveur en moins de vingt secondes ; nombre de connexions plafonné', async t => {
+  const s = await serveurDeTest(t, { comptes: false });
+  assert.ok(s.app.delais.connexions > 0 && s.app.delais.connexions <= 2000);
+  const net = require('net'), debut = Date.now();
+  const duree = await new Promise(ok => { const c = net.connect(s.app.port, '127.0.0.1', () => c.write('GET /api/v1/sante HTTP/1.1\r\nHost: x\r\nX-Lent: ')); c.resume(); c.on('close', () => ok(Date.now() - debut)); c.on('error', () => {}); setTimeout(() => { c.destroy(); ok(Infinity); }, 25000); });
+  assert.ok(duree < 20000, `connexion muette gardée ${duree} ms`);
+});

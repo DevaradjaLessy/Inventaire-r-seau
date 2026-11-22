@@ -28,7 +28,7 @@ const fs = require('fs'), zlib = require('zlib');
 const { ErreurMetier, RESSOURCES } = require('../donnees');
 
 const VERSION = require('../package.json').version, COOKIE = 'netcarto_session', SEUIL_COMPRESSION = 2048;
-const MAX_SANS_SESSION = 64 * 1024;   // une requête sans session (connexion, mot de passe perdu) n'a aucune raison d'être grosse
+const MAX_PETIT = 64 * 1024;   // connexion, compte, mot de passe : aucune de ces requêtes n'a de raison d'être grosse
 
 class ErreurHttp extends Error { constructor(statut, message) { super(message); this.statut = statut; } }
 /* Réponse qui porte aussi des en-têtes (cookie de session) */
@@ -68,12 +68,15 @@ function creerApi({ depot, sauvegardes, releveur, securite, config, https, certi
     // Adresse du poste : celle de la liaison, ou, derrière un proxy déclaré de confiance, la dernière ajoutée par ce proxy à X-Forwarded-For
     const transmise = config.serveur.proxyDeConfiance ? String(req.headers['x-forwarded-for'] || '').split(',').pop().trim() : '';
     const jeton = jetonDe(req, https), moi = securite.session(jeton), ip = (/^[0-9a-fA-F:.]{3,45}$/.test(transmise) ? transmise : req.socket.remoteAddress) || '', ctx = { utilisateur: moi, ip };
-    const max = moi ? maxConnecte : MAX_SANS_SESSION;
+    const max = MAX_PETIT;   // seuls un lot de modifications et le remplacement de la base ont droit à un corps volumineux
     /* Routes d'authentification : l'adresse qui a trop échoué attend ; chaque refus compte */
-    const sensible = async fn => {
-      const attente = securite.limiteur.attente(ip);
+    /* La tentative est comptée avant d'être traitée, et décomptée si elle réussit : une rafale ne passe pas avant le premier refus */
+    const sensible = async (fn, { compte = false } = {}) => {
+      const attente = securite.limiteur.entrer(ip);
       if (attente) throw Object.assign(new ErreurMetier('verrouille', `Trop de tentatives depuis cette adresse. Réessayez dans ${Math.ceil(attente / 60)} minute(s).`), { attente });
-      try { return await fn(); } catch (e) { if (e instanceof ErreurMetier) securite.limiteur.echec(ip); throw e; }
+      const r = await fn();
+      if (!compte) securite.limiteur.reussir(ip);   // « compte » : la demande reste comptée même si elle aboutit (mot de passe oublié)
+      return r;
     };
     // --- Sans connexion ---
     if (a === 'sante' && !b) { methode(req, 'GET'); return { ok: depot.sain(), base: 'ok' }; }
@@ -91,20 +94,20 @@ function creerApi({ depot, sauvegardes, releveur, securite, config, https, certi
       return new Reponse({ connecte: true, utilisateur: s.utilisateur }, { 'Set-Cookie': cookie(s.jeton, s.dureeSecondes) });
     }
     // Mot de passe perdu : la demande ne dit jamais si le compte existe ; le lien reçu permet d'en choisir un nouveau
-    if (a === 'recuperation' && !b) { methode(req, 'POST'); const v = await lireJson(req, max); await sensible(async () => { securite.limiteur.echec(ip); securite.demanderReinitialisation(v.compte, { ip }); }); return { ok: true }; }
+    if (a === 'recuperation' && !b) { methode(req, 'POST'); const v = await lireJson(req, max); await sensible(async () => securite.demanderReinitialisation(v.compte, { ip }), { compte: true }); return { ok: true }; }
     if (a === 'recuperation' && b === 'mot-de-passe') { methode(req, 'POST'); const v = await lireJson(req, max); return { ok: true, ...(await sensible(() => securite.reinitialiser(v.jeton, v.motDePasse, { ip }))) }; }
     // --- Compte connecté ---
     exiger(moi);
     if (a === 'recuperation' && b === 'lien') { methode(req, 'POST'); exiger(moi, 'administrateur'); const v = await lireJson(req, max); return securite.lienReinitialisation(v.id, moi); }
-    if (a === 'session' && b === 'mot-de-passe') { methode(req, 'PUT'); const v = await lireJson(req, max); await securite.changerMotDePasse(moi, jeton, v.actuel, v.nouveau); return { ok: true }; }
+    if (a === 'session' && b === 'mot-de-passe') { methode(req, 'PUT'); const v = await lireJson(req, max); await sensible(() => securite.changerMotDePasse(moi, jeton, v.actuel, v.nouveau, { ip })); return { ok: true }; }
     if (a === 'revision' && !b) { methode(req, 'GET'); return { revision: depot.revision() }; }
     if (a === 'base' && !b) {
       methode(req, 'GET', 'PUT');
       if (req.method === 'GET') return depot.lireBase();
       exiger(moi, 'administrateur');
-      return depot.remplacerBase(await lireJson(req, max), ctx);
+      return depot.remplacerBase(await lireJson(req, maxConnecte), ctx);
     }
-    if (a === 'lots' && !b) { methode(req, 'POST'); exiger(moi, 'technicien', 'administrateur'); return depot.appliquerLot(await lireJson(req, max), ctx); }
+    if (a === 'lots' && !b) { methode(req, 'POST'); exiger(moi, 'technicien', 'administrateur'); return depot.appliquerLot(await lireJson(req, maxConnecte), ctx); }
     if (a === 'supervision' && (b === 'etat' || b === 'sante')) { methode(req, 'GET'); return b === 'etat' ? releveur.etat() : releveur.sante(); }
     if (a === 'utilisateurs') {
       exiger(moi, 'administrateur');
@@ -128,7 +131,12 @@ function creerApi({ depot, sauvegardes, releveur, securite, config, https, certi
       if (b === 'restauration') { methode(req, 'POST'); const v = await lireJson(req, max); return sauvegardes.restaurer(v.nom, ctx); }
       methode(req, 'GET', 'DELETE');
       let nom; try { nom = decodeURIComponent(b); } catch { throw new ErreurHttp(400, 'Nom de sauvegarde illisible.'); }
-      if (req.method === 'GET') return new Fichier(sauvegardes.chemin(nom), nom);
+      if (req.method === 'GET') {
+        const chemin = sauvegardes.chemin(nom);
+        // La base entière sort du serveur, empreintes des mots de passe comprises : l'opération laisse une trace
+        depot.tracer(ctx, 'sauvegarde_telecharger', '', '', `Téléchargement de la sauvegarde ${nom}`, null, null, null);
+        return new Fichier(chemin, nom);
+      }
       sauvegardes.supprimer(nom);
       depot.tracer(ctx, 'sauvegarde_supprimer', '', '', `Suppression de la sauvegarde ${nom}`, null, null, null);
       return { ok: true };

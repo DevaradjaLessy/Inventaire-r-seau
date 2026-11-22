@@ -632,6 +632,25 @@ Rapport complet : `SECURITE.md`. Seize points trouvés : quatorze corrigés, deu
 
 **Règles à tenir désormais :** tout texte venu de la base passe par `esc()` avant d'entrer dans la page ; toute valeur insérée dans un attribut de style ou d'image a une forme imposée, côté interface et côté serveur ; toute route sans session passe par la limite par adresse.
 
+### 3.29 Campagne d'attaques et correctifs
+
+Après l'audit (3.28), une campagne de 40 attaques a été menée contre un serveur de test local. Rapport : `SECURITE.md`, section 8. Elle se rejoue par `npm run attaques` dans `serveur/` (`serveur/tests/campagne-attaques.js`).
+
+**Trois défenses cédaient, toutes sous une rafale de requêtes simultanées :**
+- la limite par adresse comptait l'échec à la fin du calcul : 80 tentatives envoyées ensemble étaient toutes essayées ;
+- le verrou du compte tombait trop tard : le bon mot de passe passait en 46e position ;
+- avec une session volée, le mot de passe actuel se devinait sans limite par le changement de mot de passe.
+
+**Décisions :**
+- `securite/limiteur.js` : la tentative est comptée à l'arrivée (`entrer`), rendue en cas de succès (`reussir`). Clé par réseau `/64` en IPv6 (`cleAdresse`).
+- `securite/index.js` : une tentative à la fois par compte (`unParUn`, douze en attente au plus), pour la connexion et le changement de mot de passe. Un mot de passe actuel faux compte comme un échec de connexion.
+- Adresse de courriel : jeu de caractères restreint avant l'arobase.
+- 64 Ko pour toute route, sauf `POST /lots` et `PUT /base`.
+- Téléchargement d'une sauvegarde inscrit au journal d'audit (`sauvegarde_telecharger`).
+- Vingt sessions par compte ; connexions muettes fermées en dix secondes ; 1 000 connexions au plus.
+
+Chaque attaque réussie a son scénario dans `serveur/tests/securite.test.js`. Risques restants : `SECURITE.md`, 8.4.
+
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
@@ -727,6 +746,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-20 | « Une page d'administration centrale à l'adresse /admin (création des comptes, rôles, réinitialisation des mots de passe), connexion par adresse mail, récupération de compte par mail avec serveur SMTP facultatif, niveaux de droits étagés. À toi de structurer. » | ✅ Fait (voir 3.27). |
 | 2026-11-20 | « Oui, retire les anciennes fenêtres en doublon » | ✅ Fenêtres « Utilisateurs », « Journal d'audit » et « Sauvegardes » retirées du menu du compte ; tout passe par la page d'administration (voir 3.27). |
 | 2026-11-22 | « En RSSI senior : audite la solution, trouve les failles et applique les correctifs de sécurité, elle va être déployée en entreprise » | ✅ Rapport `SECURITE.md` ; 14 failles corrigées et testées, 2 risques acceptés (voir 3.28). Restent les mesures d'exploitation de la section 5 du rapport, à la charge de l'utilisateur. |
+| 2026-11-22 | « Applique les correctifs, puis teste en te mettant dans le rôle d'un attaquant, évalue les risques et corrige-les » | ✅ Campagne de 40 attaques (`npm run attaques`) : 3 défenses cédaient sous rafale, plus 6 points trouvés en chemin, tous corrigés et testés. Risques restants notés dans `SECURITE.md`, 8.4 (voir 3.29). |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---

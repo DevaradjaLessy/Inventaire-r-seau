@@ -6,14 +6,15 @@ const { ErreurMetier } = require('../donnees/erreurs');
 const { controlerMotDePasse, hacher, verifier, aRelever, empreinteFactice, reglerCout } = require('./mots-de-passe');
 const { creerLimiteur } = require('./limiteur');
 
-const ROLES = ['lecture', 'technicien', 'administrateur'];
+const ROLES = ['lecture', 'technicien', 'administrateur'], SESSIONS_PAR_COMPTE = 20;
 const DEFAUTS = { echecsMax: 5, verrouillageMinutes: 15, sessionHeures: 12, inactiviteMinutes: 120, reinitialisationMinutes: 30, reinitialisationsParHeure: 3, tentativesParAdresse: 20, fenetreMinutes: 10, coutMotDePasse: 17 };
 /* Valeur écrite au journal du service : sans caractère de contrôle (pas de fausse ligne injectée), et courte */
 const propre = v => String(v ?? '').replace(/[^\x21-\x7e]/g, '?').slice(0, 64) || '-';
 /* Adresse de courriel : en minuscules, ou '' ; lève une erreur si la forme est invalide */
 function courrielValide(v) {
   const c = String(v || '').trim().toLowerCase();
-  if (c && (c.length > 254 || !/^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/.test(c))) throw new ErreurMetier('regle', 'Adresse de courriel invalide.');
+  // Jeu de caractères restreint : ni balise, ni guillemet, ni séparateur, pour que l'adresse ne puisse rien porter d'autre qu'une adresse
+  if (c && (c.length > 254 || !/^[a-z0-9][a-z0-9._%+-]{0,63}@[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(c) || c.includes('..'))) throw new ErreurMetier('regle', 'Adresse de courriel invalide.');
   return c;
 }
 const empreinte = jeton => crypto.createHash('sha256').update(String(jeton)).digest('hex');
@@ -41,8 +42,24 @@ function creerSecurite({ depot, config = {}, horloge = () => Date.now(), courrie
     audit(auteur, 'utilisateur_creer', u, { identifiant, nom: u.nom, courriel: u.courriel, role });
     return publique(c.parId(u.id));
   }
+  /* Les essais sur un même compte passent un par un : chacun voit le résultat du précédent. Sans cela, des essais lancés
+     en même temps liraient tous « zéro échec » et passeraient tous avant que le verrou tombe. La file est bornée. */
+  const files = new Map();
+  async function unParUn(cle, fn, plein) {
+    const f = files.get(cle) || { queue: Promise.resolve(), n: 0 };
+    if (f.n >= 12) return plein();
+    f.n++; files.set(cle, f);
+    const tour = f.queue.then(fn, fn);
+    f.queue = tour.then(() => {}, () => {});
+    try { return await tour; } finally { if (--f.n === 0) files.delete(cle); }
+  }
   /* Vérifie l'identifiant et le mot de passe ; ouvre une session et renvoie son jeton */
   async function connecter(identifiant, motDePasse, { ip = '' } = {}) {
+    const saisie = String(identifiant || '').trim(), trouve = c.parIdentifiant(saisie) || (saisie.includes('@') ? c.parCourriel(saisie) : null);
+    const cle = trouve ? 'compte:' + trouve.id : 'inconnu:' + saisie.toLowerCase().slice(0, 254);
+    return unParUn(cle, () => connecterSeul(identifiant, motDePasse, { ip }), async () => { await verifier(String(motDePasse || ''), empreinteFactice()); throw new ErreurMetier('acces', `Identifiant ou mot de passe incorrect. Après ${regle.echecsMax} échecs, un compte est verrouillé ${regle.verrouillageMinutes} minutes.`); });
+  }
+  async function connecterSeul(identifiant, motDePasse, { ip = '' } = {}) {
     // Une seule réponse pour tous les refus : compte inconnu, mauvais mot de passe, compte verrouillé ou désactivé.
     // Elle ne dit donc pas si un compte existe, et le temps de calcul est le même dans tous les cas.
     const refus = new ErreurMetier('acces', `Identifiant ou mot de passe incorrect. Après ${regle.echecsMax} échecs, un compte est verrouillé ${regle.verrouillageMinutes} minutes.`), t = horloge();
@@ -61,6 +78,7 @@ function creerSecurite({ depot, config = {}, horloge = () => Date.now(), courrie
     const releve = aRelever(u.mot_de_passe) ? { mot_de_passe: await hacher(String(motDePasse)) } : {};
     c.modifier(u.id, { echecs: 0, verrouille_jusqu_a: null, derniere_connexion: t, ...releve });
     c.creerSession(empreinte(jeton), u.id, t, ip);
+    c.plafonnerSessions(u.id, SESSIONS_PAR_COMPTE);   // un compte n'empile pas les sessions : les plus anciennes sont fermées
     c.purgerSessions(t - regle.sessionHeures * 3600000);
     audit(u, 'connexion', u, null, ip);
     return { jeton, utilisateur: publique(c.parId(u.id), t), dureeSecondes: regle.sessionHeures * 3600 };
@@ -75,12 +93,25 @@ function creerSecurite({ depot, config = {}, horloge = () => Date.now(), courrie
     return publique(s, t);
   }
   const deconnecter = jeton => { if (jeton) c.supprimerSession(empreinte(jeton)); };
-  async function changerMotDePasse(utilisateur, jeton, actuel, nouveau) {
-    const u = c.parId(utilisateur.id);
-    if (!u || !(await verifier(String(actuel || ''), u.mot_de_passe))) throw new ErreurMetier('interdit', 'Mot de passe actuel incorrect.');
+  /* Un mauvais « mot de passe actuel » compte comme un échec de connexion : après le seuil, le compte est verrouillé et toutes
+     ses sessions sont fermées. Une session volée ne permet donc pas de deviner le mot de passe par essais répétés. */
+  async function changerMotDePasse(utilisateur, jeton, actuel, nouveau, { ip = '' } = {}) {
+    return unParUn('mdp:' + utilisateur.id, () => changerSeul(utilisateur, jeton, actuel, nouveau, ip), () => { throw new ErreurMetier('interdit', 'Mot de passe actuel incorrect.'); });
+  }
+  async function changerSeul(utilisateur, jeton, actuel, nouveau, ip) {
+    const u = c.parId(utilisateur.id), t = horloge();
+    if (!u || !(await verifier(String(actuel || ''), u.mot_de_passe))) {
+      if (u) {
+        const echecs = u.echecs + 1, verrou = echecs >= regle.echecsMax;
+        c.modifier(u.id, { echecs: verrou ? 0 : echecs, verrouille_jusqu_a: verrou ? t + regle.verrouillageMinutes * 60000 : null });
+        evenement('echec_mot_de_passe_actuel', { compte: u.identifiant, adresse: ip });
+        if (verrou) { c.supprimerSessionsDe(u.id); evenement('compte_verrouille', { compte: u.identifiant, adresse: ip, minutes: regle.verrouillageMinutes }); audit(u, 'echec_connexion', u, { motif: 'mot de passe actuel' }, ip); }
+      }
+      throw new ErreurMetier('interdit', 'Mot de passe actuel incorrect.');
+    }
     const refus = controlerMotDePasse(nouveau, u.identifiant);
     if (refus) throw new ErreurMetier('regle', refus);
-    c.modifier(u.id, { mot_de_passe: await hacher(nouveau) });
+    c.modifier(u.id, { mot_de_passe: await hacher(nouveau), echecs: 0, verrouille_jusqu_a: null });
     c.supprimerSessionsDe(u.id, empreinte(jeton));   // les autres sessions de ce compte sont fermées
     audit(u, 'mot_de_passe', u);
   }

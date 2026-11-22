@@ -8,6 +8,8 @@
 
 L'audit a trouvé **16 points**, dont 1 de gravité haute et 6 de gravité moyenne. **14 sont corrigés** dans cette version, chacun avec un test automatique qui échouerait si la faille revenait. **2 sont acceptés** et documentés (section 4).
 
+Une **campagne d'attaques** a ensuite été menée contre la version corrigée (section 8). Sur 40 essais, 3 défenses ont cédé, toutes liées à des tentatives envoyées en rafale. Elles sont corrigées, ainsi que 6 autres points trouvés en chemin. Rejouée, la campagne ne passe plus nulle part.
+
 Ce document n'est pas une certification. Il ne remplace ni un test d'intrusion mené par un tiers, ni la revue de votre propre politique de sécurité.
 
 ## 2. Méthode et périmètre
@@ -96,12 +98,71 @@ Aucune ne peut être faite par le logiciel à votre place.
 | Test d'intrusion par un tiers | À faire avant toute ouverture hors du réseau interne |
 | Envoi de courriels en STARTTLS ou TLS | Écrit, mais essayé seulement contre un faux serveur sans chiffrement |
 
-## 8. Vérifier par vous-même
+## 8. Campagne d'attaques
+
+*Menée le 22 novembre 2026, après les correctifs de la section 3, contre un serveur de test local et jetable, en HTTP. Point de vue : un attaquant sur le réseau interne, d'abord sans compte, puis avec un compte en lecture, un compte de technicien, et enfin une session volée.*
+
+La campagne est rejouable : `npm run attaques` dans `serveur/`. Elle démarre son propre serveur, lance 40 essais et rend un code d'erreur si une défense cède.
+
+### 8.1 Résultat
+
+**Premier passage : 37 défenses ont tenu, 3 ont cédé**, et un quatrième défaut est apparu à la lecture des réponses. Les quatre sont corrigés. **Second passage : 40 sur 40 tiennent.**
+
+| Famille d'essais | Essais | Résultat |
+|---|---|---|
+| Accès sans compte : huit routes de l'API, cookies forgés, cookie rejoué après déconnexion | 11 | Tient |
+| Élévation de privilèges : routes d'administration, écriture par un lecteur, tables internes, promotion de soi-même, variantes d'adresse, méthodes inattendues | 6 | Tient |
+| Requêtes venues d'un autre site : écriture forcée, formulaire simple, origine nulle ou imitée, lecture croisée | 5 | Tient |
+| Injection : SQL, traversée de dossier, nom de sauvegarde détourné, pollution de prototype | 4 | Tient |
+| Robustesse : requêtes mal formées, tronquées ou démesurées ; adresse de courriel conçue pour ralentir le contrôle | 2 | Tient |
+| Devinette de mots de passe : rafale par adresse, rafale par compte, adresse usurpée par un en-tête, session volée | 4 | **3 cédaient**, corrigé |
+| Récupération de compte : jeton altéré, lien détourné vers un autre compte, jeton dans le journal | 3 | Tient |
+| Fuites : empreintes, messages d'erreur, tables internes, en-têtes, temps de réponse | 5 | Tient |
+
+Un essai regroupe souvent plusieurs requêtes : 18 pour les routes d'administration, 13 pour la traversée de dossier, 11 pour l'injection SQL.
+
+### 8.2 Les attaques qui ont réussi
+
+Probabilité et impact sont notés pour un réseau interne d'entreprise.
+
+| # | Attaque | Probabilité | Impact | Risque | Correction |
+|---|---|---|---|---|---|
+| 17 | **Rafale contre la limite par adresse.** 80 tentatives de connexion envoyées en même temps : toutes étaient essayées, car l'échec n'était compté qu'à la fin du calcul. La limite de 20 ne valait que pour un attaquant patient. | Haute : un script de dix lignes | Moyen | **Haut** | La tentative est comptée dès son arrivée, avant tout calcul. Une connexion réussie rend sa place. |
+| 18 | **Rafale contre le verrou du compte.** 60 tentatives simultanées sur un seul compte : le verrou, prévu au cinquième échec, ne tombait pas à temps. Le bon mot de passe, placé en 46e position, était accepté. | Haute | Haut : le verrou est la défense principale d'un compte | **Haut** | Les tentatives d'un même compte passent une par une. Au-delà de douze en attente, les suivantes sont refusées sans être essayées. |
+| 19 | **Session volée, mot de passe deviné sans limite.** Avec un cookie de session volé, le changement de mot de passe acceptait un nombre illimité d'essais du mot de passe actuel. L'attaquant passait d'un accès de quelques heures à un accès durable. | Faible : il faut d'abord voler une session | Haut | **Moyen** | Un mot de passe actuel faux compte comme un échec de connexion : cinquième échec, compte verrouillé et sessions fermées. La limite par adresse s'applique aussi. |
+| 20 | **Adresse de courriel porteuse de balises.** Une adresse comme `"><img src=x>"@exemple.test` était acceptée. L'interface la neutralisait, mais elle partait telle quelle dans l'en-tête du courriel de récupération. | Faible : réservé à un administrateur | Faible | **Faible** | Seuls les lettres, les chiffres et `. _ % + -` sont admis avant l'arobase. |
+
+### 8.3 Durcissements du second passage
+
+Aucun n'a donné lieu à une attaque réussie. Ils ferment des contournements que la relecture du code, en cherchant la parade aux correctifs ci-dessus, a montrés possibles.
+
+| # | Contournement | Correction |
+|---|---|---|
+| 21 | Un attaquant en IPv6 dispose de milliards d'adresses dans son propre réseau : la limite par adresse ne le gênait pas. | La limite compte par réseau `/64` en IPv6. Une adresse IPv4 écrite au format IPv6 est ramenée à sa forme IPv4. |
+| 22 | Un compte en lecture pouvait envoyer 25 Mo à n'importe quelle route. | 64 Ko pour toutes les routes, sauf l'envoi d'un lot et le remplacement de la base. |
+| 23 | Le téléchargement d'une sauvegarde, donc de toute la base, ne laissait aucune trace. | Inscrit au journal d'audit (« Sauvegarde téléchargée »). |
+| 24 | Un compte pouvait ouvrir des sessions sans limite et remplir la table. | Vingt sessions par compte ; la plus ancienne est fermée. |
+| 25 | Des milliers de connexions ouvertes sans rien envoyer occupaient le serveur jusqu'au délai. | Connexions muettes fermées en dix secondes, vérification toutes les deux secondes, 1 000 connexions au plus. |
+
+### 8.4 Risques qui restent après la campagne
+
+| Risque | Niveau | Pourquoi il reste | Parade |
+|---|---|---|---|
+| Un tiers verrouille un compte en se trompant cinq fois (point 15). Le point 18 le rend un peu plus facile : les tentatives en file comptent toutes. | Moyen | Contrepartie directe du verrou | Deux administrateurs, verrou de 15 minutes, alerte sur `SECURITE compte_verrouille` |
+| Plusieurs postes derrière une même adresse (traduction d'adresses, proxy sans `proxyDeConfiance`) partagent la limite de 20 tentatives. | Faible | La limite ne connaît que l'adresse | Régler `serveur.proxyDeConfiance` derrière un proxy ; relever `securite.tentativesParAdresse` au besoin |
+| Un technicien malveillant peut supprimer beaucoup d'objets, un par un ou par lot. | Moyen | C'est son droit d'écriture | Journal d'audit non modifiable, sauvegarde quotidienne, restauration en une commande |
+| Une session volée reste valable jusqu'à son expiration (12 heures, ou 2 heures d'inactivité, réglables). | Moyen | Pas de double authentification | Cookie illisible par les scripts, HTTPS obligatoire, fermeture des autres sessions au changement de mot de passe |
+| Attaque distribuée depuis de nombreuses adresses. | Faible en interne | Aucune limite par adresse ne l'arrête | Verrou par compte, filtrage réseau (mesure 4 de la section 5) |
+
+La campagne confirme les priorités de la section 7 : la **double authentification** est la seule mesure qui réduirait à la fois le risque de session volée et celui de mot de passe deviné.
+
+## 9. Vérifier par vous-même
 
 | Sujet | Test |
 |---|---|
 | Injection dans l'interface, exports CSV | `tests/netcarto.test.js`, bloc « Sécurité de l'interface » (3 scénarios) |
-| Serveur : contenu, tentatives, indices, tailles, en-têtes, empreintes, proxy, journal, droits, TLS | `serveur/tests/securite.test.js` (11 scénarios) |
+| Serveur : contenu, tentatives, indices, tailles, en-têtes, empreintes, proxy, journal, droits, TLS, rafales, session volée, IPv6, sessions par compte | `serveur/tests/securite.test.js` |
+| Campagne d'attaques complète (40 essais) | `npm run attaques` dans `serveur/` |
 | Comptes, rôles, récupération | `serveur/tests/comptes.test.js`, `serveur/tests/administration.test.js` |
 
 Réglages ajoutés par cet audit : `securite.tentativesParAdresse` (20), `securite.fenetreMinutes` (10), `securite.coutMotDePasse` (17), `serveur.proxyDeConfiance` (false).

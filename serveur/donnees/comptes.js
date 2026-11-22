@@ -28,6 +28,9 @@ function creerComptes(p) {
     toucherSession: (jeton, date) => p.lancer('UPDATE sessions SET vue_le = ? WHERE jeton = ?', [date, jeton]),
     supprimerSession: jeton => p.lancer('DELETE FROM sessions WHERE jeton = ?', [jeton]),
     supprimerSessionsDe: (utilisateurId, sauf = '') => p.lancer('DELETE FROM sessions WHERE utilisateur_id = ? AND jeton <> ?', [utilisateurId, sauf]),
+    nombreSessionsDe: utilisateurId => p.un('SELECT COUNT(*) AS n FROM sessions WHERE utilisateur_id = ?', [utilisateurId]).n,
+    /* Ne garde que les sessions les plus récentes d'un compte */
+    plafonnerSessions: (utilisateurId, garder) => p.lancer('DELETE FROM sessions WHERE utilisateur_id = ? AND jeton NOT IN (SELECT jeton FROM sessions WHERE utilisateur_id = ? ORDER BY creee_le DESC, rowid DESC LIMIT ?)', [utilisateurId, utilisateurId, garder]),
     purgerSessions: avant => p.lancer('DELETE FROM sessions WHERE vue_le < ?', [avant]),
     // Liens de réinitialisation du mot de passe (empreinte du jeton, jamais le jeton)
     creerReinitialisation: (jeton, utilisateurId, date, expire, origine) => p.lancer('INSERT INTO reinitialisations (jeton, utilisateur_id, cree_le, expire_le, origine) VALUES (?, ?, ?, ?, ?)', [jeton, utilisateurId, date, expire, origine]),

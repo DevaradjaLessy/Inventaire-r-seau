@@ -45,7 +45,8 @@ async function demarrer(config, { journal = console.log, horloge = () => Date.no
   // HTTPS par défaut : certificat fourni, ou certificat auto-signé créé dans le dossier de données
   const tls = preparerHttps(cfg.https, cfg.donnees.dossier, { hote: cfg.serveur.hote });
   const api = creerApi({ depot, sauvegardes, releveur, securite, config: cfg, https: !!tls, certificat: tls }), statique = creerStatique(cfg.web.dossier, PREFIXE, { https: !!tls });
-  const serveur = (tls ? https.createServer.bind(https, { cert: tls.cert, key: tls.key, minVersion: 'TLSv1.2' }) : http.createServer.bind(http))((req, res) => {
+  // connectionsCheckingInterval : fréquence à laquelle les liaisons trop lentes sont repérées et coupées
+  const serveur = (tls ? https.createServer.bind(https, { cert: tls.cert, key: tls.key, minVersion: 'TLSv1.2', connectionsCheckingInterval: 2000 }) : http.createServer.bind(http, { connectionsCheckingInterval: 2000 }))((req, res) => {
     let url;
     try { url = new URL(req.url, 'http://x'); } catch { res.writeHead(400); return res.end(); }
     if (url.pathname === PREFIXE || url.pathname.startsWith(PREFIXE + '/')) return api(req, res, url.pathname.slice(PREFIXE.length), url.searchParams);
@@ -54,7 +55,8 @@ async function demarrer(config, { journal = console.log, horloge = () => Date.no
     statique(url.pathname, res, req.headers['accept-encoding'] || '');
   });
   // Délais : une liaison qui tarde à envoyer ses en-têtes ou sa requête est coupée (attaque par connexions lentes)
-  const delais = { enTetes: 10000, requete: 60000, repos: 5000 };
+  const delais = { enTetes: 10000, requete: 60000, repos: 5000, connexions: 1000 };
+  serveur.maxConnections = delais.connexions;   // au-delà, les nouvelles liaisons sont refusées : le serveur ne s'épuise pas
   serveur.headersTimeout = delais.enTetes; serveur.requestTimeout = delais.requete; serveur.keepAliveTimeout = delais.repos;
   await new Promise((ok, ko) => { serveur.once('error', ko); serveur.listen(cfg.serveur.port, cfg.serveur.hote, ok); });
   let arrete = false;
