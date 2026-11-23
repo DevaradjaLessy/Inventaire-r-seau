@@ -40,7 +40,7 @@ test('Jeu de démonstration cohérent', async page => {
   });
   assert.deepStrictEqual([r.doublons, r.orphelins, r.surcharge, r.chevauchements], [0, 0, 0, 0]);
   assert.strictEqual(r.reels, 0, 'les données doivent rester fictives (IP privées, MAC 02:…, séries DMO-)');
-  assert.deepStrictEqual(r.n, [2, 5, 6, 102, 121, 34]);
+  assert.deepStrictEqual(r.n, [2, 5, 6, 102, 121, 37]);
 });
 test('Onglets, sauvegarde locale, annulation, réinitialisation', async page => {
   await page.click('[data-tab=dash]'); assert.strictEqual(await page.$eval('.tab.on', e => e.id), 'tab-dash');
@@ -135,7 +135,7 @@ test('Tableau de bord et alertes cliquables', async page => {
 });
 test('Base vide : site, bâtiment, étage, pièces (formulaire et tracé), baie, VLAN', async page => {
   await page.click('[data-act=reset]'); await page.check('input[value=vide]'); await page.click('[data-act=modal-ok]');
-  assert.deepStrictEqual(await page.evaluate(() => { const d = NetCarto.Store.db; return [d.sites.length, d.devices.length, d.catalog.length, d.meta.demo, d.stock.every(s => s.available === 0)]; }), [0, 0, 34, false, true]);
+  assert.deepStrictEqual(await page.evaluate(() => { const d = NetCarto.Store.db; return [d.sites.length, d.devices.length, d.catalog.length, d.meta.demo, d.stock.every(s => s.available === 0)]; }), [0, 0, 37, false, true]);
   assert.ok(await page.isVisible('.empty-state')); assert.ok(await page.isHidden('.demo-tag'));
   // Les quatre onglets s'affichent sans erreur sur une base vide
   for (const t of ['inv', 'mat', 'dash', 'carto']) await page.click(`[data-tab=${t}]`);
@@ -928,7 +928,7 @@ test('Serveur : un changement fait par un autre poste apparaît sans recharger l
 test('Serveur : base vide, puis création d\'un site, enregistrés sur le serveur', async page => {
   await page.click('[data-act=reset]'); await page.check('input[value=vide]'); await page.click('[data-act=modal-ok]'); await synchro(page);
   let b = (await api(page, '/base')).json;
-  assert.deepStrictEqual([b.sites.length, b.devices.length, b.catalog.length, b.meta.demo], [0, 0, 34, false]);
+  assert.deepStrictEqual([b.sites.length, b.devices.length, b.catalog.length, b.meta.demo], [0, 0, 37, false]);
   await page.click('.empty-state [data-kind=site]'); await page.waitForSelector('.modal'); await page.fill('.modal [name=name]', 'Siège'); await page.click('[data-act=modal-ok]'); await synchro(page);
   b = (await api(page, '/base')).json;
   assert.deepStrictEqual(b.sites.map(s => s.name), ['Siège']);
@@ -939,6 +939,53 @@ test('Serveur : supervision par le module intégré, sans adresse à saisir', as
   await page.click('[data-act=sources]'); await page.selectOption('.modal [name=type]', 'relais'); await page.click('[data-act=modal-ok]'); await page.waitForFunction(() => NetCarto.Live.state === 'ok', null, { timeout: 5000 });
   assert.deepStrictEqual(await page.evaluate(() => [NetCarto.Live.matched, NetCarto.Live.port.size]), [1, 2]);
 }, { serveur: true, supervision: [{ type: 'simulation', devices: [{ ip: '10.10.99.18', hostname: 'SW-A1-ACC-01', ports: ['Gi1/0/1', 'Gi1/0/2'] }] }] });
+test('Supervision : deux sources voient le même switch et une troisième est en panne — un seul équipement, rien de masqué', async page => {
+  // Un téléphone de l'inventaire porte l'adresse MAC que le switch dira voir sur son port 1
+  await page.evaluate(() => NetCarto.Store.commit('edit', 'Adresse MAC d\'essai', db => { db.devices.find(d => d.hostname === 'TEL-A1-01').mac = '02:00:00:00:00:99'; })); await synchro(page);
+  await page.click('[data-act=sources]'); await page.selectOption('.modal [name=type]', 'relais'); await page.click('[data-act=modal-ok]'); await page.waitForFunction(() => NetCarto.Live.state === 'ok', null, { timeout: 8000 });
+  const r = await page.evaluate(() => { const L = NetCarto.Live, d = NetCarto.Store.db, sw = d.devices.find(x => x.hostname === 'SW-A1-ACC-01'), port = n => { const p = d.ports.find(x => x.deviceId === sw.id && x.name === n); return { id: p.id, m: L.port.get(p.id) }; };
+    return { vus: L.matched, inconnus: L.unmatched, p1: port('Gi1/0/1'), p2: port('Gi1/0/2'), p3: port('Gi1/0/3'), sources: L.sources.map(x => [x.nom, x.ok]), ecarts: L.ecarts, diag: L.diag.get(sw.id) }; });
+  assert.strictEqual(r.vus, 1, 'le switch vu par PRTG (nom DNS) et par SNMP (adresse) ne fait qu\'un');
+  assert.deepStrictEqual(r.inconnus, ['INCONNU-PRTG']);
+  // Les deux sources se complètent sur le port 1 ; sur le port 2 elles se contredisent : la première fait foi, l'écart est gardé
+  assert.deepStrictEqual([r.p1.m.status, r.p1.m.totalMbps, r.p1.m.speedMbps, r.p1.m.macs], ['up', 12, 1000, ['02:00:00:00:00:99']]);
+  assert.strictEqual(r.p2.m.status, 'down'); assert.deepStrictEqual(r.ecarts, ['SW-A1-ACC-01 — GigabitEthernet1/0/2 : prtg dit « down », snmp dit « up »']);
+  assert.deepStrictEqual([r.p3.m.status, r.p3.m.errors], ['error', 250]);
+  assert.deepStrictEqual(r.sources, [['prtg', true], ['snmp', true], ['zabbix', false]]);
+  assert.deepStrictEqual([r.diag.reconnus, r.diag.inconnus], [3, ['Gi9/9/9', 'Vlan99']]);
+  // La fenêtre « Sources de données » dit tout cela
+  await page.click('[data-act=sources]');
+  const fen = (await page.locator('#src-state').innerText()).replace(/\s+/g, ' ');
+  for (const attendu of [/prtg.*1 équipement|prtg.*2 équipements/, /snmp/, /zabbix.*en erreur/i, /INCONNU-PRTG/, /SW-A1-ACC-01.*3 ports reconnus.*2 non reconnus.*Gi9\/9\/9/, /prtg dit « down », snmp dit « up »/]) assert.match(fen, attendu);
+  await page.click('[data-act=modal-close]');
+  // Fiche du port : erreurs de trame, et l'adresse MAC vue est rattachée à l'équipement de l'inventaire
+  await page.evaluate(i => NetCarto.select(i, { keep: true }), r.p3.id); assert.match(await page.locator('#detail').innerText(), /Erreurs de trame\s*250/);
+  await page.evaluate(i => NetCarto.select(i, { keep: true }), r.p1.id); assert.match((await page.locator('#detail').innerText()).replace(/\s+/g, ' '), /02:00:00:00:00:99 → TEL-A1-01/);
+  // Tableau de bord : la source en panne est une alerte
+  await page.click('[data-tab=dash]');
+  assert.match(await page.locator('.alist .al', { hasText: 'Source de supervision en erreur' }).innerText(), /zabbix/);
+  // Un relevé trop ancien n'est pas présenté comme l'état réel
+  const vieux = await page.evaluate(() => { try { NetCarto.Live.apply({ version: 1, ts: Date.now() - 3600e3, devices: [{ ip: '10.10.99.18', state: 'down' }] }); return 'accepté'; } catch (e) { return e.message; } });
+  assert.match(vieux, /date de .* la supervision ne tourne plus/); assert.strictEqual(await page.evaluate(() => NetCarto.Live.dev.size), 0);
+}, { serveur: true, erreursAttendues: /./, supervision: [
+  { type: 'simulation', nom: 'prtg', devices: [{ ip: 'sw-a1-acc-01.exemple.interne', hostname: 'SW-A1-ACC-01', ports: [{ name: 'GigabitEthernet1/0/1', status: 'up', totalMbps: 12 }, { name: 'GigabitEthernet1/0/2', status: 'down' }] }, { ip: '192.0.2.77', hostname: 'INCONNU-PRTG' }] },
+  { type: 'simulation', nom: 'snmp', devices: [{ ip: '10.10.99.18', hostname: '', ports: [{ name: 'Gi1/0/1', status: 'up', speedMbps: 1000, macs: ['02:00:00:00:00:99'], macCount: 1 }, { name: 'Gi1/0/2', status: 'up' }, { name: 'Gi1/0/3', status: 'error', errors: 250 }, { name: 'Vlan99', status: 'up' }, { name: 'Gi9/9/9', status: 'up' }] }] },
+  { type: 'json', nom: 'zabbix', url: 'http://127.0.0.1:1/etat', timeoutMs: 800 }] });
+test('Juniper : les modèles EX du catalogue portent les noms d\'interface Junos, et un relevé s\'y rattache', async page => {
+  const r = await page.evaluate(() => {
+    const S = NetCarto.Store, cat = S.db.catalog.filter(c => c.brand === 'Juniper'), ex = cat.find(c => c.id === 'cat-ex2300-48p');
+    const baie = S.db.racks.find(x => x.name === 'BAIE-A2-01');
+    const id = NetCarto.installFromStock(ex.id, { rackId: baie.id, u: 20, name: 'SW-JUN-01' });
+    S.commit('edit', 'Adresse', db => { db.devices.find(d => d.hostname === 'SW-JUN-01').ip = '10.10.99.201'; });
+    const dev = S.db.devices.find(d => d.hostname === 'SW-JUN-01'), ports = S.db.ports.filter(p => p.deviceId === dev.id).map(p => p.name);
+    Object.assign(NetCarto.Live.cfg, { type: 'relais' });
+    NetCarto.Live.apply({ version: 1, ts: Date.now(), devices: [{ ip: '10.10.99.201', hostname: 'ex2300-test.exemple.interne', state: 'up', ports: [{ name: 'GE-0/0/5', status: 'up' }, { name: 'xe-0/1/0', status: 'down' }, { name: 'ge-0/0/0.0', status: 'up' }, { name: 'me0', status: 'up' }] }] });
+    return { modeles: cat.map(c => c.model).sort(), n: ports.length, premier: ports[0], dernierCuivre: ports[47], montee: ports[48], mesures: NetCarto.Live.port.size, diag: NetCarto.Live.diag.get(dev.id), id: !!id };
+  });
+  assert.deepStrictEqual(r.modeles, ['EX2300-24P', 'EX2300-48P', 'EX3400-24P']);
+  assert.deepStrictEqual([r.n, r.premier, r.dernierCuivre, r.montee], [52, 'ge-0/0/0', 'ge-0/0/47', 'xe-0/1/0']);
+  assert.strictEqual(r.mesures, 2); assert.deepStrictEqual([r.diag.reconnus, r.diag.inconnus], [2, ['me0']], 'une unité logique n\'est pas comptée comme un port inconnu');
+});
 test('Serveur injoignable : la modification est annulée à l\'écran et l\'utilisateur est prévenu', async (page, ctx) => {
   const dev = await page.evaluate(() => { const x = NetCarto.Store.db.devices.find(d => d.hostname === 'SW-A1-ACC-01'); NetCarto.select(x.id); return x; });
   await ctx.app.arreter();
@@ -1208,7 +1255,7 @@ test('Comptes : session expirée en cours de travail → on se reconnecte sans p
       await fn(page, { app, requetes, reponse });
       assert.deepStrictEqual(erreurs, [], 'erreurs dans la console du navigateur');
       console.log('  ok    ' + nom);
-    } catch (e) { echecs++; console.log('  ÉCHEC ' + nom + '\n        ' + String(e.message).split('\n').slice(0, 3).join('\n        ')); }
+    } catch (e) { echecs++; console.log('  ÉCHEC ' + nom + '\n        ' + String(e.message).split('\n').slice(0, process.env.NETCARTO_TEST_DETAIL ? 30 : 3).join('\n        ')); }
     await ctx.close();
     if (app) { await app.arreter(); fs.rmSync(dossier, { recursive: true, force: true }); }
   }

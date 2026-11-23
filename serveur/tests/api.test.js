@@ -16,7 +16,7 @@ test('informations, santé et base de départ', async t => {
   assert.match(info.entetes['content-type'], /application\/json/); assert.strictEqual(info.entetes['cache-control'], 'no-store');
   assert.deepStrictEqual((await requete('GET', api + '/sante')).json, { ok: true, base: 'ok' });
   const b = (await appel('GET', api + '/base')).json;
-  assert.deepStrictEqual([b.sites.length, b.catalog.length, b.vlans.length, b.meta.demo], [0, 34, 8, false]);
+  assert.deepStrictEqual([b.sites.length, b.catalog.length, b.vlans.length, b.meta.demo], [0, 37, 8, false]);
 });
 
 test('remplacer la base, puis appliquer un lot ; refus sans effet en cas de doublon', async t => {

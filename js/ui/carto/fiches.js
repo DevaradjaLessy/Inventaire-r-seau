@@ -12,6 +12,10 @@ import { Carto, iconOf } from './carto.js';
 import { resumeImpact } from '../interventions.js';
 import { traceSection } from './tracage.js';
 import { structButtons } from './structure.js';
+import { Cache } from '../../store.js';
+
+/* Équipements de l'inventaire par adresse MAC, pour rattacher une adresse vue par un switch */
+const parMac = () => Cache.get('parMac', () => new Map(Store.db.devices.filter(d => d.mac && d.status !== 'retired').map(d => [normMac(d.mac) || d.mac, d])));
 
 /* ---------- Fiche de détails ---------- */
 const kv = rows => `<dl class="kv">${rows.filter(r => r && r[1] !== '' && r[1] != null).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
@@ -115,7 +119,9 @@ const Detail = {
     const m = passive ? null : measuredPort(p.id), gap = m?.status && m.status !== p.status;
     const liveSec = m ? sec(`${ico('gauge')}Mesure en direct`, kv([['État mesuré', stPort(m.status || p.status)], gap ? ['Écart', `<span class="st"><span style="color:${COL.warn};display:flex">${ico('alert')}</span>Saisi : ${PORT_STATUS[p.status].label}</span>`] : null,
       m.inMbps != null ? ['Trafic entrant', fmtRate(m.inMbps)] : null, m.outMbps != null ? ['Trafic sortant', fmtRate(m.outMbps)] : null, m.totalMbps != null ? ['Trafic total', fmtRate(m.totalMbps)] : null, m.speedMbps ? ['Débit négocié', fmtSpeed(m.speedMbps)] : null, m.poeW ? ['PoE mesuré', `${m.poeW} W`] : null,
-      m.macs.length ? ['MAC vues', m.macs.slice(0, 4).map(mono).join('<br>')] : null, ['Relevé', fmtClock(m.ts)]])) : '';
+      m.errors ? ['Erreurs de trame', `<span class="st"><span style="color:${COL.warn};display:flex">${ico('alert')}</span>${m.errors}</span> <small class="dim">depuis le relevé précédent</small>`] : null,
+      // Une adresse vue par le switch est rattachée à l'équipement de l'inventaire qui la porte : le lien entre le port et ce qui y est branché
+      m.macCount > m.macs.length ? ['MAC vues', `${m.macCount} adresses : ce port mène à un autre switch`] : m.macs.length ? ['MAC vues', m.macs.slice(0, 8).map(a => { const x = parMac().get(normMac(a) || a); return `${mono(a)}${x ? ` → <a data-act="sel" data-id="${x.id}" style="cursor:pointer">${esc(x.hostname)}</a>` : ' <small class="dim">inconnue de l\'inventaire</small>'}`; }).join('<br>')] : null, ['Relevé', fmtClock(m.ts)]])) : '';
     const cabList = cabs.map(c => { const o = otherEnd(c, p.id), side = passive ? (isPassiveNode(o) ? 'Arrière' : 'Avant') : ''; return `<div class="li" data-act="sel" data-id="${o}">${ico('cable')}<span>${side ? side + ' : ' : ''}${esc(labelOf(o))}</span><small>${esc(c.type.toUpperCase())} · ${c.length} m</small></div>`; }).join('') || '<span class="dim">Aucun câble sur ce port</span>';
     return dHead(passive ? 'passive' : 'switch', `${p.name}`, `Port de <a data-act="sel" data-id="${dev.id}" style="cursor:pointer">${esc(dev.hostname)}</a> · ${esc(locLabel(dev.id, { short: true }))}`) +
       sec('', `<div class="btns"><button class="btn sm pri" data-act="trace" data-id="${p.id}" ${cabs.length ? '' : 'disabled'}>${ico('trace')}Tracer</button><button class="btn sm" data-act="connect" data-id="${p.id}">${ico('link')}Connecter à…</button>${passive ? '' : p.status === 'disabled' ? `<button class="btn sm" data-act="port-retablir" data-id="${p.id}">${ico('bolt')}Réactiver</button>` : `<button class="btn sm danger" data-act="port-couper" data-id="${p.id}" data-tip="Désactiver le port|Avec un motif, noté dans l'historique">${ico('x')}Désactiver</button>`}<button class="btn sm danger" data-act="disconnect" data-id="${p.id}" ${cabs.length ? '' : 'disabled'}>${ico('unlink')}Débrancher</button></div>`) +

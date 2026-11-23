@@ -687,6 +687,34 @@ La base a toujours accepté plusieurs sites, mais l'interface n'avait été essa
 - **Emplacements :** `batLabel` (`js/services/requetes.js`) donne « Bât. A » avec un seul site, « CODE · Bât. A » dès qu'il y en a plusieurs. Le code d'un bâtiment n'est unique que dans son site. Utilisé par `locLabel`, le filtre de l'inventaire, la matrice du tableau de bord et la synthèse.
 - **Tableau de bord et synthèse :** l'en-tête nomme tous les sites. Les chiffres couvrent toute la base ; il n'existe pas de tableau de bord par site.
 
+### 3.33 Supervision : audit, plusieurs sources, Juniper (lot 23)
+
+Demande : vérifier que la supervision est réellement fonctionnelle, sans doublon ni conflit entre sources ; PRTG impératif ; plusieurs solutions possibles ; étudier Juniper.
+
+**Défauts trouvés à la lecture du code, reproduits par un test, puis corrigés :**
+
+| Défaut | Effet | Correction |
+|---|---|---|
+| Deux sources nommaient le même port différemment (`GigabitEthernet1/0/1` pour PRTG, `Gi1/0/1` pour le SNMP) | Port en double ; dans l'interface, le second relevé effaçait le premier | Rapprochement par nom normalisé, côté relais (`nomInterface`) comme côté interface (`normIf`) |
+| PRTG donnant un nom DNS et le SNMP une adresse | Équipement en double | Rapprochement par adresse, sinon par nom d'hôte sans domaine ; l'interface réunit aussi deux relevés du même équipement |
+| En cas de désaccord, la dernière source lue l'emportait | Résultat dépendant de l'ordre d'arrivée, sans trace | La première source de la configuration fait foi ; l'écart est gardé et affiché |
+| Une source en panne disparaissait sans rien dire | Ses équipements revenaient à l'état saisi, sans alerte | État de chaque source dans le relevé, dans la fenêtre « Sources de données » et dans les alertes |
+| Une source qui ne répondait plus bloquait tous les relevés suivants | Supervision figée | Délai de 60 s par source et par relevé |
+| Un relais arrêté laissait son dernier état à l'écran | État mesuré périmé présenté comme réel | Relevé trop ancien refusé ; en erreur, les mesures sont retirées |
+| Junos expose unités logiques, bouclages et interfaces internes | Relevé pollué | Seules les interfaces Ethernet physiques sont gardées (`ifType`) |
+| Un port en erreur n'existait qu'à la saisie | LED orange jamais allumée par une vraie source | Erreurs de trame entre deux relevés (`ifInErrors`, `ifOutErrors`) |
+| Les adresses MAC du contrat n'étaient remplies par aucune vraie source | Champ d'affichage vide | Table de commutation lue en SNMP ; chaque adresse est rattachée à l'équipement de l'inventaire qui la porte |
+| Aucun retour sur les ports non rapprochés | Impossible de savoir pourquoi un port restait sans mesure | Ports non reconnus listés par équipement |
+
+**Décisions :**
+- **Priorité = ordre de la configuration**, et non « l'état le plus grave ». Règle simple à expliquer ; le désaccord reste visible.
+- **Source `json`** pour raccorder un outil sans source dédiée (Zabbix, Centreon, LibreNMS) : l'outil publie son état au format du contrat. Une source native par outil viendra à la demande.
+- **Juniper : la source SNMP standard suffit.** Trois modèles EX au catalogue, avec les noms d'interface de Junos. Le catalogue d'une base existante n'est pas modifié : ces modèles n'arrivent que dans une base neuve, ou par « Nouveau modèle ».
+- **Ce qui n'est pas remonté, et dit comme tel :** VLAN et puissance PoE par port (pas de MIB commune) ; changements instantanés (pas d'écoute des traps) ; NETCONF, API REST de Junos, gNMI, Mist.
+- **Connectique.** NetCarto connaît les ports RJ45, SFP, SFP+ et LC, et les câbles Cat6A, cordon RJ45, fibre OM3, fibre OS2 et DAC ; il refuse de relier du cuivre à de la fibre. Ne sont pas modélisés : les ports QSFP+ et QSFP28 (40 et 100 Gb/s, empilage des EX3400 et EX4300), ni les modules optiques comme objets d'inventaire (type SR ou LR, compatibilité avec le switch).
+
+**Rien de tout cela n'a tourné contre un vrai PRTG ni un vrai switch.** Les simulateurs imitent les réponses documentées ; l'essai réel reste dans les rappels de la section 4.
+
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
@@ -723,8 +751,15 @@ La base a toujours accepté plusieurs sites, mais l'interface n'avait été essa
 | 19 | **Docker :** image NetCarto et `docker-compose.yml` | Élevé (high) | ✅ Fait (voir 3.20) |
 | 20 | **Installation Linux :** `installer.sh`, systemd, mise à jour, désinstallation | Élevé (high) | ✅ Fait (voir 3.21) |
 | 22 | **Three.js hébergé localement**, pour fonctionner sans Internet | Moyen | ✅ Fait (voir 3.22) |
+| 23 | **Supervision fiable et multi-sources :** audit du module (`connecteurs/`), fusion sans doublon ni conflit entre sources, priorité explicite, Juniper (noms d'interfaces Junos, modèles EX au catalogue), PRTG, ce que chaque source remonte réellement | Élevé (high) | ✅ Fait (voir 3.33) |
+| 24 | **Localisation des sites et des bâtiments :** adresse et lien d'itinéraire vers un service de cartes, sans carte intégrée dans la page (aucune adresse extérieure appelée) | Moyen | ⏳ À faire |
+| 25 | **Interventions planifiées :** « à venir » sur un équipement, une prise ou une pièce, avec note, date, personne chargée et état ; visibles par toute l'équipe | Élevé (high) | ⏳ À faire |
+| 26 | **Liaisons entre sites :** vue des sites et des liens qui les relient (fibre, opérateur) | Moyen | ⏳ À faire |
+| 27 | **Firmware de référence par modèle :** version cible saisie par l'administrateur, écarts signalés. Un flux d'actualité des constructeurs demande une décision (accès à Internet depuis le serveur, pas de source commune aux constructeurs) | Moyen | ⏳ À faire |
 
 **Ordre de réalisation (décision du 2026-11-19) :** 16, 17, 11, 18, 14, 19, 20, 22. Les lots 9 (reste), 13 et 15 viennent ensuite. Il n'y a pas de lot 21.
+
+**Lots 23 à 27 (demandes du 2026-11-23) :** dans cet ordre. La supervision passe en premier : PRTG est déclaré impératif.
 
 Le stockage partagé, les comptes, le journal d'audit et la supervision réelle, auparavant « en attente de décision », sont désormais couverts par les lots 16 et 17 et par la section 3.14.
 
@@ -788,6 +823,13 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-23 | « Si je photographie les bureaux et que je t'envoie un plan, tu pourras tout reproduire (emplacements, liaisons, 3D) ? » | 🕓 Question, réponse donnée. Possible pour le plan, les pièces, les baies et leur contenu ; les liaisons demandent un relevé de brassage. Les données réelles ne doivent pas entrer dans le dépôt (public) : elles seraient livrées en fichier à importer. En attente des documents. |
 | 2026-11-23 | « La liste des étages est transparente ? C'est pareil pour tous les menus ? » (capture d'écran) | ✅ Défaut corrigé : les deux listes posées sur une barre d'outils (étage, baie) se déroulaient sur fond blanc. Fond et texte des choix imposés pour toutes les listes ; scénario de contraste dans les deux thèmes. |
 | 2026-11-23 | « J'ai créé un nouveau site : il m'affiche les mêmes bâtiments, et un clic ramène sur le site de démonstration » (capture d'écran) | ✅ Défaut corrigé : la vue d'un site montrait tous les étages de la base. Elle ne montre plus que les siens, et dit quoi faire quand le site est vide. Avec plusieurs sites, les emplacements, le filtre de l'inventaire et le tableau de bord nomment le site (`batLabel`), car deux sites peuvent avoir chacun leur « Bât. A ». |
+| 2026-11-23 | « Étudie ce que les switchs Juniper permettent de récupérer en temps réel (état des connexions et des ports) pour l'intégrer à la vue 3D ; étudie aussi les connecteurs et la connectique compatibles » | ✅ Lot 23 (voir 3.33) : la source SNMP standard suffit pour Juniper ; trois modèles EX au catalogue ; connectique décrite, QSFP et modules optiques non modélisés. |
+| 2026-11-23 | « Vérifie que les sources de données sont réellement fonctionnelles et pas seulement visuelles : communication entre Juniper, la vue 3D et les autres supervisions, sans bug, conflit, doublon ni problème de synchronisation. PRTG est impératif ; prévoir plusieurs solutions de supervision » | ✅ Lot 23 (voir 3.33) : dix défauts trouvés et corrigés (doublons, conflits, source en panne, relevé périmé) ; source `json` pour les autres outils. Non essayé sur un vrai PRTG. |
+| 2026-11-23 | « Ajouter la localisation des bâtiments avec Google Maps, pour s'y rendre » | ⏳ Lot 24. Un lien d'itinéraire, pas de carte intégrée : la page ne doit appeler aucune adresse extérieure. |
+| 2026-11-23 | « Programmer une intervention “à venir” (résoudre une alerte Wi-Fi, installer tel matériel) avec une note, pour que l'équipe voie qui fait quoi » | ⏳ Lot 25. |
+| 2026-11-23 | « Voir quels sites sont connectés entre eux, par exemple par une fibre » | ⏳ Lot 26. |
+| 2026-11-23 | « Firmware par modèle : une source d'actualité qui prévient quand une mise à jour est disponible ? » | ⏳ Lot 27. Version de référence saisie à la main d'abord ; le flux automatique demande une décision. |
+| 2026-11-23 | « Cherche sur claudeskills.fr des skills utiles au projet, de la gestion de projet à la technique, et applique-les » | 🕓 Annuaire lu (environnement `inventaire-r-seau` créé pour autoriser le site). Les skills sont des dépôts GitHub de tiers : aucun installé sans relecture de leur contenu ni accord. Sélection proposée à l'utilisateur. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---
