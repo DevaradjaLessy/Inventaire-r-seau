@@ -3,12 +3,12 @@
 'use strict';
 const { isDeepStrictEqual } = require('util');
 const { ErreurMetier, traduire } = require('./erreurs');
-const { COLLECTIONS, ORDRE, GROUPE, ID, versLigne, versObjet, colonnes, colonneCle } = require('./schema');
+const { COLLECTIONS, ORDRE, FACULTATIVES, GROUPE, ID, versLigne, versObjet, colonnes, colonneCle } = require('./schema');
 const { verifier } = require('./regles');
 const { creerComptes } = require('./comptes');
 
 const APP = 'NetCarto', SCHEMA_JSON = 1, MAX_CHANGEMENTS = 50000;
-const LIBELLE = { vlans: 'VLAN', sites: 'site', batiments: 'bâtiment', etages: 'étage', pieces: 'pièce', catalogue: 'modèle du catalogue', catalogue_ports: 'groupe de ports', stock: 'ligne de stock', baies: 'baie', equipements: 'équipement', ports: 'port', prises: 'prise murale', cables: 'câble', journal: 'entrée du journal' };
+const LIBELLE = { vlans: 'VLAN', sites: 'site', batiments: 'bâtiment', etages: 'étage', pieces: 'pièce', catalogue: 'modèle du catalogue', catalogue_ports: 'groupe de ports', stock: 'ligne de stock', interventions: 'intervention', baies: 'baie', equipements: 'équipement', ports: 'port', prises: 'prise murale', cables: 'câble', journal: 'entrée du journal' };
 
 function creerDepot(pilote, versionSchema) {
   const p = pilote;
@@ -67,7 +67,7 @@ function creerDepot(pilote, versionSchema) {
     const m = verifier(p, touchees);
     if (m) throw new ErreurMetier('regle', m);
   }
-  const nomDe = (c, o) => (o && (o.hostname || o.name || o.label || o.model || o.id || o.catalogId)) || c;
+  const nomDe = (c, o) => (o && (o.hostname || o.name || o.label || o.model || o.title || o.id || o.catalogId)) || c;
   /* Exécute une écriture en traduisant les refus de la base en messages clairs */
   function ecrire(fn, contexte) { try { fn(); } catch (e) { if (e instanceof ErreurMetier) throw e; throw traduire(e, contexte) || e; } }
 
@@ -111,6 +111,8 @@ function creerDepot(pilote, versionSchema) {
   /* Remplace toute la base par un document JSON (import, réinitialisation), tout ou rien */
   function remplacerBase(doc, ctx = null, trace = { action: 'remplacement', libelle: 'Remplacement de toute la base' }) {
     if (!doc || typeof doc !== 'object' || !doc.meta || doc.meta.app !== APP) throw new ErreurMetier('invalide', 'Ce document n\'est pas une base NetCarto.');
+    // Un export plus ancien n'a pas les sections ajoutées depuis : elles valent une liste vide
+    for (const c of FACULTATIVES) if (doc[c] === undefined) doc = { ...doc, [c]: [] };
     for (const c of ORDRE) if (!Array.isArray(doc[c])) throw new ErreurMetier('invalide', `Section « ${c} » absente ou invalide.`);
     return p.transaction(() => {
       for (const c of [...ORDRE].reverse()) p.lancer(`DELETE FROM ${COLLECTIONS[c].table}`);

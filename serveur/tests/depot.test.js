@@ -4,7 +4,7 @@ const test = require('node:test'), assert = require('node:assert'), path = requi
 const { ouvrirBase, ErreurMetier } = require('../donnees');
 const { dossierTemporaire, demo, depart, parCle } = require('./aide');
 
-const COLLECTIONS = ['vlans', 'sites', 'buildings', 'floors', 'rooms', 'racks', 'devices', 'ports', 'outlets', 'cables', 'catalog', 'stock', 'history'];
+const COLLECTIONS = ['vlans', 'sites', 'buildings', 'floors', 'rooms', 'racks', 'devices', 'ports', 'outlets', 'cables', 'catalog', 'stock', 'interventions', 'history'];
 const cleDe = c => (c === 'stock' ? 'catalogId' : 'id');
 async function baseDemo(t) {
   const depot = ouvrirBase({ fichier: path.join(dossierTemporaire(t), 'netcarto.sqlite') });
@@ -26,11 +26,11 @@ test('une base neuve reçoit le schéma et le modèle de départ, sans aucun sit
   assert.deepStrictEqual([b.meta.app, b.meta.demo, b.sites.length, b.devices.length], ['NetCarto', false, 0, 0]);
   assert.strictEqual(b.catalog.length, 37); assert.strictEqual(b.vlans.length, 8);
   assert.ok(b.stock.length === 37 && b.stock.every(s => s.available === 0));
-  assert.strictEqual(depot.versionSchema(), 3);
+  assert.strictEqual(depot.versionSchema(), 4);
   depot.fermer();
   // Réouverture : rien n'est recréé ni perdu, les migrations ne sont pas rejouées
   const d2 = ouvrirBase({ fichier, depart: await depart() });
-  assert.strictEqual(d2.lireBase().catalog.length, 37); assert.strictEqual(d2.versionSchema(), 3);
+  assert.strictEqual(d2.lireBase().catalog.length, 37); assert.strictEqual(d2.versionSchema(), 4);
   d2.fermer();
 });
 
@@ -126,6 +126,33 @@ test('remplacement complet : tout ou rien, et lecture filtrée', async t => {
   assert.strictEqual(depot.lire('sites', 'site-absent'), null);
 });
 
+test('interventions planifiées : création, avancement, valeurs contrôlées, et base plus ancienne acceptée', async t => {
+  const { depot, d } = await baseDemo(t), dev = d.devices.find(x => x.hostname === 'AP-B0-03');
+  const i = { id: 'int-essai-1', ref: dev.id, title: 'Remplacer la borne en panne', note: 'Borne de rechange en stock', date: '2026-12-02', assignee: 'tech', status: 'planned', createdBy: 'admin', createdAt: 1700000000000, doneAt: null };
+  depot.appliquerLot({ changements: [{ collection: 'interventions', op: 'creer', cle: i.id, apres: i }] });
+  assert.deepStrictEqual(depot.lireBase().interventions.find(x => x.id === i.id), i);
+  // Avancement : en cours, puis faite
+  const fait = { ...i, status: 'done', doneAt: 1700000500000 };
+  depot.appliquerLot({ changements: [changer('interventions', i, { status: 'done', doneAt: 1700000500000 })] });
+  assert.deepStrictEqual(depot.lire('interventions', i.id), fait);
+  // Valeurs refusées : état inconnu, date mal écrite, titre vide, propriété inconnue
+  const neuf = m => ({ changements: [{ collection: 'interventions', op: 'creer', cle: 'int-essai-2', apres: { ...i, id: 'int-essai-2', ...m } }] });
+  refuse(() => depot.appliquerLot(neuf({ status: 'annulee' })), 'regle');
+  refuse(() => depot.appliquerLot(neuf({ date: '02/12/2026' })), 'invalide', /date/);
+  refuse(() => depot.appliquerLot(neuf({ title: '  ' })), 'invalide', /title/);
+  refuse(() => depot.appliquerLot(neuf({ priorite: 'haute' })), 'invalide', /inconnue/);
+  refuse(() => depot.appliquerLot(neuf({ note: 'x'.repeat(20001) })), 'invalide', /trop long/);
+  assert.strictEqual(depot.lireBase().interventions.length, d.interventions.length + 1, 'aucun refus n\'a rien écrit');
+  // Sans objet visé, sans date, sans personne : une intervention générale est permise
+  depot.appliquerLot(neuf({ ref: null, date: '', assignee: '' }));
+  assert.strictEqual(depot.lire('interventions', 'int-essai-2').ref, null);
+  // L'objet visé peut disparaître : l'intervention reste, pour mémoire
+  depot.appliquerLot({ changements: [{ collection: 'interventions', op: 'supprimer', cle: 'int-essai-2', avant: depot.lire('interventions', 'int-essai-2') }] });
+  // Un export fait avant l'existence des interventions se recharge : la section manquante vaut une liste vide
+  const ancien = { ...d }; delete ancien.interventions;
+  depot.remplacerBase(ancien);
+  assert.deepStrictEqual(depot.lireBase().interventions, []);
+});
 test('les données survivent à la fermeture, dans le dossier indiqué', async t => {
   const dossier = dossierTemporaire(t), fichier = path.join(dossier, 'sous-dossier', 'netcarto.sqlite');
   const a = ouvrirBase({ fichier }); a.remplacerBase(await demo()); const rev = a.revision(); a.fermer();

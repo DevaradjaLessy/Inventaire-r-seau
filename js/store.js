@@ -1,5 +1,5 @@
 /* Store : état, index, historique, annulation, sauvegarde locale. Toute modification passe par Store.commit(type, texte, mutation). */
-import { APP, CATEGORIES, DEVICE_STATUS, OUTLET_USAGE, PORT_KIND, PORT_ROLE, PORT_STATUS } from './config.js';
+import { APP, CATEGORIES, DEVICE_STATUS, INTERV_STATUS, OUTLET_USAGE, PORT_KIND, PORT_ROLE, PORT_STATUS } from './config.js';
 import { nextId, setRandomIds } from './utils.js';
 import { buildDemo, emptyDb } from './demo.js';
 import { defaire, diff, ecartEntre, lotInverse } from './ecarts.js';
@@ -75,6 +75,8 @@ const Store = {
   validate(d) {
     if (!d || typeof d !== 'object' || !d.meta || d.meta.app !== APP.name) return 'Ce fichier n\'est pas un export NetCarto.';
     if (d.meta.schemaVersion > APP.schemaVersion) return 'Ce fichier vient d\'une version plus récente de NetCarto.';
+    // Sections ajoutées après la première version : un fichier plus ancien, qui ne les a pas, reste accepté
+    if (d.interventions === undefined) d.interventions = [];
     for (const k of Object.keys(emptyDb())) if (k !== 'meta' && !Array.isArray(d[k])) return `Section « ${k} » absente ou invalide.`;
     // Contrôle du contenu : ces valeurs sont insérées dans la page, elles doivent donc avoir une forme sûre
     const ID = /^[A-Za-z0-9_-]{1,64}$/, COLOR = /^#[0-9a-fA-F]{3,8}$/, IMG = /^data:image\/(png|jpeg|jpg|webp|gif|svg\+xml)[;,]/, DATE = /^\d{4}-\d{2}-\d{2}$/;   // une image est toujours intégrée : jamais d'adresse extérieure
@@ -93,6 +95,7 @@ const Store = {
       catalog: e => id(e.id) && e.category in CATEGORIES && Array.isArray(e.ports) && e.ports.every(g => g && g.kind in PORT_KIND) && (!e.visual || (col(e.visual.color) && col(e.visual.accent) && img(e.visual.frontImage))),
       stock: e => id(e.catalogId) && nb(e.available) && nb(e.threshold),
       vlans: e => Number.isInteger(e.id) && col(e.color),
+      interventions: e => id(e.id) && ref(e.ref) && typeof e.title === 'string' && !!e.title.trim() && date(e.date) && e.status in INTERV_STATUS && nb(e.createdAt) && nb(e.doneAt),
       history: e => e && typeof e === 'object',
     };
     for (const [k, ok] of Object.entries(RULES)) {

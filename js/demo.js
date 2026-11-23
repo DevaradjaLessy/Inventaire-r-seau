@@ -7,7 +7,7 @@ function emptyDb() {
   return {
     meta: { app: APP.name, schemaVersion: APP.schemaVersion, updatedAt: Date.now(), demo: false, seq: 0 },
     vlans: [], sites: [], buildings: [], floors: [], rooms: [], racks: [], devices: [], ports: [], outlets: [], cables: [],
-    catalog: [], stock: [], history: [],
+    catalog: [], stock: [], interventions: [], history: [],
   };
 }
 /* Crée les ports d'un équipement à partir des groupes de ports de son modèle */
@@ -379,6 +379,13 @@ function buildDemo() {
     [200, 'import', 'Initialisation du jeu de données de démonstration'],
   ];
   db.history = hist.map(([h, type, text]) => ({ id: nextId(db, 'h'), ts: now - h * H, type, text, ref: null }));
+  // Deux interventions planifiées, pour montrer la fonction : l'une en cours sur la borne en panne, l'autre à venir sur un port en erreur
+  const jourDans = n => { const t = new Date(now + n * 86400000); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; };
+  const borne = db.devices.find(x => x.hostname === 'AP-B0-03'), portErr = db.ports.find(p => p.status === 'error');
+  db.interventions = [
+    { id: nextId(db, 'int'), ref: borne ? borne.id : null, title: 'Remplacer la borne Wi-Fi en panne', note: 'Borne de rechange en stock. Prévoir un escabeau.', date: jourDans(2), assignee: 'Équipe réseau', status: 'doing', createdBy: '', createdAt: now - 20 * H, doneAt: null },
+    { id: nextId(db, 'int'), ref: portErr ? portErr.id : null, title: 'Contrôler le port en erreur et son cordon', note: '', date: jourDans(5), assignee: '', status: 'planned', createdBy: '', createdAt: now - 3 * H, doneAt: null },
+  ];
   db.meta.updatedAt = now;
   return db;
 }

@@ -154,7 +154,7 @@ Derrière un proxy inverse, mettez `proxyDeConfiance = true` dans la section `[s
 
 Un seul fichier, `netcarto.sqlite`, dans le dossier de données. Ne le copiez pas à la main pendant que le serveur tourne : utilisez les sauvegardes ci-dessous, qui donnent une copie cohérente.
 
-Une table par type d'objet : `sites`, `batiments`, `etages`, `pieces`, `baies`, `equipements`, `ports`, `prises`, `cables`, `catalogue`, `catalogue_ports`, `stock`, `vlans`, `journal`, `meta`, puis `utilisateurs`, `sessions` et `audit`. Le schéma complet est dans `donnees/migrations/sqlite/`.
+Une table par type d'objet : `sites`, `batiments`, `etages`, `pieces`, `baies`, `equipements`, `ports`, `prises`, `cables`, `catalogue`, `catalogue_ports`, `stock`, `vlans`, `interventions`, `journal`, `meta`, puis `utilisateurs`, `sessions` et `audit`. Le schéma complet est dans `donnees/migrations/sqlite/`.
 
 Ce que la base garantit :
 
@@ -235,7 +235,7 @@ La session tient dans un cookie `HttpOnly`, `SameSite=Strict` (et `Secure`, avec
 
 La commande `npm run attaques` rejoue la campagne d'attaques de `SECURITE.md` (section 8) contre un serveur de test qu'elle démarre elle-même.
 
-Ressources : `sites`, `batiments`, `etages`, `pieces`, `baies`, `equipements`, `ports`, `prises`, `cables`, `catalogue`, `stock`, `vlans`, `journal`.
+Ressources : `sites`, `batiments`, `etages`, `pieces`, `baies`, `equipements`, `ports`, `prises`, `cables`, `catalogue`, `stock`, `vlans`, `interventions`, `journal`.
 
 Exemple :
 

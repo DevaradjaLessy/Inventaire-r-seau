@@ -530,6 +530,69 @@ test('Liaisons : les rocades entre bâtiments sont réunies en liaisons, et une 
   await page.evaluate(() => { const ids = NetCarto.liaisons().flatMap(x => x.cables.map(c => c.id)); NetCarto.Store.commit('edit', 'Rocades retirées', db => { db.cables = db.cables.filter(c => !ids.includes(c.id)); }); });
   await page.click('[data-tab=dash]'); assert.match(await page.locator('#liaisons-card').innerText(), /Aucun câble ne relie deux bâtiments/);
 });
+/* ---------- Interventions planifiées ---------- */
+test('Interventions : planifier sur un équipement, suivre l\'avancement, voir le retard, annuler', async page => {
+  const avant = await page.evaluate(() => NetCarto.Store.db.interventions.length);
+  await choisir(page, 'AP-B0-03');
+  await page.click('#detail [data-act=interv-new]'); await page.waitForSelector('.modal');
+  assert.match(await page.locator('.modal').innerText(), /AP-B0-03/);
+  await page.click('[data-act=modal-ok]'); assert.match(await page.locator('.toast').last().innerText(), /titre/i);   // le titre est obligatoire
+  await page.fill('.modal [name=title]', 'Remplacer la borne du magasin'); await page.fill('.modal [name=note]', 'Borne de rechange en stock, nacelle à prévoir');
+  await page.fill('.modal [name=date]', '2020-01-15'); await page.fill('.modal [name=assignee]', 'Camille'); await page.click('[data-act=modal-ok]');
+  const i = await page.evaluate(() => NetCarto.Store.db.interventions.at(-1));
+  assert.deepStrictEqual([i.title, i.date, i.assignee, i.status, typeof i.createdAt, /^int-/.test(i.id)], ['Remplacer la borne du magasin', '2020-01-15', 'Camille', 'planned', 'number', true]);
+  // Sur la fiche de l'équipement
+  assert.match((await page.locator('#detail .interv').innerText()).replace(/\s+/g, ' '), /Remplacer la borne du magasin .*Camille/);
+  // Au tableau de bord : la carte, et une alerte puisque la date est passée
+  await page.click('[data-tab=dash]');
+  const ligne = page.locator('#interv-card .iv-row', { hasText: 'Remplacer la borne du magasin' });
+  assert.match((await ligne.innerText()).replace(/\s+/g, ' '), /AP-B0-03.*15\/01\/2020.*Camille.*en retard/i);
+  assert.strictEqual(await page.locator('.alist .al', { hasText: 'Intervention en retard : Remplacer la borne du magasin' }).count(), 1);
+  // Avancement : en cours, puis terminée (elle quitte la liste des interventions à faire, et l'alerte disparaît)
+  await ligne.locator('[data-act=interv-etat][data-s=doing]').click();
+  assert.match(await page.locator('#interv-card .iv-row', { hasText: 'Remplacer la borne du magasin' }).innerText(), /En cours/);
+  await page.locator('#interv-card .iv-row', { hasText: 'Remplacer la borne du magasin' }).locator('[data-act=interv-etat][data-s=done]').click();
+  assert.strictEqual(await page.locator('#interv-card .iv-ouvertes .iv-row', { hasText: 'Remplacer la borne du magasin' }).count(), 0);
+  assert.strictEqual(await page.locator('.alist .al', { hasText: 'Intervention en retard : Remplacer' }).count(), 0);
+  const fait = await page.evaluate(id => NetCarto.Store.db.interventions.find(x => x.id === id), i.id);
+  assert.deepStrictEqual([fait.status, typeof fait.doneAt], ['done', 'number']);
+  // Chaque étape s'annule
+  await page.keyboard.press('Control+z'); assert.strictEqual(await page.evaluate(id => NetCarto.Store.db.interventions.find(x => x.id === id).status, i.id), 'doing');
+  // Une intervention générale, sans objet ; puis modification et suppression
+  await page.click('#interv-card [data-act=interv-new]'); await page.fill('.modal [name=title]', 'Inventaire annuel du stock'); await page.click('[data-act=modal-ok]');
+  const gen = page.locator('#interv-card .iv-row', { hasText: 'Inventaire annuel du stock' });
+  await gen.locator('[data-act=interv-edit]').click(); await page.fill('.modal [name=assignee]', 'Équipe réseau'); await page.click('[data-act=modal-ok]');
+  assert.match(await page.locator('#interv-card .iv-row', { hasText: 'Inventaire annuel du stock' }).innerText(), /Équipe réseau/);
+  await page.locator('#interv-card .iv-row', { hasText: 'Inventaire annuel du stock' }).locator('[data-act=interv-del]').click(); await page.click('[data-act=modal-ok]');
+  assert.strictEqual(await page.evaluate(() => NetCarto.Store.db.interventions.length), avant + 1);
+});
+test('Interventions : un export d\'avant leur existence se recharge, et un fichier piégé est refusé', async page => {
+  const r = await page.evaluate(() => { const S = NetCarto.Store, d = JSON.parse(JSON.stringify(S.db)); delete d.interventions;
+    const ancien = S.validate(d), aAjoute = Array.isArray(d.interventions);
+    const mauvais = m => { const x = JSON.parse(JSON.stringify(S.db)); x.interventions = [{ id: 'int-1', ref: null, title: 'Essai', note: '', date: '', assignee: '', status: 'planned', createdBy: '', createdAt: 1, doneAt: null, ...m }]; return !!S.validate(x); };
+    return { ancien, aAjoute, bon: mauvais({}), etat: mauvais({ status: 'x' }), date: mauvais({ date: '<img>' }), titre: mauvais({ title: '' }), ref: mauvais({ ref: '"><script>' }) }; });
+  assert.deepStrictEqual(r, { ancien: null, aAjoute: true, bon: false, etat: true, date: true, titre: true, ref: true });
+});
+test('Interventions : ce qu\'un technicien planifie est vu par les autres, et tracé', async (page, { app }) => {
+  await choisir(page, 'SW-A1-ACC-01'); await page.click('#detail [data-act=interv-new]');
+  await page.fill('.modal [name=title]', 'Mise à niveau du firmware'); await page.fill('.modal [name=date]', '2020-06-01'); await page.click('[data-act=modal-ok]'); await synchro(page);
+  const srv = (await api(page, '/interventions')).json.find(x => x.title === 'Mise à niveau du firmware');
+  assert.deepStrictEqual([srv.status, srv.createdBy, srv.assignee, srv.date], ['planned', 'tech', 'Compte tech', '2020-06-01']);
+  // Un compte en lecture seule la voit, sans pouvoir y toucher
+  const r = await fetch(`http://127.0.0.1:${app.port}/api/v1/session`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identifiant: 'lecteur', motDePasse: MDP }) });
+  const ctx = await page.context().browser().newContext({ viewport: { width: 1600, height: 900 } });
+  await ctx.addCookies([{ name: 'netcarto_session', value: r.headers.getSetCookie()[0].split(';')[0].split('=')[1], url: `http://127.0.0.1:${app.port}/` }]);
+  const p2 = await ctx.newPage(); await p2.goto(`http://127.0.0.1:${app.port}/`); await p2.waitForFunction(() => window.NetCarto?.Store.db);
+  await p2.click('[data-tab=dash]');
+  const ligne = p2.locator('#interv-card .iv-row', { hasText: 'Mise à niveau du firmware' }); await ligne.waitFor();
+  assert.match((await ligne.innerText()).replace(/\s+/g, ' '), /SW-A1-ACC-01.*01\/06\/2020.*Compte tech/);
+  // L'alerte de retard reste visible en lecture seule, et mène à l'équipement
+  const al = p2.locator('.alist .al', { hasText: 'Intervention en retard : Mise à niveau du firmware' }); assert.ok(await al.isVisible());
+  await al.click(); await p2.waitForSelector('#tab-carto.on #detail:has-text("SW-A1-ACC-01")'); await p2.click('[data-tab=dash]');
+  assert.strictEqual(await p2.locator('#interv-card [data-act]:visible').evaluateAll(l => l.filter(b => /^interv-(new|edit|etat|del)$/.test(b.dataset.act)).length), 0);
+  await ctx.close();
+}, { serveur: true, compte: 'tech' });
+
 /* ---------- Dossier pour un prestataire ---------- */
 test('Dossier prestataire : plan, prises, équipements et baies d\'un étage ou d\'un bâtiment dans un seul document, sans adresses par défaut', async page => {
   await page.evaluate(() => { window.__imprime = 0; window.print = () => { window.__imprime++; }; NetCarto.select(NetCarto.Store.db.floors[1].id); });
@@ -580,6 +643,7 @@ test('Sécurité : aucun texte saisi n\'est interprété comme du code, où qu\'
     for (const x of d.catalog) { T(x, ['brand', 'model', 'ref', 'firmware', 'description']); if (x.specs && typeof x.specs === 'object') for (const k of Object.keys(x.specs)) if (typeof x.specs[k] === 'string') x.specs[k] = charge; }
     for (const x of d.stock) T(x, ['location']);
     for (const x of d.history) T(x, ['text']);
+    for (const x of d.interventions) T(x, ['title', 'note', 'assignee', 'createdBy']);
     const err = S.validate(d); if (err) return err;
     S.save = () => {}; S.db = d; S.undoStack = []; S.reindex(); S.emit(); return null;
   }, CHARGE);

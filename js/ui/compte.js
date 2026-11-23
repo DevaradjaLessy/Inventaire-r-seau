@@ -142,10 +142,10 @@ Actions['user-lien'] = el => {
 
 /* --- Journal d'audit (administrateur) --- */
 const ACTIONS = { operation: 'Opération', sauvegarde_telecharger: 'Sauvegarde téléchargée', lien_reinitialisation: 'Lien de réinitialisation', demande_reinitialisation: 'Mot de passe oublié', mot_de_passe_reinitialise: 'Mot de passe réinitialisé', sauvegarde: 'Sauvegarde', sauvegarde_supprimer: 'Sauvegarde supprimée', restauration: 'Restauration', creer: 'Création', modifier: 'Modification', supprimer: 'Suppression', remplacement: 'Remplacement de la base', connexion: 'Connexion', echec_connexion: 'Échec de connexion', utilisateur_creer: 'Compte créé', utilisateur_modifier: 'Compte modifié', utilisateur_supprimer: 'Compte supprimé', mot_de_passe: 'Mot de passe changé' };
-const OBJETS = { sites: 'site', buildings: 'bâtiment', floors: 'étage', rooms: 'pièce', racks: 'baie', devices: 'équipement', ports: 'port', outlets: 'prise', cables: 'câble', catalog: 'modèle', stock: 'stock', vlans: 'VLAN', utilisateurs: 'compte' };
+const OBJETS = { sites: 'site', buildings: 'bâtiment', floors: 'étage', rooms: 'pièce', racks: 'baie', devices: 'équipement', ports: 'port', outlets: 'prise', cables: 'câble', catalog: 'modèle', stock: 'stock', vlans: 'VLAN', interventions: 'intervention', utilisateurs: 'compte' };
 const court = v => { const s = v === null || v === undefined || v === '' ? '∅' : typeof v === 'object' ? JSON.stringify(v) : String(v); return s.length > 60 ? s.slice(0, 57) + '…' : s; };
 /* Noms des champs les plus courants, tels que l'interface les affiche ; un champ absent d'ici garde son nom technique */
-const CHAMPS = { hostname: 'nom', name: 'nom', label: 'repère', ip: 'adresse IP', mac: 'adresse MAC', serial: 'n° de série', firmware: 'firmware', installDate: 'installé le', status: 'statut', notes: 'notes', description: 'description', u: 'position (U)', rackId: 'baie', roomId: 'pièce', floorId: 'étage', catalogId: 'modèle', vlan: 'VLAN', speed: 'débit', connected: 'terminal', subnet: 'sous-réseau', color: 'couleur', available: 'disponible', threshold: 'seuil d\'alerte', location: 'lieu de stockage', length: 'longueur', type: 'type', usage: 'usage', address: 'adresse' };
+const CHAMPS = { hostname: 'nom', name: 'nom', label: 'repère', ip: 'adresse IP', mac: 'adresse MAC', serial: 'n° de série', firmware: 'firmware', installDate: 'installé le', status: 'statut', notes: 'notes', description: 'description', u: 'position (U)', rackId: 'baie', roomId: 'pièce', floorId: 'étage', catalogId: 'modèle', vlan: 'VLAN', speed: 'débit', connected: 'terminal', subnet: 'sous-réseau', color: 'couleur', available: 'disponible', threshold: 'seuil d\'alerte', location: 'lieu de stockage', length: 'longueur', type: 'type', usage: 'usage', address: 'adresse', title: 'titre', assignee: 'chargé de', date: 'date prévue', note: 'note', doneAt: 'terminée le' };
 /* Champs qui diffèrent entre la valeur avant et la valeur après */
 function ecarts(avant, apres) {
   const plat = o => Object.fromEntries(Object.entries(o || {}).flatMap(([k, v]) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.entries(v).map(([k2, v2]) => [`${k}.${k2}`, v2]) : [[k, v]])));
@@ -153,7 +153,7 @@ function ecarts(avant, apres) {
   return [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(k => JSON.stringify(a[k]) !== JSON.stringify(b[k])).map(k => `<span class="a-chg"><b>${esc(CHAMPS[k] || k)}</b> : ${esc(court(a[k]))} → ${esc(court(b[k]))}</span>`);
 }
 /* Noms au pluriel, pour les décomptes */
-const PLURIELS = { sites: 'sites', buildings: 'bâtiments', floors: 'étages', rooms: 'pièces', racks: 'baies', devices: 'équipements', ports: 'ports', outlets: 'prises', cables: 'câbles', catalog: 'modèles', stock: 'lignes de stock', vlans: 'VLAN', history: 'actions d\'historique' };
+const PLURIELS = { sites: 'sites', buildings: 'bâtiments', floors: 'étages', rooms: 'pièces', racks: 'baies', devices: 'équipements', ports: 'ports', outlets: 'prises', cables: 'câbles', catalog: 'modèles', stock: 'lignes de stock', vlans: 'VLAN', interventions: 'interventions', history: 'actions d\'historique' };
 const compte = (c, n) => `${n} ${n > 1 ? PLURIELS[c] || c : OBJETS[c] || c}`;
 /* Familles d'actions proposées dans le filtre */
 const FAMILLES = {

@@ -202,7 +202,7 @@ test('une base du lot 16 (version 1) reçoit les nouvelles tables sans perdre se
   p.lancer('INSERT INTO meta (cle, valeur) VALUES (\'initialisee\', \'1\'), (\'revision\', \'7\')');
   p.fermer();
   const { app, api, admin } = await serveurDeTest(t, { dossier });
-  assert.strictEqual(app.depot.versionSchema(), 3);
+  assert.strictEqual(app.depot.versionSchema(), 4);
   assert.deepStrictEqual((await requete('GET', api + '/sites', undefined, admin)).json.map(x => x.name), ['Ancien site']);
   assert.strictEqual((await requete('GET', api + '/batiments', undefined, admin)).json.length, 1);
   assert.strictEqual((await requete('GET', api + '/revision', undefined, admin)).json.revision, 7);

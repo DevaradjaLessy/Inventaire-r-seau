@@ -1,6 +1,6 @@
 /* Services — lecture de la base : accès par identifiant, emplacement, occupation des baies, PoE, alertes. */
 import { CATEGORIES, POE_STEPS, POE_WARN_PCT, RACK_FULL_PCT, VLAN_GREY } from '../config.js';
-import { pct, sum, typeOf } from '../utils.js';
+import { pct, sum, today, typeOf } from '../utils.js';
 import { Cache, Store } from '../store.js';
 import { planAdressage, SEUIL_PLEIN_PCT } from './adressage.js';
 import { Live } from './mesures.js';
@@ -90,6 +90,9 @@ function computeAlerts() {
     for (const s of d.stock) { const c = Store.idx.cat.get(s.catalogId); if (c && s.available <= s.threshold && s.threshold > 0) out.push({ level: s.available === 0 ? 'serious' : 'warn', kind: 'stock', icon: 'box', text: `Stock bas : ${c.brand} ${c.model}`, sub: `${s.available} disponible(s), seuil ${s.threshold}`, ref: c.id }); }
     // Supervision : équipements que la source mesure comme injoignables
     for (const [id, m] of Live.dev) { const x = byId(id); if (x && m.state === 'down' && x.status !== 'fault') out.push({ level: 'crit', kind: 'live', icon: deviceIcon(x), text: `Équipement injoignable (supervision) : ${x.hostname}`, sub: m.message || locLabel(x.id), ref: x.id }); }
+    // Interventions dont la date prévue est passée
+    const jour = today();
+    for (const i of d.interventions) if (i.status !== 'done' && i.date && i.date < jour) out.push({ level: 'warn', kind: 'intervention', icon: 'history', text: `Intervention en retard : ${i.title}`, sub: `Prévue le ${i.date.split('-').reverse().join('/')}${i.assignee ? ` · ${i.assignee}` : ''}`, act: 'interv-voir', ref: i.id });
     // Supervision : une source en panne n'apporte plus rien ; la supervision entière arrêtée, c'est l'état saisi qui s'affiche
     for (const s of Live.sources) if (s.ok === false) out.push({ level: 'serious', kind: 'source', icon: 'gauge', text: `Source de supervision en erreur : ${s.nom}`, sub: s.erreur || 'Aucune réponse', act: 'sources', ref: '' });
     if (Live.state === 'error') out.push({ level: 'serious', kind: 'source', icon: 'gauge', text: 'Supervision en erreur : les états affichés sont ceux saisis à la main', sub: Live.error, act: 'sources', ref: '' });

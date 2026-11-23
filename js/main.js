@@ -49,6 +49,7 @@ import { chargerSecurite } from './ui/tableau-de-bord.js';
 import './ui/sources.js';
 import './ui/synthese.js';
 import './ui/dossier.js';
+import './ui/planning.js';
 import { ouvrirSession } from './ui/compte.js';
 import { Live } from './services/mesures.js';
 import { addRoom, deleteStructure, deleteVlan } from './services/structure.js';

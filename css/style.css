@@ -89,6 +89,18 @@ a{color:var(--accent)}
 .ip-row .lib{color:var(--txt2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dnote a{color:var(--accent);cursor:pointer}
 .age-anciens{margin-top:10px}
+.iv-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:9px 4px;border-bottom:1px solid var(--line)}
+.iv-row.retard{box-shadow:inset 2px 0 0 var(--warn);padding-left:8px}
+.iv-t{flex:1;min-width:150px}
+.iv-t b{display:block;font-weight:600;overflow-wrap:anywhere}
+.iv-t small{display:block;color:var(--txt2);font-size:12px;margin-top:2px;overflow-wrap:anywhere}
+.iv-t small a{color:var(--accent);cursor:pointer}
+.iv-t .iv-note{color:var(--txt3)}
+.iv-acts{display:inline-flex;gap:4px;align-items:center}
+.iv-faites{margin-top:10px}
+.iv-faites>summary{cursor:pointer;color:var(--txt2);font-size:12.5px}
+.interv .btns{margin-top:8px}
+.interv .iv-row{padding:7px 0}
 a.btn{text-decoration:none}
 .li-schema{overflow-x:auto;margin-bottom:8px}
 .li-schema svg{display:block;width:100%;height:auto;margin:0 auto}
@@ -150,7 +162,7 @@ a.btn{text-decoration:none}
 .adm-corps>h2{font-size:15px;display:flex;align-items:center;gap:8px;margin-bottom:14px}
 .adm-corps #audit-list,.adm-corps #sv-list{max-height:none}
 /* Compte en lecture seule : les boutons d'action ne sont pas proposés */
-.role-lecture :is([data-act=dev-edit],[data-act=dev-move],[data-act=dev-replace],[data-act=dev-remove],[data-act=dev-restock],[data-act=rack-edit],[data-act=rack-del],[data-act=connect],[data-act=disconnect],[data-act=port-couper],[data-act=port-retablir],[data-act=outlet-del],[data-act=install],[data-act=palette],[data-act=plan-edit],[data-act=plan-draw],[data-act=plan-img],[data-act=csv-import],[data-act=import],[data-act=reset],[data-act=undo],[data-act=st-add],[data-act=st-edit],[data-act=st-del],[data-act=hist-retour],[data-act=stock-in],[data-act=stock-rapide],[data-act=stock-out],[data-act=cat-new],[data-act=cat-edit]){display:none!important}
+.role-lecture :is([data-act=dev-edit],[data-act=dev-move],[data-act=dev-replace],[data-act=dev-remove],[data-act=dev-restock],[data-act=rack-edit],[data-act=rack-del],[data-act=connect],[data-act=disconnect],[data-act=port-couper],[data-act=port-retablir],[data-act=outlet-del],[data-act=install],[data-act=palette],[data-act=plan-edit],[data-act=plan-draw],[data-act=plan-img],[data-act=csv-import],[data-act=import],[data-act=reset],[data-act=undo],[data-act=st-add],[data-act=st-edit],[data-act=st-del],[data-act=hist-retour],[data-act=stock-in],[data-act=stock-rapide],[data-act=stock-out],[data-act=interv-new],[data-act=interv-edit],[data-act=interv-etat],[data-act=interv-del],[data-act=cat-new],[data-act=cat-edit]){display:none!important}
 .cp-row{display:grid;grid-template-columns:150px minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
 .sv-row{display:grid;grid-template-columns:130px minmax(0,1fr) 80px auto;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
 .sv-row .nom{font-family:var(--mono);font-size:12px;color:var(--txt2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

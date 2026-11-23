@@ -2,7 +2,7 @@
    Garder l'écart plutôt qu'une copie complète rend l'annulation légère, même sur une grande base. */
 
 /* Collections suivies, avec le nom de leur clé */
-const CLES = { vlans: 'id', sites: 'id', buildings: 'id', floors: 'id', rooms: 'id', catalog: 'id', stock: 'catalogId', racks: 'id', devices: 'id', ports: 'id', outlets: 'id', cables: 'id', history: 'id' };
+const CLES = { vlans: 'id', sites: 'id', buildings: 'id', floors: 'id', rooms: 'id', catalog: 'id', stock: 'catalogId', racks: 'id', devices: 'id', ports: 'id', outlets: 'id', cables: 'id', interventions: 'id', history: 'id' };
 
 /* Égalité de deux valeurs au sens du JSON (une propriété « undefined » compte comme absente) */
 function egal(a, b) {

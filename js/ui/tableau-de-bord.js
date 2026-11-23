@@ -12,6 +12,7 @@ import { Securite } from '../services/securite.js';
 import { Sync } from '../sync.js';
 import { Actions, estAdmin, levelColor, renderActive, renderShell, showTab, UI, Views, vlanChip } from './socle.js';
 import { Inv } from './inventaire.js';
+import { interventionsCard } from './planning.js';
 
 /* Statistiques globales (hors équipements hors service) */
 function computeStats() {
@@ -174,6 +175,9 @@ Views.dash = {
       <div class="dcard c3">${title('switch', 'États des ports')}
         ${donut(states, s.ports || 1, s.ports, 'ports réseau')}
         <div class="dleg">${states.map(x => `<div><span class="st2"><i style="background:${x.color}"></i>${x.label}</span><b>${x.n}</b><span class="muted">${pct(x.n, s.ports)} %</span></div>`).join('')}</div></div>
+      ${interventionsCard()}
+      <div class="dcard c7">${title('history', 'Dernières actions', `<button class="btn sm" data-act="historique" data-tip="Historique|Filtrer toutes les actions, revenir à un état antérieur">${ico('list')}Tout voir (${d.history.length})</button>`)}
+        <div class="scroll tline">${d.history.slice(0, 40).map(h => `<div class="tli"><span class="td">${ico(HIST_ICON[h.type] || 'edit')}</span><div><b>${esc(h.text)}</b><small>${HISTORY_TYPES[h.type] || h.type} · ${fmtDateTime(h.ts)}</small></div></div>`).join('') || '<div class="empty">Aucune action</div>'}</div></div>
       <div class="dcard c4">${title('switch', 'Occupation des ports par switch')}<div class="scroll">${hbars(swRows, 100, r => `${r.raw.used}/${r.raw.total}`)}</div></div>
       <div class="dcard c4">${title('rack', 'Remplissage des baies', `<span class="muted">${s.uUsed}/${s.uTotal} U</span>`)}
         <div class="rgs">${racks.map(x => `<div class="rg ${x.pct >= RACK_FULL_PCT ? 'warn' : ''}" data-act="go" data-id="${x.r.id}" data-tip="${esc(x.r.name)}|${x.used} U occupées sur ${x.total}|${esc(locLabel(x.r.roomId))}"><b>${x.pct} %</b><div class="tube"><i style="height:${x.pct}%"></i></div><span>${esc(x.r.name.replace(/^(BAIE|COFFRET)-/, ''))}</span><small>${x.used}/${x.total} U</small></div>`).join('')}</div>
@@ -181,8 +185,6 @@ Views.dash = {
       <div class="dcard c4">${title('bolt', 'Budget PoE par switch')}<div class="scroll">${hbars(poeRows, 100, r => `${r.raw.used}/${r.raw.budget} W`)}</div></div>
       <div class="dcard c4">${title('building', 'Type × bâtiment')}${matrix}</div>
       ${firmwareCard()}${ageCard()}${adressageCard()}${liaisonsCard()}${securiteCard()}
-      <div class="dcard c7">${title('history', 'Dernières actions', `<button class="btn sm" data-act="historique" data-tip="Historique|Filtrer toutes les actions, revenir à un état antérieur">${ico('list')}Tout voir (${d.history.length})</button>`)}
-        <div class="scroll tline">${d.history.slice(0, 40).map(h => `<div class="tli"><span class="td">${ico(HIST_ICON[h.type] || 'edit')}</span><div><b>${esc(h.text)}</b><small>${HISTORY_TYPES[h.type] || h.type} · ${fmtDateTime(h.ts)}</small></div></div>`).join('') || '<div class="empty">Aucune action</div>'}</div></div>
     </div>`;
   },
 };

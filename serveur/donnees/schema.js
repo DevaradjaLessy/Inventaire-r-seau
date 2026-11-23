@@ -27,14 +27,17 @@ const COLLECTIONS = {
                ['poe.capable', 'poe_possible', 'bool'], ['poe.watts', 'poe_watts', 'num'], ['mac', 'mac', 'txt'], ['connected', 'connecte', 'txt'], ['description', 'description', 'txt']] },
   outlets:   { table: 'prises', cle: 'id', champs: [['id', 'id', 'id'], ['roomId', 'piece_id', 'ref'], ['label', 'repere', 'txt!'], ['x', 'x', 'num'], ['y', 'y', 'num'], ['usage', 'usage', 'txt!']] },
   cables:    { table: 'cables', cle: 'id', extremites: true, champs: [['id', 'id', 'id'], ['type', 'type', 'txt!'], ['length', 'longueur', 'num'], ['color', 'couleur', 'coul'], ['label', 'libelle', 'txt']] },
+  interventions: { table: 'interventions', cle: 'id', ordre: 'cree_le, rowid', champs: [['id', 'id', 'id'], ['ref', 'ref', 'ref?'], ['title', 'titre', 'txt!'], ['note', 'note', 'txt'], ['date', 'date_prevue', 'date'], ['assignee', 'charge', 'txt'], ['status', 'statut', 'txt!'], ['createdBy', 'auteur', 'txt'], ['createdAt', 'cree_le', 'int'], ['doneAt', 'fait_le', 'int?']] },
   history:   { table: 'journal', cle: 'id', ordre: 'date DESC, rowid DESC', champs: [['id', 'id', 'id'], ['ts', 'date', 'int'], ['type', 'type', 'txt!'], ['text', 'texte', 'txt'], ['ref', 'ref', 'ref?']] },
 };
 /* Ordre d'écriture qui respecte les dépendances (utile pour un remplacement complet) */
-const ORDRE = ['vlans', 'sites', 'buildings', 'floors', 'rooms', 'catalog', 'stock', 'racks', 'devices', 'ports', 'outlets', 'cables', 'history'];
+const ORDRE = ['vlans', 'sites', 'buildings', 'floors', 'rooms', 'catalog', 'stock', 'racks', 'devices', 'ports', 'outlets', 'cables', 'interventions', 'history'];
+/* Sections ajoutées après la première version : un document plus ancien, qui ne les a pas, reste accepté */
+const FACULTATIVES = ['interventions'];
 /* Groupes de ports d'un modèle du catalogue (table fille) */
 const GROUPE = [['kind', 'type', 'txt!'], ['count', 'nombre', 'int'], ['speed', 'debit', 'num'], ['poe', 'poe', 'bool'], ['role', 'role', 'txt!'], ['prefix', 'prefixe', 'txt'], ['start', 'debut', 'int'], ['names', 'noms', 'json~']];
 /* Nom des ressources dans les adresses de l'API */
-const RESSOURCES = { sites: 'sites', batiments: 'buildings', etages: 'floors', pieces: 'rooms', baies: 'racks', equipements: 'devices', ports: 'ports', prises: 'outlets', cables: 'cables', catalogue: 'catalog', stock: 'stock', vlans: 'vlans', journal: 'history' };
+const RESSOURCES = { sites: 'sites', batiments: 'buildings', etages: 'floors', pieces: 'rooms', baies: 'racks', equipements: 'devices', ports: 'ports', prises: 'outlets', cables: 'cables', catalogue: 'catalog', stock: 'stock', vlans: 'vlans', interventions: 'interventions', journal: 'history' };
 
 const lire = (o, chemin) => chemin.split('.').reduce((x, k) => (x == null ? undefined : x[k]), o);
 function ecrire(o, chemin, v) { const ks = chemin.split('.'); let x = o; for (const k of ks.slice(0, -1)) x = x[k] || (x[k] = {}); x[ks.at(-1)] = v; }
@@ -112,4 +115,4 @@ function versObjet(collection, ligne, filles = null) {
 const colonnes = collection => { const s = COLLECTIONS[collection]; return [...s.champs.map(c => c[1]), ...(s.extremites ? ['a_port_id', 'a_prise_id', 'b_port_id', 'b_prise_id'] : [])]; };
 const colonneCle = collection => { const s = COLLECTIONS[collection]; return s.champs.find(c => c[0] === s.cle)[1]; };
 
-module.exports = { COLLECTIONS, ORDRE, GROUPE, RESSOURCES, ID, versLigne, versObjet, colonnes, colonneCle };
+module.exports = { COLLECTIONS, ORDRE, FACULTATIVES, GROUPE, RESSOURCES, ID, versLigne, versObjet, colonnes, colonneCle };

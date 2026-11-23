@@ -138,6 +138,7 @@ js/3d/                     three (chargement), facades, viewer, objets
 js/ui/socle.js             onglets, fenêtres, infobulles, notifications
 js/ui/carto/               carto, plan, fiches, baie, tracage, connexion, topologie
 js/ui/dossier.js, synthese.js   documents à imprimer : dossier pour un prestataire, synthèse du parc
+js/ui/planning.js          interventions planifiées (services/planification.js)
 js/ui/inventaire.js  import-csv.js  recherche.js  tableau-de-bord.js
 js/ui/materiel/            catalogue, installation, palette, modele
 ```
@@ -732,6 +733,18 @@ Trois ajouts qui ne changent pas le modèle de données.
 **Firmware de référence (lot 27).** La version inscrite sur le modèle (onglet Matériel) sert de référence. Un équipement qui en porte une autre, ou aucune, est « en retard » : carte du tableau de bord, fiche de l'équipement, synthèse imprimable.
 - **Pas de flux d'actualité des constructeurs.** Il n'existe pas de source commune : chaque constructeur a son site, souvent derrière un compte client, et le serveur NetCarto n'a pas vocation à sortir sur Internet. La référence se met à jour à la main quand une version est publiée. Un flux par constructeur reste possible si l'utilisateur le décide, en acceptant une sortie vers Internet depuis le serveur.
 
+### 3.35 Interventions planifiées (lot 25)
+
+Demande : pouvoir noter qu'une intervention est « à venir » (résoudre une alerte, installer un matériel), avec une note, pour que l'équipe voie qui fait quoi.
+
+- **Une intervention** : un titre, une note, une date prévue (facultative), la personne ou l'équipe qui s'en charge, et un état — à venir, en cours, terminée. Elle vise un équipement, un port, une prise, une baie ou une pièce, ou rien (tâche générale).
+- **Où elle se voit :** carte « Interventions à venir » du tableau de bord (en cours d'abord, puis par date), section « Interventions » sur la fiche de l'objet visé, alerte d'avertissement quand la date prévue est passée.
+- **Partage :** en mode serveur, elle est enregistrée dans la base comme le reste : tous les comptes la voient, un compte en lecture seule ne peut pas la modifier, et chaque changement figure au journal d'audit.
+- **Données :** nouvelle collection `interventions` (migration `004_interventions.sql`, `serveur/donnees/schema.js`, règle dans `Store.validate`). Le préfixe d'identifiant est `int-`. Un export ou une sauvegarde d'avant cette version se recharge : la section manquante vaut une liste vide (`FACULTATIVES`).
+- **Fichiers :** `js/services/planification.js`, `js/ui/planning.js`. Le fichier `js/ui/interventions.js` reste celui des interventions d'urgence (impact, remplacement).
+- **Choix :** la personne chargée est un texte libre, proposé parmi les noms déjà saisis et prérempli avec le compte courant. Ce n'est pas un lien vers un compte : on peut désigner une équipe ou un prestataire. Aucune notification n'est envoyée.
+- **Non fait :** rappel par courriel, calendrier, récurrence, pièce jointe, marqueur sur le plan.
+
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
@@ -770,7 +783,7 @@ Trois ajouts qui ne changent pas le modèle de données.
 | 22 | **Three.js hébergé localement**, pour fonctionner sans Internet | Moyen | ✅ Fait (voir 3.22) |
 | 23 | **Supervision fiable et multi-sources :** audit du module (`connecteurs/`), fusion sans doublon ni conflit entre sources, priorité explicite, Juniper (noms d'interfaces Junos, modèles EX au catalogue), PRTG, ce que chaque source remonte réellement | Élevé (high) | ✅ Fait (voir 3.33) |
 | 24 | **Localisation des sites et des bâtiments :** adresse et lien d'itinéraire vers un service de cartes, sans carte intégrée dans la page (aucune adresse extérieure appelée) | Moyen | ✅ Fait (voir 3.34) |
-| 25 | **Interventions planifiées :** « à venir » sur un équipement, une prise ou une pièce, avec note, date, personne chargée et état ; visibles par toute l'équipe | Élevé (high) | ⏳ À faire |
+| 25 | **Interventions planifiées :** « à venir » sur un équipement, une prise ou une pièce, avec note, date, personne chargée et état ; visibles par toute l'équipe | Élevé (high) | ✅ Fait (voir 3.35) |
 | 26 | **Liaisons entre sites :** vue des sites et des liens qui les relient (fibre, opérateur) | Moyen | ✅ Fait (voir 3.34) |
 | 27 | **Firmware de référence par modèle :** version cible saisie par l'administrateur, écarts signalés. Un flux d'actualité des constructeurs demande une décision (accès à Internet depuis le serveur, pas de source commune aux constructeurs) | Moyen | ✅ Fait pour la référence saisie (voir 3.34) ; flux automatique en attente de décision |
 
@@ -843,7 +856,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-23 | « Étudie ce que les switchs Juniper permettent de récupérer en temps réel (état des connexions et des ports) pour l'intégrer à la vue 3D ; étudie aussi les connecteurs et la connectique compatibles » | ✅ Lot 23 (voir 3.33) : la source SNMP standard suffit pour Juniper ; trois modèles EX au catalogue ; connectique décrite, QSFP et modules optiques non modélisés. |
 | 2026-11-23 | « Vérifie que les sources de données sont réellement fonctionnelles et pas seulement visuelles : communication entre Juniper, la vue 3D et les autres supervisions, sans bug, conflit, doublon ni problème de synchronisation. PRTG est impératif ; prévoir plusieurs solutions de supervision » | ✅ Lot 23 (voir 3.33) : dix défauts trouvés et corrigés (doublons, conflits, source en panne, relevé périmé) ; source `json` pour les autres outils. Non essayé sur un vrai PRTG. |
 | 2026-11-23 | « Ajouter la localisation des bâtiments avec Google Maps, pour s'y rendre » | ✅ Lot 24 (voir 3.34) : liens « Voir sur la carte » et « Itinéraire » sur la fiche d'un site et d'un bâtiment. Pas de carte intégrée : la page ne doit appeler aucune adresse extérieure. |
-| 2026-11-23 | « Programmer une intervention “à venir” (résoudre une alerte Wi-Fi, installer tel matériel) avec une note, pour que l'équipe voie qui fait quoi » | ⏳ Lot 25. |
+| 2026-11-23 | « Programmer une intervention “à venir” (résoudre une alerte Wi-Fi, installer tel matériel) avec une note, pour que l'équipe voie qui fait quoi » | ✅ Lot 25 (voir 3.35) : interventions planifiées avec note, date, personne chargée et état, visibles par toute l'équipe. |
 | 2026-11-23 | « Voir quels sites sont connectés entre eux, par exemple par une fibre » | ✅ Lot 26 (voir 3.34) : carte « Liaisons entre bâtiments et sites » avec schéma, et section « Liaisons » sur les fiches. |
 | 2026-11-23 | « Firmware par modèle : une source d'actualité qui prévient quand une mise à jour est disponible ? » | ✅ Lot 27 (voir 3.34) : la version du modèle sert de référence, les équipements en retard sont comptés. Pas de flux automatique : il demande une sortie vers Internet depuis le serveur, à décider. |
 | 2026-11-23 | « Cherche sur claudeskills.fr des skills utiles au projet, de la gestion de projet à la technique, et applique-les » | 🕓 Annuaire lu (environnement `inventaire-r-seau` créé pour autoriser le site). Les skills sont des dépôts GitHub de tiers : aucun installé sans relecture de leur contenu ni accord. Sélection proposée à l'utilisateur. |
