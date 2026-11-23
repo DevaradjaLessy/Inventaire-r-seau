@@ -421,6 +421,21 @@ test('Direction : âge du parc, équipements à renouveler, et synthèse imprima
   await page.click('#age-card .fw-row >> nth=0'); await page.waitForSelector('#detail:has-text("SW-A1-ACC-01")');
 });
 
+test('Listes déroulantes : les choix restent lisibles dans les deux thèmes, y compris sur une barre d\'outils', async page => {
+  // Luminance relative d'une couleur « rgb(r, g, b) » ; une couleur transparente laisse le navigateur mettre du blanc
+  const releve = () => page.evaluate(() => {
+    const lum = c => { const m = c.match(/[\d.]+/g).map(Number); if (m.length > 3 && m[3] === 0) return null; const [r, g, b] = m.map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    return [...document.querySelectorAll('select')].filter(s => s.offsetParent).map(s => { const o = s.querySelector('option'), g = s.querySelector('optgroup'), cs = getComputedStyle(o), fond = lum(cs.backgroundColor), texte = lum(cs.color);
+      const contraste = fond == null ? 0 : (Math.max(fond, texte) + 0.05) / (Math.min(fond, texte) + 0.05);
+      return { ou: s.dataset.chg || s.id || s.name, contraste: Math.round(contraste * 10) / 10, groupe: g ? lum(getComputedStyle(g).backgroundColor) != null : true }; }); });
+  const controler = async ou => { const l = await releve(); assert.ok(l.length, `${ou} : au moins une liste`); for (const x of l) { assert.ok(x.contraste >= 4.5, `${ou}, liste « ${x.ou} » : contraste ${x.contraste}`); assert.ok(x.groupe, `${ou}, liste « ${x.ou} » : titre de groupe sans fond`); } };
+  for (const theme of ['sombre', 'clair']) {
+    if (theme === 'clair') await page.click('[data-act=theme]');
+    await page.evaluate(() => NetCarto.select(NetCarto.Store.db.floors[1].id)); await page.waitForSelector('svg.plan'); await controler(`${theme}, plan`);
+    await choisir(page, 'BAIE-A1-01'); await pret3D(page); await controler(`${theme}, baie`);
+    await page.click('[data-tab=inv]'); await controler(`${theme}, inventaire`); await page.click('[data-tab=carto]');
+  }
+});
 /* ---------- Dossier pour un prestataire ---------- */
 test('Dossier prestataire : plan, prises, équipements et baies d\'un étage ou d\'un bâtiment dans un seul document, sans adresses par défaut', async page => {
   await page.evaluate(() => { window.__imprime = 0; window.print = () => { window.__imprime++; }; NetCarto.select(NetCarto.Store.db.floors[1].id); });
