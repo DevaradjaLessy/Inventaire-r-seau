@@ -30,9 +30,14 @@ function locOf(id) {
   return r;
 }
 /* Emplacement en clair : « Bât. A · R+1 · Local technique A1 · BAIE-A1-01 · U38 » */
+/* Nom court d'un bâtiment. Avec plusieurs sites, le site est nommé : deux sites peuvent avoir chacun leur « Bât. A ». */
+function batLabel(b) {
+  const site = Store.db.sites.length > 1 ? byId(b.siteId) : null;
+  return `${site ? `${site.code || site.name} · ` : ''}Bât. ${b.code}`;
+}
 function locLabel(id, { short = false } = {}) {
   const l = locOf(id), parts = [];
-  if (l.building) parts.push(`Bât. ${l.building.code}`);
+  if (l.building) parts.push(batLabel(l.building));
   if (l.floor) parts.push(l.floor.name);
   if (l.room && !(short && l.rack)) parts.push(l.room.name);
   if (l.rack) parts.push(l.rack.name);
@@ -94,4 +99,4 @@ function computeAlerts() {
   });
 }
 
-export { byId, cablesOf, catOf, computeAlerts, deviceIcon, isPassive, labelOf, locLabel, locOf, poeColor, poeUsage, portsOf, rackMap, rackUsage, vlanOf };
+export { batLabel, byId, cablesOf, catOf, computeAlerts, deviceIcon, isPassive, labelOf, locLabel, locOf, poeColor, poeUsage, portsOf, rackMap, rackUsage, vlanOf };

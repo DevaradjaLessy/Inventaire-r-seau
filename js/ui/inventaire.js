@@ -3,7 +3,7 @@ import { CATEGORIES, COL, DEVICE_STATUS } from '../config.js';
 import { $, clamp, csvCell, download, esc, fmtDate, norm, plural, today, typeOf } from '../utils.js';
 import { ico } from '../icones.js';
 import { Cache, Store } from '../store.js';
-import { catOf, locLabel, locOf } from '../services/requetes.js';
+import { batLabel, catOf, locLabel, locOf } from '../services/requetes.js';
 import { NET_CATS } from '../services/cablage.js';
 import { search } from '../services/recherche.js';
 import { Actions, Changes, Inputs, showTab, toast, UI, Views } from './socle.js';
@@ -69,7 +69,7 @@ Views.inv = {
     $('#inv-bar').innerHTML = `<div class="inv-h" style="margin:0">Liste des équipements</div>
       <div class="gsearch" style="margin:0;max-width:300px">${ico('search')}<input type="search" id="inv-q" data-inp="inv-q" placeholder="Rechercher : nom, IP, MAC, série, pièce…" value="${esc(Inv.q)}" style="width:100%;padding-left:30px"></div>
       ${sel('type', 'Type', Object.keys(CATEGORIES).filter(k => cats.includes(k)).map(k => opt(k, CATEGORIES[k].one, Inv.type)).join(''))}
-      ${sel('bld', 'Bâtiment', d.buildings.map(b => opt(b.id, `Bât. ${b.code}`, Inv.bld)).join(''))}
+      ${sel('bld', 'Bâtiment', d.buildings.map(b => opt(b.id, batLabel(b), Inv.bld)).join(''))}
       ${sel('status', 'Statut', Object.entries(DEVICE_STATUS).map(([k, v]) => opt(k, v.label, Inv.status)).join(''))}
       ${sel('brand', 'Marque', brands.map(b => opt(b, b, Inv.brand)).join(''))}
       <button class="btn ghost" data-act="inv-reset" data-tip="Effacer tous les filtres">${ico('x')}Effacer</button>

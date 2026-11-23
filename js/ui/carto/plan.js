@@ -89,10 +89,12 @@ function renderPlan() {
   if (!Store.db.sites.length) { host.innerHTML = emptyState(); return; }
   // Site ou bâtiment sélectionné : vignettes des étages
   if (t === 'site' || t === 'building' || !Carto.floorId) {
-    const floors = Store.db.floors.filter(f => t !== 'building' || f.buildingId === Carto.sel);
+    // Un site ne montre que les étages de ses bâtiments ; sans sélection, tous les étages
+    const floors = Store.db.floors.filter(f => (t === 'building' ? f.buildingId === Carto.sel : t !== 'site' || byId(f.buildingId)?.siteId === Carto.sel));
+    const vide = t === 'site' && !(Store.idx.bldBySite.get(Carto.sel) || []).length ? 'Ce site n\'a pas encore de bâtiment. Utilisez « Ajouter un bâtiment » dans sa fiche, à droite.' : 'Aucun étage pour l\'instant. Sélectionnez un bâtiment dans l\'arbre, puis « Ajouter un étage ».';
     host.innerHTML = `<div class="floor-cards">${floors.map(f => { const s = scopeOf(f.id), b = byId(f.buildingId); return `<div class="fcard" data-act="sel" data-id="${f.id}">
       <h4>${esc(b.name)} — ${esc(f.name)}</h4><div class="muted">${plural((Store.idx.roomsByFloor.get(f.id) || []).length, 'pièce')} · ${plural(s.racks.length, 'baie')} · ${plural(s.devices.length, 'équipement')} · ${plural(s.outlets.length, 'prise')}</div>
-      <svg viewBox="-10 -10 ${f.width * K + 20} ${f.height * K + 20}">${planSvg(f, true)}</svg></div>`; }).join('') || '<div class="empty">Aucun étage pour l\'instant. Sélectionnez un bâtiment dans l\'arbre, puis « Ajouter un étage ».</div>'}</div>`;
+      <svg viewBox="-10 -10 ${f.width * K + 20} ${f.height * K + 20}">${planSvg(f, true)}</svg></div>`; }).join('') || `<div class="empty">${vide}</div>`}</div>`;
     return;
   }
   const floor = byId(Carto.floorId);

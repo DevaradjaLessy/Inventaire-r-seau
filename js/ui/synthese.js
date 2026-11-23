@@ -5,7 +5,7 @@ import { esc, fmtDate, pct, plural } from '../utils.js';
 import { Store } from '../store.js';
 import { planAdressage } from '../services/adressage.js';
 import { ageDuParc } from '../services/cycle-de-vie.js';
-import { catOf, computeAlerts, locLabel } from '../services/requetes.js';
+import { batLabel, catOf, computeAlerts, locLabel } from '../services/requetes.js';
 import { Actions } from './socle.js';
 import { imprimer } from './impression.js';
 import { computeStats, versionsFirmware } from './tableau-de-bord.js';
@@ -20,11 +20,11 @@ function synthese() {
   const fw = versionsFirmware().filter(l => l.v.size > 1);
   const vieux = age.anciens.filter(x => x.ans >= RENOUVELLEMENT_ANS);
   return `<section class="pr-synthese"><h1>Synthèse du parc réseau</h1>
-    <p class="pr-sous">${esc(d.sites[0]?.name || 'Aucun site')} — ${plural(d.buildings.length, 'bâtiment')}, ${plural(d.floors.length, 'étage')}, ${plural(d.racks.length, 'baie')}</p>
+    <p class="pr-sous">${esc(d.sites.length > 1 ? `${d.sites.length} sites : ${d.sites.map(x => x.name).join(', ')}` : d.sites[0]?.name || 'Aucun site')} — ${plural(d.buildings.length, 'bâtiment')}, ${plural(d.floors.length, 'étage')}, ${plural(d.racks.length, 'baie')}</p>
     <h2>Chiffres clés</h2>
     ${table(['Équipements', 'Ports occupés', 'Baies', 'PoE consommé', 'Prises brassées', 'Alertes'], [[`<b>${s.devices}</b> dont ${s.active} actifs`, `<b>${pct(s.portsUsed, s.ports)} %</b> (${s.portsUsed} sur ${s.ports})`, `<b>${pct(s.uUsed, s.uTotal)} %</b> (${s.uUsed} U sur ${s.uTotal})`, `<b>${s.poeUsed} W</b> sur ${s.poeBudget} W`, `<b>${pct(s.patched, s.outlets)} %</b> (${s.patched} sur ${s.outlets})`, `<b>${alertes.length}</b> dont ${niveau('crit')} critique${niveau('crit') > 1 ? 's' : ''}`]], '')}
     <h2>Parc par type</h2>
-    ${table(['Type', 'Nombre', ...d.buildings.map(b => `Bât. ${esc(b.code)}`)], Object.keys(CATEGORIES).filter(k => s.byCat.has(k)).map(k => [esc(CATEGORIES[k].label), s.byCat.get(k).length, ...d.buildings.map(b => s.byCat.get(k).filter(x => s.byBld.get(b.id)?.includes(x)).length)]), 'Aucun équipement')}
+    ${table(['Type', 'Nombre', ...d.buildings.map(b => esc(batLabel(b)))], Object.keys(CATEGORIES).filter(k => s.byCat.has(k)).map(k => [esc(CATEGORIES[k].label), s.byCat.get(k).length, ...d.buildings.map(b => s.byCat.get(k).filter(x => s.byBld.get(b.id)?.includes(x)).length)]), 'Aucun équipement')}
     <h2>Âge du parc <small>${age.total - age.inconnu ? `âge moyen : ${ans(age.moyen)} ans` : ''}${age.inconnu ? ` — ${plural(age.inconnu, 'équipement')} sans date d'installation` : ''}</small></h2>
     ${table(['Tranche', 'Équipements', 'Part'], age.tranches.map(t => [t.label, t.n, `${pct(t.n, age.total - age.inconnu)} %`]), '')}
     <h2>À renouveler <small>plus de ${RENOUVELLEMENT_ANS} ans</small></h2>

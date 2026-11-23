@@ -436,6 +436,36 @@ test('Listes déroulantes : les choix restent lisibles dans les deux thèmes, y 
     await page.click('[data-tab=inv]'); await controler(`${theme}, inventaire`); await page.click('[data-tab=carto]');
   }
 });
+/* ---------- Plusieurs sites ---------- */
+test('Plusieurs sites : la vue d\'un site ne montre que ses étages, et les emplacements nomment le site', async page => {
+  const cartes = () => page.locator('#v-plan .fcard h4').allInnerTexts();
+  // Nouveau site, encore vide : aucun étage d'un autre site, et la marche à suivre
+  await page.click('.c-tree-h [data-act=st-add]'); await page.fill('.modal [name=name]', 'Usine Essai'); await page.fill('.modal [name=code]', 'use'); await page.click('[data-act=modal-ok]');
+  await page.waitForSelector('#detail:has-text("Usine Essai")');
+  assert.deepStrictEqual(await cartes(), [], 'un site vide n\'affiche pas les étages des autres');
+  assert.match(await page.locator('#v-plan').innerText(), /Ce site n'a pas encore de bâtiment/);
+  // Un bâtiment de même code que sur l'autre site, puis un étage : seul cet étage s'affiche pour le site
+  await page.click('#detail [data-act=st-add][data-kind=building]'); await page.fill('.modal [name=name]', 'Atelier'); await page.fill('.modal [name=code]', 'A'); await page.click('[data-act=modal-ok]');
+  await page.waitForSelector('#detail:has-text("Atelier")');
+  await page.click('#detail [data-act=st-add][data-kind=floor]'); await page.fill('.modal [name=name]', 'RDC'); await page.click('[data-act=modal-ok]');
+  const ids = await page.evaluate(() => { const d = NetCarto.Store.db; return { neuf: d.sites.find(s => s.name === 'Usine Essai').id, demo: d.sites[0].id, etage: d.floors.at(-1).id }; });
+  await page.evaluate(i => NetCarto.select(i), ids.neuf); assert.deepStrictEqual(await cartes(), ['Atelier — RDC']);
+  await page.evaluate(i => NetCarto.select(i), ids.demo); const demo = await cartes();
+  assert.strictEqual(demo.length, 5); assert.ok(demo.every(t => /^Bâtiment [AB]/.test(t)), 'le premier site garde ses cinq étages');
+  // Deux bâtiments « A » : l'emplacement, le filtre de l'inventaire et le tableau de bord disent de quel site il s'agit
+  await page.evaluate(i => { NetCarto.select(i); NetCarto.addRoom(i, { name: 'Local essai', type: 'tech', x: 1, y: 1, w: 5, h: 4 }); }, ids.etage);
+  await page.evaluate(i => NetCarto.select(NetCarto.Store.db.rooms.at(-1).id));
+  assert.match(await page.locator('#detail').innerText(), /USE · Bât\. A · RDC/);
+  await page.click('[data-tab=inv]');
+  const filtres = await page.locator('[data-chg=inv-f][data-f=bld] option, select[data-f=bld] option').allInnerTexts();
+  assert.ok(filtres.includes('USE · Bât. A') && filtres.includes('DEMO · Bât. A'), `filtre par bâtiment : ${filtres.join(' | ')}`);
+  await page.click('[data-tab=dash]');
+  assert.match(await page.locator('.dhead').innerText(), /2 sites : Campus Démo, Usine Essai/);
+  // Site supprimé : on retrouve l'affichage à un seul site
+  await page.click('[data-tab=carto]'); await page.evaluate(i => { NetCarto.deleteStructure(NetCarto.Store.db.rooms.at(-1).id); NetCarto.deleteStructure(NetCarto.Store.db.floors.at(-1).id); NetCarto.deleteStructure(NetCarto.Store.db.buildings.at(-1).id); NetCarto.deleteStructure(i); }, ids.neuf);
+  await page.evaluate(() => NetCarto.select(NetCarto.Store.db.devices.find(d => d.hostname === 'SW-A1-ACC-01').id));
+  assert.match(await page.locator('#detail').innerText(), /Bât\. A · R\+1/); assert.doesNotMatch(await page.locator('#detail').innerText(), /DEMO · Bât/, 'un seul site : pas de préfixe');
+});
 /* ---------- Dossier pour un prestataire ---------- */
 test('Dossier prestataire : plan, prises, équipements et baies d\'un étage ou d\'un bâtiment dans un seul document, sans adresses par défaut', async page => {
   await page.evaluate(() => { window.__imprime = 0; window.print = () => { window.__imprime++; }; NetCarto.select(NetCarto.Store.db.floors[1].id); });

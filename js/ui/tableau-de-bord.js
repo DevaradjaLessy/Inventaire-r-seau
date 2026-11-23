@@ -3,7 +3,7 @@ import { CATEGORIES, COL, HISTORY_TYPES, POE_WARN_PCT, PORT_STATUS, RACK_FULL_PC
 import { $, clamp, esc, fmtDate, fmtDateTime, groupBy, pct, plural, sum } from '../utils.js';
 import { ico } from '../icones.js';
 import { Cache, Store } from '../store.js';
-import { cablesOf, catOf, computeAlerts, isPassive, locLabel, locOf, poeUsage, portsOf, rackUsage } from '../services/requetes.js';
+import { batLabel, cablesOf, catOf, computeAlerts, isPassive, locLabel, locOf, poeUsage, portsOf, rackUsage } from '../services/requetes.js';
 import { effStatus, isNetDev, outletInfo } from '../services/cablage.js';
 import { planAdressage, SEUIL_PLEIN_PCT } from '../services/adressage.js';
 import { ageDuParc } from '../services/cycle-de-vie.js';
@@ -131,14 +131,14 @@ Views.dash = {
     const racks = [...s.racks].sort((a, b) => b.pct - a.pct);
     // Matrice type × bâtiment : teinte unique, plus dense quand la valeur monte
     const mxMax = Math.max(1, ...cats.flatMap(k => d.buildings.map(b => s.byCat.get(k).filter(x => locOf(x.id).building?.id === b.id).length)));
-    const matrix = `<table class="mx"><thead><tr><th></th>${d.buildings.map(b => `<th class="c">Bât. ${esc(b.code)}</th>`).join('')}<th class="c">Total</th></tr></thead><tbody>${cats.map(k => { const row = d.buildings.map(b => s.byCat.get(k).filter(x => locOf(x.id).building?.id === b.id).length);
-      return `<tr><th>${ico(CATEGORIES[k].icon)}${CATEGORIES[k].label}</th>${row.map((n, i) => `<td style="background:color-mix(in srgb, var(--accent) ${n ? Math.round(10 + 50 * n / mxMax) : 3}%, transparent)" data-tip="${CATEGORIES[k].label} — Bât. ${esc(d.buildings[i].code)}|${plural(n, 'équipement')}">${n || '·'}</td>`).join('')}<td class="tot">${sum(row)}</td></tr>`; }).join('')}</tbody></table>`;
+    const matrix = `<table class="mx"><thead><tr><th></th>${d.buildings.map(b => `<th class="c">${esc(batLabel(b))}</th>`).join('')}<th class="c">Total</th></tr></thead><tbody>${cats.map(k => { const row = d.buildings.map(b => s.byCat.get(k).filter(x => locOf(x.id).building?.id === b.id).length);
+      return `<tr><th>${ico(CATEGORIES[k].icon)}${CATEGORIES[k].label}</th>${row.map((n, i) => `<td style="background:color-mix(in srgb, var(--accent) ${n ? Math.round(10 + 50 * n / mxMax) : 3}%, transparent)" data-tip="${CATEGORIES[k].label} — ${esc(batLabel(d.buildings[i]))}|${plural(n, 'équipement')}">${n || '·'}</td>`).join('')}<td class="tot">${sum(row)}</td></tr>`; }).join('')}</tbody></table>`;
     const states = ['up', 'down', 'disabled', 'error'].map(k => ({ k, n: (s.portStates.get(k) || []).length, color: PORT_STATUS[k].color, label: PORT_STATUS[k].label }));
     const nLevel = l => alerts.filter(a => a.level === l).length, crit = nLevel('crit');
     const pill = l => nLevel(l) ? `<span class="pill" style="--c:${levelColor(l)}"><i></i>${nLevel(l)} ${LEVEL_LABEL[l].toLowerCase()}${nLevel(l) > 1 ? 's' : ''}</span>` : '';
-    const site = d.sites[0];
+    const sites = d.sites.length > 1 ? `${d.sites.length} sites : ${d.sites.map(x => x.name).join(', ')}` : d.sites[0]?.name || 'Aucun site';
     $('#tab-dash').innerHTML = `<div class="dash">
-      <div class="dhead c12"><div><h2>Tableau de bord</h2><div class="muted">${esc(site ? site.name : 'Aucun site')} · ${plural(d.buildings.length, 'bâtiment')} · ${plural(d.floors.length, 'étage')} · mis à jour le ${fmtDateTime(d.meta.updatedAt)}</div></div><span class="grow"></span><button class="btn" data-act="synthese" data-tip="Synthèse du parc|Document d'une à deux pages à imprimer ou à enregistrer en PDF : chiffres clés, âge du parc, capacité, adressage">${ico('list')}Synthèse</button><button class="btn" data-act="vlans" data-tip="VLAN|Ajouter, renommer, recolorer ou supprimer un VLAN">${ico('floor')}VLAN (${d.vlans.length})</button></div>
+      <div class="dhead c12"><div><h2>Tableau de bord</h2><div class="muted">${esc(sites)} · ${plural(d.buildings.length, 'bâtiment')} · ${plural(d.floors.length, 'étage')} · mis à jour le ${fmtDateTime(d.meta.updatedAt)}</div></div><span class="grow"></span><button class="btn" data-act="synthese" data-tip="Synthèse du parc|Document d'une à deux pages à imprimer ou à enregistrer en PDF : chiffres clés, âge du parc, capacité, adressage">${ico('list')}Synthèse</button><button class="btn" data-act="vlans" data-tip="VLAN|Ajouter, renommer, recolorer ou supprimer un VLAN">${ico('floor')}VLAN (${d.vlans.length})</button></div>
       ${kpi('box', 'Équipements', s.devices, `dont ${s.active} actifs · ${plural(d.racks.length, 'baie')}`)}
       ${kpi('switch', 'Ports occupés', `${pct(s.portsUsed, s.ports)}<small> %</small>`, `${s.portsUsed} sur ${s.ports} ports`, pct(s.portsUsed, s.ports))}
       ${kpi('rack', 'Baies', `${pct(s.uUsed, s.uTotal)}<small> %</small>`, `${s.uUsed} U sur ${s.uTotal}`, pct(s.uUsed, s.uTotal))}

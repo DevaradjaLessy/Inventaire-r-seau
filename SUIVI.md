@@ -679,6 +679,14 @@ Demande venue d'un futur utilisateur : sortir un plan à remettre à ses prestat
 - **Adresses IP, adresses MAC et numéros de série absents par défaut** : le document part chez un tiers. Une case les ajoute ; la page de garde dit s'ils ont été retirés. `ficheBaie` accepte `{ sensibles: false }`.
 - **Limites :** le plan n'est pas éditable (ni Visio, ni DWG) ; la génération du dossier n'est pas inscrite au journal d'audit, car elle se fait dans le navigateur à partir de données que le compte peut déjà lire.
 
+### 3.32 Plusieurs sites
+
+La base a toujours accepté plusieurs sites, mais l'interface n'avait été essayée qu'avec un seul.
+
+- **Vue d'un site :** seulement les étages de ses bâtiments (`renderPlan`). Un site sans bâtiment affiche la marche à suivre.
+- **Emplacements :** `batLabel` (`js/services/requetes.js`) donne « Bât. A » avec un seul site, « CODE · Bât. A » dès qu'il y en a plusieurs. Le code d'un bâtiment n'est unique que dans son site. Utilisé par `locLabel`, le filtre de l'inventaire, la matrice du tableau de bord et la synthèse.
+- **Tableau de bord et synthèse :** l'en-tête nomme tous les sites. Les chiffres couvrent toute la base ; il n'existe pas de tableau de bord par site.
+
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
@@ -779,6 +787,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-23 | « Sortir des plans pour les prestataires : si on peut répondre à ce besoin, oui » (retour d'un collègue) | ✅ Bouton « Dossier » sur un étage, un bâtiment ou un site : un seul PDF avec plan, prises, équipements et baies ; adresses et numéros de série absents par défaut (voir 3.31). |
 | 2026-11-23 | « Si je photographie les bureaux et que je t'envoie un plan, tu pourras tout reproduire (emplacements, liaisons, 3D) ? » | 🕓 Question, réponse donnée. Possible pour le plan, les pièces, les baies et leur contenu ; les liaisons demandent un relevé de brassage. Les données réelles ne doivent pas entrer dans le dépôt (public) : elles seraient livrées en fichier à importer. En attente des documents. |
 | 2026-11-23 | « La liste des étages est transparente ? C'est pareil pour tous les menus ? » (capture d'écran) | ✅ Défaut corrigé : les deux listes posées sur une barre d'outils (étage, baie) se déroulaient sur fond blanc. Fond et texte des choix imposés pour toutes les listes ; scénario de contraste dans les deux thèmes. |
+| 2026-11-23 | « J'ai créé un nouveau site : il m'affiche les mêmes bâtiments, et un clic ramène sur le site de démonstration » (capture d'écran) | ✅ Défaut corrigé : la vue d'un site montrait tous les étages de la base. Elle ne montre plus que les siens, et dit quoi faire quand le site est vide. Avec plusieurs sites, les emplacements, le filtre de l'inventaire et le tableau de bord nomment le site (`batLabel`), car deux sites peuvent avoir chacun leur « Bât. A ». |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---
