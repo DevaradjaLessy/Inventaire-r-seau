@@ -731,7 +731,7 @@ Trois ajouts qui ne changent pas le modèle de données.
 - Limite : seul le câblage saisi compte. Un lien d'opérateur entre deux sites (fibre louée, VPN) n'apparaît que s'il est saisi comme un câble entre deux équipements.
 
 **Firmware de référence (lot 27).** La version inscrite sur le modèle (onglet Matériel) sert de référence. Un équipement qui en porte une autre, ou aucune, est « en retard » : carte du tableau de bord, fiche de l'équipement, synthèse imprimable.
-- **Pas de flux d'actualité des constructeurs.** Il n'existe pas de source commune : chaque constructeur a son site, souvent derrière un compte client, et le serveur NetCarto n'a pas vocation à sortir sur Internet. La référence se met à jour à la main quand une version est publiée. Un flux par constructeur reste possible si l'utilisateur le décide, en acceptant une sortie vers Internet depuis le serveur.
+- **Pas de flux d'actualité des constructeurs.** Il n'existe pas de source commune : chaque constructeur a son site, souvent derrière un compte client, et le serveur NetCarto n'a pas vocation à sortir sur Internet. La référence se met à jour à la main quand une version est publiée. **Décision du 2026-11-23 :** pas de flux automatique. L'utilisateur ne veut aucun impact sur le réseau de son entreprise : le serveur ne sort pas sur Internet, la référence reste saisie à la main.
 
 ### 3.35 Interventions planifiées (lot 25)
 
@@ -785,7 +785,7 @@ Demande : pouvoir noter qu'une intervention est « à venir » (résoudre une al
 | 24 | **Localisation des sites et des bâtiments :** adresse et lien d'itinéraire vers un service de cartes, sans carte intégrée dans la page (aucune adresse extérieure appelée) | Moyen | ✅ Fait (voir 3.34) |
 | 25 | **Interventions planifiées :** « à venir » sur un équipement, une prise ou une pièce, avec note, date, personne chargée et état ; visibles par toute l'équipe | Élevé (high) | ✅ Fait (voir 3.35) |
 | 26 | **Liaisons entre sites :** vue des sites et des liens qui les relient (fibre, opérateur) | Moyen | ✅ Fait (voir 3.34) |
-| 27 | **Firmware de référence par modèle :** version cible saisie par l'administrateur, écarts signalés. Un flux d'actualité des constructeurs demande une décision (accès à Internet depuis le serveur, pas de source commune aux constructeurs) | Moyen | ✅ Fait pour la référence saisie (voir 3.34) ; flux automatique en attente de décision |
+| 27 | **Firmware de référence par modèle :** version cible saisie par l'administrateur, écarts signalés. Un flux d'actualité des constructeurs demande une décision (accès à Internet depuis le serveur, pas de source commune aux constructeurs) | Moyen | ✅ Fait pour la référence saisie (voir 3.34) ; pas de flux automatique (décision du 2026-11-23) |
 
 **Ordre de réalisation (décision du 2026-11-19) :** 16, 17, 11, 18, 14, 19, 20, 22. Les lots 9 (reste), 13 et 15 viennent ensuite. Il n'y a pas de lot 21.
 
@@ -860,6 +860,7 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-23 | « Voir quels sites sont connectés entre eux, par exemple par une fibre » | ✅ Lot 26 (voir 3.34) : carte « Liaisons entre bâtiments et sites » avec schéma, et section « Liaisons » sur les fiches. |
 | 2026-11-23 | « Firmware par modèle : une source d'actualité qui prévient quand une mise à jour est disponible ? » | ✅ Lot 27 (voir 3.34) : la version du modèle sert de référence, les équipements en retard sont comptés. Pas de flux automatique : il demande une sortie vers Internet depuis le serveur, à décider. |
 | 2026-11-23 | « Cherche sur claudeskills.fr des skills utiles au projet, de la gestion de projet à la technique, et applique-les » | 🕓 Annuaire lu (environnement `inventaire-r-seau` créé pour autoriser le site). Les skills sont des dépôts GitHub de tiers : aucun installé sans relecture de leur contenu ni accord. Sélection proposée à l'utilisateur. |
+| 2026-11-23 | « Je ne veux pas que tu impactes le réseau de mon entreprise, continue dans ton cloud » | ✅ Décision notée : le travail se fait dans la session cloud, rien ne passe par le réseau de l'entreprise ; pas de flux de firmware automatique (voir 3.34) ; aucun skill tiers installé. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---
