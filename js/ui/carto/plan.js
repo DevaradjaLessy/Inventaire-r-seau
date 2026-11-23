@@ -221,4 +221,4 @@ function moveOnPlan(id, x, y) {
   Store.commit('move', `Déplacement de ${labelOf(id)} (${room.name})`, () => { e.x = x; e.y = y; e.roomId = room.id; }, id);
 }
 
-export { initPlanEvents, planDrag, renderPlan, svgPoint };
+export { fitVb, initPlanEvents, planDrag, planSvg, renderPlan, svgPoint };

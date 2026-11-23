@@ -116,6 +116,19 @@ a{color:var(--accent)}
   #print-root th{background:var(--panel3);font-size:9pt}
   #print-root tr{break-inside:avoid}
   #print-root .pr-brassage{break-before:page}
+  /* Le plan d'un étage occupe une page en paysage ; un navigateur qui ne sait pas mêler les orientations le laisse en portrait */
+  @page paysage{size:A4 landscape}
+  #print-root .pr-plan{page:paysage}
+  #print-root .pr-plan,#print-root .pr-baie{break-before:page}
+  #print-root .pr-baie .pr-brassage{break-before:auto;margin-top:14pt}
+  #print-root svg.plan{width:100%;height:auto;max-height:150mm;background:none;cursor:default;border:1px solid var(--line3)}
+  #print-root svg.plan .lbl{font-size:6.5px;fill:var(--txt)}
+  #print-root .pr-legende{display:flex;flex-wrap:wrap;gap:3pt 10pt;align-items:center;margin:6pt 0 0;font-size:8.5pt;color:var(--txt2)}
+  #print-root .pr-legende span{display:inline-flex;align-items:center;gap:3pt}
+  #print-root .pr-legende i{width:7pt;height:7pt;border-radius:1.5pt;display:inline-block}
+  #print-root .pr-legende i.rond{border-radius:50%} #print-root .pr-legende i.vide{border:1px solid var(--txt3)}
+  #print-root .pr-note{margin:8pt 0 0;color:var(--txt2);font-size:9.5pt}
+  #print-root .pr-couv h2{margin-top:18pt}
   #print-root .pr-pied{margin-top:10pt;color:var(--txt3);font-size:8.5pt}
 }
 .auth-lien{text-align:center;font-size:12.5px;cursor:pointer}

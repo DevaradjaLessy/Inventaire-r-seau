@@ -54,6 +54,7 @@ function structButtons(e) {
   const t = typeOf(e.id), child = { site: ['building', 'Ajouter un bâtiment'], building: ['floor', 'Ajouter un étage'], floor: ['room', 'Ajouter une pièce'] }[t];
   return `<div class="btns">${child ? `<button class="btn sm pri" data-act="st-add" data-kind="${child[0]}" data-parent="${e.id}">${ico('plus')}${child[1]}</button>` : ''}
     ${t === 'floor' ? `<button class="btn sm ${Carto.draw ? 'on' : ''}" data-act="plan-draw" data-tip="Dessiner une pièce|Tracez un rectangle à la souris sur le plan">${ico('room')}Dessiner</button>` : ''}
+    <button class="btn sm" data-act="dossier" data-id="${e.id}" data-tip="Dossier technique|Un seul document pour un prestataire : plan, prises, équipements, baies et brassage. À imprimer ou à enregistrer en PDF.">${ico('download')}Dossier</button>
     <button class="btn sm" data-act="st-edit" data-id="${e.id}">${ico('edit')}Modifier</button><button class="btn sm danger" data-act="st-del" data-id="${e.id}">${ico('trash')}Supprimer</button></div>`;
 }
 Actions['plan-draw'] = () => { Carto.draw = !Carto.draw; if (Carto.draw) { Carto.edit = false; Carto.view = 'plan'; toast('Tracez la pièce sur le plan : cliquez, glissez, relâchez', 'ok'); } renderCarto(); };

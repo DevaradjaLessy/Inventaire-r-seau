@@ -421,6 +421,37 @@ test('Direction : âge du parc, équipements à renouveler, et synthèse imprima
   await page.click('#age-card .fw-row >> nth=0'); await page.waitForSelector('#detail:has-text("SW-A1-ACC-01")');
 });
 
+/* ---------- Dossier pour un prestataire ---------- */
+test('Dossier prestataire : plan, prises, équipements et baies d\'un étage ou d\'un bâtiment dans un seul document, sans adresses par défaut', async page => {
+  await page.evaluate(() => { window.__imprime = 0; window.print = () => { window.__imprime++; }; NetCarto.select(NetCarto.Store.db.floors[1].id); });
+  const doc = () => page.locator('#print-root').evaluate(e => e.textContent.replace(/\s+/g, ' '));
+  await page.click('#detail [data-act=dossier]'); await page.waitForSelector('.modal');
+  assert.match(await page.locator('.modal').innerText(), /Bât\. A · R\+1/);
+  assert.strictEqual(await page.locator('.modal [name=sensibles]').isChecked(), false, 'les adresses ne partent pas par défaut');
+  await page.click('[data-act=modal-ok]');
+  assert.strictEqual(await page.evaluate(() => window.__imprime), 1);
+  let t = await doc();
+  for (const attendu of [/Dossier technique — Bât\. A · R\+1/, /Campus Démo/, /7 pièces/, /32 prises/, /1 baie/, /Plan — Bât\. A · R\+1/, /Prises murales/, /A1-010.*SW-A1-ACC-01 · Gi1\/0\/10/, /Équipements hors baie/, /AP-A1-01/, /BAIE-A1-01/, /Plan de brassage — BAIE-A1-01/, /Adresses IP, adresses MAC et numéros de série retirés/]) assert.match(t, attendu);
+  assert.doesNotMatch(t, /10\.10\.\d+\.\d+/, 'aucune adresse IP'); assert.doesNotMatch(t, /DMO-/, 'aucun numéro de série'); assert.doesNotMatch(t, /BAIE-A0-01|BAIE-A2-01/, 'seulement cet étage');
+  // Le plan est dessiné dans le document, avec le repère de chaque prise
+  const plan = await page.locator('#print-root svg.plan').evaluate(s => ({ pieces: s.querySelectorAll('.room').length, reperes: [...s.querySelectorAll('.lbl')].filter(x => getComputedStyle(x).display !== 'none').length, cadre: s.getAttribute('viewBox'), sel: s.querySelectorAll('.sel').length }));
+  assert.deepStrictEqual([plan.pieces, plan.sel], [7, 0]); assert.ok(plan.reperes >= 32, 'repères visibles'); assert.match(plan.cadre, /^-\d+ -\d+ \d+ \d+$/);
+  // Avec les adresses, sans le plan
+  await page.click('#detail [data-act=dossier]'); await page.check('.modal [name=sensibles]'); await page.uncheck('.modal [name=plan]'); await page.click('[data-act=modal-ok]');
+  t = await doc();
+  assert.match(t, /10\.10\.99\.18/); assert.match(t, /DMO-/); assert.doesNotMatch(t, /retirés de ce document/);
+  assert.strictEqual(await page.locator('#print-root svg.plan').count(), 0);
+  // Rien de coché : on le dit, sans rien imprimer
+  await page.click('#detail [data-act=dossier]'); for (const n of ['plan', 'prises', 'equipements', 'baies']) await page.uncheck(`.modal [name=${n}]`); await page.click('[data-act=modal-ok]');
+  assert.match(await page.locator('.toast').last().innerText(), /au moins une rubrique/); await page.click('[data-act=modal-close]');
+  assert.strictEqual(await page.evaluate(() => window.__imprime), 2);
+  // Un bâtiment entier : tous ses étages, toutes ses baies
+  await page.evaluate(() => NetCarto.select(NetCarto.Store.db.buildings[0].id)); await page.click('#detail [data-act=dossier]'); await page.click('[data-act=modal-ok]');
+  t = await doc();
+  for (const attendu of [/Dossier technique — Bâtiment A/, /3 étages/, /Plan — Bât\. A · RDC/, /Plan — Bât\. A · R\+2/, /BAIE-A0-01/, /BAIE-A0-02/, /BAIE-A2-01/]) assert.match(t, attendu);
+  assert.strictEqual(await page.locator('#print-root svg.plan').count(), 3); assert.doesNotMatch(t, /BAIE-B0-01/);
+});
+
 /* ---------- Sécurité de l'interface ---------- */
 const CHARGE = '"\'><img src=x onerror="window.__xss=(window.__xss||0)+1"><svg onload="window.__xss=1"></svg>`;--';
 test('Sécurité : aucun texte saisi n\'est interprété comme du code, où qu\'il s\'affiche', async page => {
@@ -474,6 +505,7 @@ test('Sécurité : aucun texte saisi n\'est interprété comme du code, où qu\'
   await page.evaluate(i => NetCarto.select(i, { keep: true }), ids.port);
   for (const act of ['connect', 'port-couper', 'vlans']) await fenetre(act);
   await page.evaluate(i => NetCarto.select(i), ids.baie); await page.evaluate(() => { window.print = () => {}; }); await page.click('#detail [data-act=rack-print]'); await controle('document imprimé');
+  await page.evaluate(i => NetCarto.select(i), ids.etage); await page.click('#detail [data-act=dossier]'); await page.check('.modal [name=sensibles]'); await page.click('[data-act=modal-ok]'); await controle('dossier prestataire'); await page.evaluate(i => NetCarto.select(i), ids.baie);
   await fenetre('rack-edit');
   // Recherche, inventaire, matériel, tableau de bord, historique
   await page.fill('#gsearch', 'img'); await page.waitForTimeout(150); await controle('recherche globale'); await page.keyboard.press('Enter'); await controle('inventaire filtré');

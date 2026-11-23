@@ -137,6 +137,7 @@ js/services/               requetes, cablage, topologie, tracage, connexion, rec
 js/3d/                     three (chargement), facades, viewer, objets
 js/ui/socle.js             onglets, fenêtres, infobulles, notifications
 js/ui/carto/               carto, plan, fiches, baie, tracage, connexion, topologie
+js/ui/dossier.js, synthese.js   documents à imprimer : dossier pour un prestataire, synthèse du parc
 js/ui/inventaire.js  import-csv.js  recherche.js  tableau-de-bord.js
 js/ui/materiel/            catalogue, installation, palette, modele
 ```
@@ -668,6 +669,16 @@ Cinq profils ont déroulé leurs tâches dans l'application : administrateur ré
 
 **Non fait, noté dans `AUDIT.md` 7.3 :** garantie et fin de support, seuil de renouvellement par type, alertes envoyées, réservation d'adresses, IPv6, étiquettes, lecture de code-barres.
 
+### 3.31 Dossier technique pour un prestataire
+
+Demande venue d'un futur utilisateur : sortir un plan à remettre à ses prestataires. Jusque-là, le plan sortait en image et chaque baie s'imprimait à part.
+
+- **Bouton « Dossier »** sur la fiche d'un étage, d'un bâtiment ou d'un site (`js/ui/dossier.js`). Un seul document : page de garde avec sommaire, puis pour chaque étage le plan, la liste des prises avec leur liaison (panneau, switch, VLAN, état), les équipements hors baie, et chaque baie avec son élévation et son plan de brassage. Chaque rubrique se décoche.
+- **Sortie par la fenêtre d'impression** du navigateur, qui sait enregistrer en PDF : aucune bibliothèque ajoutée. Le plan est le dessin vectoriel de l'écran (`planSvg`, exporté par `js/ui/carto/plan.js`), sans sélection ni couverture Wi-Fi, repères des prises affichés.
+- **Plan en paysage** (`@page paysage`). Un navigateur qui ne sait pas mêler les orientations dans un même document le laisse en portrait.
+- **Adresses IP, adresses MAC et numéros de série absents par défaut** : le document part chez un tiers. Une case les ajoute ; la page de garde dit s'ils ont été retirés. `ficheBaie` accepte `{ sensibles: false }`.
+- **Limites :** le plan n'est pas éditable (ni Visio, ni DWG) ; la génération du dossier n'est pas inscrite au journal d'audit, car elle se fait dans le navigateur à partir de données que le compte peut déjà lire.
+
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
@@ -765,6 +776,8 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-22 | « En RSSI senior : audite la solution, trouve les failles et applique les correctifs de sécurité, elle va être déployée en entreprise » | ✅ Rapport `SECURITE.md` ; 14 failles corrigées et testées, 2 risques acceptés (voir 3.28). Restent les mesures d'exploitation de la section 5 du rapport, à la charge de l'utilisateur. |
 | 2026-11-22 | « Applique les correctifs, puis teste en te mettant dans le rôle d'un attaquant, évalue les risques et corrige-les » | ✅ Campagne de 40 attaques (`npm run attaques`) : 3 défenses cédaient sous rafale, plus 6 points trouvés en chemin, tous corrigés et testés. Risques restants notés dans `SECURITE.md`, 8.4 (voir 3.29). |
 | 2026-11-22 | « Peaufine encore la solution côté utilisation : mets-toi à la place d'un administrateur réseau (deux visions), d'un RSSI, d'un DSI et d'un technicien, audite et améliore » | ✅ Audit par cinq profils (`AUDIT.md`, section 7) : journal d'audit regroupé par opération, alertes de sécurité dans la liste, plan d'adressage, âge du parc et synthèse imprimable, barre d'outils repliée sur téléphone, entrée en stock depuis la baie (voir 3.30). Demandes restantes en 7.3. |
+| 2026-11-23 | « Sortir des plans pour les prestataires : si on peut répondre à ce besoin, oui » (retour d'un collègue) | ✅ Bouton « Dossier » sur un étage, un bâtiment ou un site : un seul PDF avec plan, prises, équipements et baies ; adresses et numéros de série absents par défaut (voir 3.31). |
+| 2026-11-23 | « Si je photographie les bureaux et que je t'envoie un plan, tu pourras tout reproduire (emplacements, liaisons, 3D) ? » | 🕓 Question, réponse donnée. Possible pour le plan, les pièces, les baies et leur contenu ; les liaisons demandent un relevé de brassage. Les données réelles ne doivent pas entrer dans le dépôt (public) : elles seraient livrées en fichier à importer. En attente des documents. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---

@@ -178,10 +178,12 @@ Ces points ont été relevés pendant l'audit et ne sont pas faits. Ils demanden
 | Technicien | Étiquettes à imprimer pour les câbles et les prises | Fonction absente (constat 12). |
 | Technicien | Lecture d'un code-barres ou d'un QR code pour retrouver un équipement | Demande l'accès à l'appareil photo, donc HTTPS et un essai sur un vrai téléphone. |
 
+**Depuis l'audit (23 novembre).** Un futur utilisateur a demandé à sortir des plans pour ses prestataires. Le bouton « Dossier », sur la fiche d'un étage, d'un bâtiment ou d'un site, produit un seul document : plan, prises, équipements hors baie, baies et brassage. Les adresses IP et les numéros de série n'y figurent que sur demande.
+
 **Limite de cet audit.** Les profils sont joués par un automate qui suit des parcours écrits à l'avance. Il mesure ce que l'écran affiche, pas ce qu'une personne ressent après une semaine d'usage. Un essai par de vrais utilisateurs reste à faire.
 
 ## 8. Où trouver les preuves
 
-- Scénarios automatiques : `tests/netcarto.test.js` (71 scénarios, dont les blocs « Interventions d'urgence » et « Audit par profils ») et `serveur/tests/` (77 scénarios).
+- Scénarios automatiques : `tests/netcarto.test.js` (72 scénarios, dont les blocs « Interventions d'urgence » et « Audit par profils ») et `serveur/tests/` (77 scénarios).
 - Essais d'installation réels : `installation/tests/` (image Docker, Debian 12 avec systemd).
 - Décisions et limites connues : `SUIVI.md`, sections 3.14 à 3.26.

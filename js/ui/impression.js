@@ -7,16 +7,16 @@ import { connectedLabel, effStatus, segment, STATE_LABEL } from '../services/cab
 import { Actions, toast } from './socle.js';
 
 const cellule = v => (v === '' || v == null ? '—' : esc(v));
-/* Élévation : une ligne par équipement, de haut en bas */
-function ficheBaie(rack) {
+/* Élévation : une ligne par équipement, de haut en bas. sensibles : false retire le numéro de série et l'adresse IP (document remis à un tiers) */
+function ficheBaie(rack, { sensibles = true } = {}) {
   const u = rackUsage(rack.id), c = catOf(rack);
   const lignes = [...u.devices].sort((a, b) => b.u - a.u).map(d => {
     const m = catOf(d), hU = m.heightU || 1;
-    return `<tr><td>U${d.u}${hU > 1 ? `–${d.u + hU - 1}` : ''}</td><td><b>${esc(d.hostname)}</b></td><td>${esc(CATEGORIES[m.category].one)}</td><td>${esc(`${m.brand} ${m.model}`)}</td><td>${cellule(d.serial)}</td><td>${cellule(d.ip)}</td><td>${esc(DEVICE_STATUS[d.status].label)}</td></tr>`;
+    return `<tr><td>U${d.u}${hU > 1 ? `–${d.u + hU - 1}` : ''}</td><td><b>${esc(d.hostname)}</b></td><td>${esc(CATEGORIES[m.category].one)}</td><td>${esc(`${m.brand} ${m.model}`)}</td>${sensibles ? `<td>${cellule(d.serial)}</td><td>${cellule(d.ip)}</td>` : ''}<td>${esc(DEVICE_STATUS[d.status].label)}</td></tr>`;
   }).join('');
   return `<section class="pr-elev"><h1>${esc(rack.name)}</h1>
     <p class="pr-sous">${esc(locLabel(rack.roomId))} — ${esc(`${c.brand} ${c.model}`)}, ${rack.heightU} U — ${u.used} U occupées sur ${u.total} (${u.pct} %) — ${plural(u.devices.length, 'équipement')}</p>
-    <table><thead><tr><th>Position</th><th>Nom</th><th>Type</th><th>Modèle</th><th>N° de série</th><th>Adresse IP</th><th>Statut</th></tr></thead><tbody>${lignes || '<tr><td colspan="7">Baie vide</td></tr>'}</tbody></table></section>`;
+    <table><thead><tr><th>Position</th><th>Nom</th><th>Type</th><th>Modèle</th>${sensibles ? '<th>N° de série</th><th>Adresse IP</th>' : ''}<th>Statut</th></tr></thead><tbody>${lignes || '<tr><td colspan="7">Baie vide</td></tr>'}</tbody></table></section>`;
 }
 /* Plan de brassage : pour chaque port actif câblé, le chemin jusqu'à l'autre bout */
 function planBrassage(rack) {
