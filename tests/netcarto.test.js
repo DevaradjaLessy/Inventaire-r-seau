@@ -466,6 +466,70 @@ test('Plusieurs sites : la vue d\'un site ne montre que ses étages, et les empl
   await page.evaluate(() => NetCarto.select(NetCarto.Store.db.devices.find(d => d.hostname === 'SW-A1-ACC-01').id));
   assert.match(await page.locator('#detail').innerText(), /Bât\. A · R\+1/); assert.doesNotMatch(await page.locator('#detail').innerText(), /DEMO · Bât/, 'un seul site : pas de préfixe');
 });
+/* ---------- Localisation des sites, firmware de référence ---------- */
+test('Localisation : la fiche d\'un site et d\'un bâtiment propose la carte et l\'itinéraire, par un lien, sans rien charger depuis la page', async (page, { requetes }) => {
+  const ids = await page.evaluate(() => { const d = NetCarto.Store.db; NetCarto.select(d.sites[0].id); return { site: d.sites[0].id, bat: d.buildings[0].id }; });
+  const liens = () => page.locator('#detail .loc a').evaluateAll(l => l.map(a => ({ t: a.textContent.trim(), href: a.href, cible: a.target, rel: a.rel })));
+  let l = await liens();
+  assert.deepStrictEqual(l.map(x => x.t), ['Voir sur la carte', 'Itinéraire']);
+  const u0 = new URL(l[0].href), u1 = new URL(l[1].href);
+  assert.deepStrictEqual([u0.origin + u0.pathname, u0.searchParams.get('api'), u0.searchParams.get('query')], ['https://www.google.com/maps/search/', '1', '1 rue de l\'Exemple, 00000 Villefictive']);
+  assert.deepStrictEqual([u1.origin + u1.pathname, u1.searchParams.get('destination')], ['https://www.google.com/maps/dir/', '1 rue de l\'Exemple, 00000 Villefictive']);
+  assert.ok(l.every(x => x.cible === '_blank' && /noopener/.test(x.rel) && /noreferrer/.test(x.rel)), 'nouvel onglet, sans référent');
+  assert.match(await page.locator('#detail .loc').innerText(), /1 rue de l'Exemple, 00000 Villefictive/);
+  // Le bâtiment reprend l'adresse de son site
+  await page.evaluate(i => NetCarto.select(i), ids.bat); l = await liens();
+  assert.strictEqual(l.length, 2); assert.match(l[1].href, /destination=1%20rue/);
+  // Une adresse piégée reste une adresse : elle est encodée dans le lien
+  await page.evaluate(() => NetCarto.Store.commit('edit', 'Adresse piégée', db => { db.sites[0].address = '"><img src=x onerror=alert(1)> & co'; }));
+  await page.evaluate(i => NetCarto.select(i), ids.site); l = await liens();
+  assert.strictEqual(new URL(l[0].href).searchParams.get('query'), '"><img src=x onerror=alert(1)> & co'); assert.strictEqual(await page.locator('#detail img[src="x"]').count(), 0);
+  // Sans adresse : pas de lien, mais la marche à suivre
+  await page.evaluate(() => NetCarto.Store.commit('edit', 'Sans adresse', db => { db.sites[0].address = ''; }));
+  await page.evaluate(i => NetCarto.select(i), ids.site);
+  assert.strictEqual((await liens()).length, 0); assert.match(await page.locator('#detail .loc').innerText(), /Renseignez l'adresse/);
+  assert.ok(!requetes.some(u => /google/.test(u)), 'la page n\'appelle aucun service de cartes');
+});
+test('Firmware : la version du modèle sert de référence, et les équipements en retard sont comptés', async page => {
+  const r = await page.evaluate(() => {
+    const d = NetCarto.Store.db, sw = d.devices.filter(x => x.catalogId === 'cat-c9200l-48p-4x');
+    NetCarto.Store.commit('edit', 'Firmware d\'essai', db => { db.devices.find(x => x.id === sw[0].id).firmware = 'IOS-XE 17.6.1'; db.devices.find(x => x.id === sw[1].id).firmware = ''; });
+    NetCarto.select(sw[0].id); return { nom: sw[0].hostname, n: sw.length, ref: d.catalog.find(c => c.id === 'cat-c9200l-48p-4x').firmware };
+  });
+  assert.match((await page.locator('#detail').innerText()).replace(/\s+/g, ' '), new RegExp(`Firmware IOS-XE 17\\.6\\.1 .*référence du modèle : ${r.ref.replace(/[.]/g, '\\.')}`));
+  await page.click('[data-tab=dash]');
+  const carte = page.locator('#fw-card'), ligne = carte.locator('.fw-row', { hasText: 'Catalyst 9200L-48P-4X' });
+  assert.match(await carte.locator('.dt').innerText(), /2 équipements à mettre à niveau/);
+  assert.match((await ligne.innerText()).replace(/\s+/g, ' '), new RegExp(`référence ${r.ref.replace(/[.]/g, '\\.')}.*2 en retard`));
+  // Changer la référence du modèle (nouvelle version publiée par le constructeur) met tout le modèle en retard, sauf ceux déjà à jour
+  await page.evaluate(() => NetCarto.Store.commit('catalog', 'Nouvelle référence', db => { db.catalog.find(c => c.id === 'cat-c9200l-48p-4x').firmware = 'IOS-XE 17.12.4'; }));
+  await page.waitForFunction(n => new RegExp(`${n} en retard`).test(document.querySelector('#fw-card')?.textContent || ''), r.n);
+  // La synthèse imprimable liste les modèles concernés
+  await page.evaluate(() => { window.print = () => {}; }); await page.click('[data-act=synthese]');
+  assert.match(await page.locator('#print-root').evaluate(e => e.textContent.replace(/\s+/g, ' ')), /Firmware : équipements à mettre à niveau.*Catalyst 9200L-48P-4X.*IOS-XE 17\.12\.4/);
+});
+
+test('Liaisons : les rocades entre bâtiments sont réunies en liaisons, et une liaison entre deux sites est signalée', async page => {
+  const l = await page.evaluate(() => NetCarto.liaisons().map(x => ({ a: x.a.code, b: x.b.code, n: x.cables.length, types: x.types, m: x.longueur, sites: x.entreSites, actifs: x.actifs, bouts: x.bouts[0] })));
+  assert.strictEqual(l.length, 1);
+  assert.deepStrictEqual([l[0].a, l[0].b, l[0].n, l[0].types, l[0].m, l[0].sites], ['A', 'B', 2, ['Fibre monomode OS2'], 180, false]);
+  assert.ok(l[0].bouts.every(Boolean), `les deux bouts de la chaîne sont nommés : ${l[0].bouts}`);
+  await page.click('[data-tab=dash]');
+  const carte = page.locator('#liaisons-card');
+  assert.match((await carte.locator('.fw-row').innerText()).replace(/\s+/g, ' '), /Bât\. A ↔ Bât\. B 2 liens · Fibre monomode OS2 · 180 m/);
+  assert.deepStrictEqual(await carte.locator('.li-schema svg').evaluate(s => [s.querySelectorAll('.li-bat').length, s.querySelectorAll('path').length, s.querySelector('.li-n').textContent]), [2, 1, '2']);
+  // Le bâtiment B passe sur un second site : la liaison devient une liaison entre sites, et chaque nom porte son site
+  await page.evaluate(() => NetCarto.Store.commit('edit', 'Second site', db => { db.sites.push({ id: 'site-essai', name: 'Annexe', code: 'ANX', address: '' }); db.buildings.find(b => b.code === 'B').siteId = 'site-essai'; }));
+  await page.waitForSelector('#liaisons-card .fw-row:has-text("entre sites")');
+  assert.match((await carte.locator('.fw-row').innerText()).replace(/\s+/g, ' '), /DEMO · Bât\. A ↔ ANX · Bât\. B/);
+  // La fiche du site et celle du bâtiment listent leurs liaisons ; un clic mène au lien
+  await page.click('[data-tab=carto]'); await page.evaluate(() => NetCarto.select('site-essai'));
+  assert.match((await page.locator('#detail').innerText()).replace(/\s+/g, ' '), /Liaisons .*DEMO · Bât\. A ↔ ANX · Bât\. B .*2 liens · entre sites/i);
+  await page.click('#detail .li:has-text("↔")'); await page.waitForSelector('#detail:has-text("Port de")');
+  // Sans aucun câble entre bâtiments : la carte le dit
+  await page.evaluate(() => { const ids = NetCarto.liaisons().flatMap(x => x.cables.map(c => c.id)); NetCarto.Store.commit('edit', 'Rocades retirées', db => { db.cables = db.cables.filter(c => !ids.includes(c.id)); }); });
+  await page.click('[data-tab=dash]'); assert.match(await page.locator('#liaisons-card').innerText(), /Aucun câble ne relie deux bâtiments/);
+});
 /* ---------- Dossier pour un prestataire ---------- */
 test('Dossier prestataire : plan, prises, équipements et baies d\'un étage ou d\'un bâtiment dans un seul document, sans adresses par défaut', async page => {
   await page.evaluate(() => { window.__imprime = 0; window.print = () => { window.__imprime++; }; NetCarto.select(NetCarto.Store.db.floors[1].id); });

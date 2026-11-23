@@ -13,6 +13,8 @@ import { resumeImpact } from '../interventions.js';
 import { traceSection } from './tracage.js';
 import { structButtons } from './structure.js';
 import { Cache } from '../../store.js';
+import { liaisonsDe } from '../../services/liaisons.js';
+import { batLabel } from '../../services/requetes.js';
 
 /* Équipements de l'inventaire par adresse MAC, pour rattacher une adresse vue par un switch */
 const parMac = () => Cache.get('parMac', () => new Map(Store.db.devices.filter(d => d.mac && d.status !== 'retired').map(d => [normMac(d.mac) || d.mac, d])));
@@ -22,6 +24,15 @@ const kv = rows => `<dl class="kv">${rows.filter(r => r && r[1] !== '' && r[1] !
 const li = (id, text, small = '', icon = null) => `<div class="li" data-act="sel" data-id="${id}">${ico(icon || iconOf(id))}<span>${esc(text)}</span>${small ? `<small>${small}</small>` : ''}</div>`;
 /* En-tête d'une fiche. « sub » est du HTML : tout texte venu de la base doit y être passé par esc() */
 const dHead = (icon, title, sub) => `<div class="d-head"><div class="dico">${ico(icon)}</div><div style="min-width:0"><h2>${esc(title)}</h2><div class="sub">${sub}</div></div></div>`;
+/* Localisation d'un site : l'adresse, et deux liens vers un service de cartes. Ce sont des liens, ouverts dans un nouvel onglet
+   à la demande : la page elle-même ne charge rien d'extérieur. L'adresse est encodée dans le lien, jamais insérée telle quelle. */
+/* Liaisons d'un site ou d'un bâtiment avec les autres : une ligne par liaison, qui mène au premier lien */
+const liaisonsSec = id => sec('Liaisons', liaisonsDe(id).map(l => `<div class="li" data-act="sel" data-id="${l.cables[0].a}">${ico('trace')}<span>${esc(batLabel(l.a))} ↔ ${esc(batLabel(l.b))}</span><small data-tip="${l.actifs} actif${l.actifs > 1 ? 's' : ''} sur ${l.cables.length}">${plural(l.cables.length, 'lien')}${l.entreSites ? ' · entre sites' : ''}</small></div>`).join(''));
+function localisation(site) {
+  const a = String(site?.address || '').trim(), q = encodeURIComponent(a);
+  const lien = (url, icone, texte, aide) => `<a class="btn sm" href="${url}" target="_blank" rel="noopener noreferrer" data-tip="${texte}|${aide}|L'adresse est transmise à Google Maps">${ico(icone)}${texte}</a>`;
+  return `<div class="loc">${a ? `<p style="margin:0 0 8px">${esc(a)}</p><div class="btns">${lien(`https://www.google.com/maps/search/?api=1&amp;query=${q}`, 'site', 'Voir sur la carte', 'Ouvre la carte dans un nouvel onglet')}${lien(`https://www.google.com/maps/dir/?api=1&amp;destination=${q}`, 'move', 'Itinéraire', 'Calcule le trajet depuis votre position, dans un nouvel onglet')}</div>` : '<p class="muted" style="margin:0">Renseignez l\'adresse du site (bouton « Modifier ») pour obtenir la carte et l\'itinéraire.</p>'}</div>`;
+}
 const sec = (title, body) => body ? `<div class="d-sec">${title ? `<div class="sec-t">${title}</div>` : ''}${body}</div>` : '';
 const opt = (v, l, cur) => `<option value="${esc(v)}" ${String(v) === String(cur) ? 'selected' : ''}>${esc(l)}</option>`;
 const fmtRate = v => v >= 1000 ? `${(v / 1000).toFixed(2)} Gb/s` : v >= 1 ? `${v.toFixed(1)} Mb/s` : `${Math.round(v * 1000)} kb/s`;
@@ -56,13 +67,13 @@ function renderDetail() {
 const Detail = {
   site(e) {
     const s = scopeOf(e.id), blds = Store.idx.bldBySite.get(e.id) || [];
-    return dHead('site', e.name, esc(e.address)) + sec('', structButtons(e)) + sec('Résumé', kv([['Code', esc(e.code)], ['Bâtiments', blds.length], ['Baies', s.racks.length], ['Équipements', s.devices.length], ['Prises murales', s.outlets.length]])) +
-      sec('Bâtiments', blds.map(b => li(b.id, b.name, plural(scopeOf(b.id).devices.length, 'équip.', 'équip.'))).join(''));
+    return dHead('site', e.name, esc(e.address)) + sec('', structButtons(e)) + sec('Localisation', localisation(e)) + sec('Résumé', kv([['Code', esc(e.code)], ['Bâtiments', blds.length], ['Baies', s.racks.length], ['Équipements', s.devices.length], ['Prises murales', s.outlets.length]])) +
+      sec('Bâtiments', blds.map(b => li(b.id, b.name, plural(scopeOf(b.id).devices.length, 'équip.', 'équip.'))).join('')) + liaisonsSec(e.id);
   },
   building(e) {
     const s = scopeOf(e.id), floors = Store.idx.floorsByBld.get(e.id) || [];
-    return dHead('building', e.name, `Code ${esc(e.code)} · ${esc(byId(e.siteId).name)}`) + sec('', structButtons(e)) + sec('Résumé', kv([['Étages', floors.length], ['Baies', s.racks.length], ['Équipements', s.devices.length], ['Prises murales', s.outlets.length]])) +
-      sec('Étages', floors.map(f => li(f.id, f.name, `${scopeOf(f.id).devices.length} équip. · ${scopeOf(f.id).outlets.length} prises`)).join(''));
+    return dHead('building', e.name, `Code ${esc(e.code)} · ${esc(byId(e.siteId).name)}`) + sec('', structButtons(e)) + sec('Localisation', localisation(byId(e.siteId))) + sec('Résumé', kv([['Étages', floors.length], ['Baies', s.racks.length], ['Équipements', s.devices.length], ['Prises murales', s.outlets.length]])) +
+      sec('Étages', floors.map(f => li(f.id, f.name, `${scopeOf(f.id).devices.length} équip. · ${scopeOf(f.id).outlets.length} prises`)).join('')) + liaisonsSec(e.id);
   },
   floor(e) {
     const s = scopeOf(e.id), rooms = Store.idx.roomsByFloor.get(e.id) || [];
@@ -95,7 +106,7 @@ const Detail = {
     return dHead(cat.icon, e.hostname, `${cat.one} · ${esc(c.brand)} ${esc(c.model)}`) +
       sec('', `<div class="btns"><button class="btn sm" data-act="dev-edit" data-id="${e.id}">${ico('edit')}Modifier</button>${retired ? '' : `<button class="btn sm" data-act="dev-move" data-id="${e.id}">${ico('move')}Déplacer</button><button class="btn sm" data-act="dev-replace" data-id="${e.id}" data-tip="Remplacer|Échange par un modèle du stock : nom, adresse, configuration et câblage sont repris">${ico('reset')}Remplacer</button><button class="btn sm danger" data-act="dev-remove" data-id="${e.id}">${ico('out')}Retirer</button>`}${e.rackId ? '' : `<button class="btn sm" data-act="c-view" data-v="rack">${ico('cube')}Vue 3D</button>`}</div>`) +
       (isNetDev(e) && !retired ? sec(`${ico('alert')}En cas de panne`, `<div class="impact"><span>${resumeImpact(e.id) || 'Rien de raccordé'}</span><button class="btn sm" data-act="impact" data-id="${e.id}">Détail</button></div>`) : '') +
-      sec('Identification', kv([['Statut', stDev(e.status)], ['Emplacement', esc(locLabel(e.id))], ['Adresse IP', mono(e.ip)], ['Adresse MAC', mono(e.mac)], ['N° de série', mono(e.serial)], ['Firmware', esc(e.firmware) || '—'], ['Installé le', fmtDate(e.installDate)], c.heightU ? ['Hauteur', `${c.heightU} U`] : null, c.powerW ? ['Consommation', `${c.powerW} W`] : null, e.notes ? ['Notes', esc(e.notes)] : null])) +
+      sec('Identification', kv([['Statut', stDev(e.status)], ['Emplacement', esc(locLabel(e.id))], ['Adresse IP', mono(e.ip)], ['Adresse MAC', mono(e.mac)], ['N° de série', mono(e.serial)], ['Firmware', (esc(e.firmware) || '—') + (c.firmware && c.category !== 'passive' && e.firmware !== c.firmware ? ` <span class="st" style="display:inline-flex"><span style="color:${COL.warn};display:flex">${ico('alert')}</span><small>référence du modèle : ${esc(c.firmware)}</small></span>` : '')], ['Installé le', fmtDate(e.installDate)], c.heightU ? ['Hauteur', `${c.heightU} U`] : null, c.powerW ? ['Consommation', `${c.powerW} W`] : null, e.notes ? ['Notes', esc(e.notes)] : null])) +
       (md ? sec(`${ico('gauge')}Supervision`, kv([['État mesuré', `<span class="st"><i style="background:${DEV_STATE[md.state].color}"></i>${DEV_STATE[md.state].label}</span>`], md.message ? ['Message', esc(md.message)] : null, ['Ports suivis', ports.filter(x => measuredPort(x.id)).length], ['Relevé', fmtClock(md.ts)]])) : '') +
       (poe ? sec('Budget PoE', `<div class="row"><div class="bar grow"><i style="width:${Math.min(100, poe.pct)}%;background:${poe.pct >= POE_WARN_PCT ? COL.serious : '#f0b93a'}"></i></div><b>${poe.used} / ${poe.budget} W</b></div>`) : '') +
       (ports.length ? sec(`Ports (${used} utilisés sur ${ports.length})`, portGrid(e)) : '');

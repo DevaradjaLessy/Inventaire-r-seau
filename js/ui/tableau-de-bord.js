@@ -7,6 +7,7 @@ import { batLabel, cablesOf, catOf, computeAlerts, isPassive, locLabel, locOf, p
 import { effStatus, isNetDev, outletInfo } from '../services/cablage.js';
 import { planAdressage, SEUIL_PLEIN_PCT } from '../services/adressage.js';
 import { ageDuParc } from '../services/cycle-de-vie.js';
+import { liaisons } from '../services/liaisons.js';
 import { Securite } from '../services/securite.js';
 import { Sync } from '../sync.js';
 import { Actions, estAdmin, levelColor, renderActive, renderShell, showTab, UI, Views, vlanChip } from './socle.js';
@@ -49,23 +50,26 @@ function donut(parts, total, center, sub) {
 }
 /* En-tête d'une carte : icône, titre, et un élément à droite */
 const titre = (icon, t, right = '') => `<div class="dt"><span class="ti">${ico(icon)}</span><h3>${t}</h3><span class="grow"></span>${right}</div>`;
-/* Versions de firmware par modèle : plusieurs versions pour un même modèle signalent un parc à mettre à niveau */
+/* Versions de firmware par modèle. La version inscrite sur le modèle (onglet Matériel) est la référence :
+   un équipement qui en porte une autre, ou aucune, est « en retard ». Chaque ligne : { c, v: Map(version → nombre), retard }. */
 function versionsFirmware() {
   const parModele = new Map();
   for (const d of Store.db.devices) {
     const c = catOf(d);
-    if (!c || d.status === 'retired' || c.category === 'passive' || !d.firmware) continue;
-    const m = parModele.get(c.id) || parModele.set(c.id, { c, v: new Map() }).get(c.id);
-    m.v.set(d.firmware, (m.v.get(d.firmware) || 0) + 1);
+    if (!c || d.status === 'retired' || c.category === 'passive' || (!d.firmware && !c.firmware)) continue;
+    const m = parModele.get(c.id) || parModele.set(c.id, { c, v: new Map(), retard: 0 }).get(c.id);
+    if (d.firmware) m.v.set(d.firmware, (m.v.get(d.firmware) || 0) + 1);
+    if (c.firmware && d.firmware !== c.firmware) m.retard++;
   }
-  return [...parModele.values()].sort((a, b) => b.v.size - a.v.size || `${a.c.brand} ${a.c.model}`.localeCompare(`${b.c.brand} ${b.c.model}`));
+  return [...parModele.values()].sort((a, b) => b.retard - a.retard || b.v.size - a.v.size || `${a.c.brand} ${a.c.model}`.localeCompare(`${b.c.brand} ${b.c.model}`));
 }
 function firmwareCard() {
   const lignes = versionsFirmware();
-  const ecarts = lignes.filter(l => l.v.size > 1).length;
-  return `<div class="dcard c4">${titre('gauge', 'Firmware par modèle', `<span class="muted">${ecarts ? `${plural(ecarts, 'modèle')} avec plusieurs versions` : 'parc homogène'}</span>`)}
-    <div class="scroll">${lignes.map(l => `<div class="fw-row" data-act="fw-inv" data-q="${esc(l.c.model)}" data-tip="${esc(l.c.brand)} ${esc(l.c.model)}|Clic : voir ces équipements dans l'Inventaire">
-      <b>${esc(l.c.model)}</b><span>${[...l.v].sort((a, b) => b[1] - a[1]).map(([v, n]) => `${esc(v)} <small>× ${n}</small>`).join(' · ')}</span>${l.v.size > 1 ? `<span class="chip warn">${l.v.size} versions</span>` : '<span></span>'}</div>`).join('') || '<div class="empty">Aucune version de firmware saisie</div>'}</div></div>`;
+  const retard = sum(lignes, l => l.retard);
+  return `<div class="dcard c4" id="fw-card">${titre('gauge', 'Firmware par modèle', `<span class="muted">${retard ? `${plural(retard, 'équipement')} à mettre à niveau` : 'parc à la version de référence'}</span>`)}
+    <div class="scroll">${lignes.map(l => `<div class="fw-row" data-act="fw-inv" data-q="${esc(l.c.model)}" data-tip="${esc(l.c.brand)} ${esc(l.c.model)}|Référence : ${esc(l.c.firmware || 'non renseignée')} (modifiable dans l'onglet Matériel)|Clic : voir ces équipements dans l'Inventaire">
+      <b>${esc(l.c.model)}</b><span>${[...l.v].sort((a, b) => b[1] - a[1]).map(([v, n]) => `${esc(v)} <small>× ${n}</small>`).join(' · ') || '<small>aucune version saisie</small>'}${l.c.firmware ? `<br><small>référence ${esc(l.c.firmware)}</small>` : ''}</span>${l.retard ? `<span class="chip warn">${l.retard} en retard</span>` : '<span></span>'}</div>`).join('') || '<div class="empty">Aucune version de firmware saisie</div>'}</div>
+    <div class="dnote">La référence est la version inscrite sur le modèle, dans l'onglet Matériel. Mettez-la à jour quand le constructeur publie une nouvelle version.</div></div>`;
 }
 /* Âge du parc : répartition par tranche, âge moyen, et les plus anciens (un clic y mène) */
 function ageCard() {
@@ -86,6 +90,25 @@ function adressageCard() {
     <div class="scroll">${lignes || '<div class="empty">Aucun sous-réseau saisi : ouvrez « VLAN » pour en indiquer un par VLAN</div>'}</div>
     <div class="dnote">${p.hors.length ? `<span style="color:${COL.serious}">${ico('alert')}</span><span>${plural(p.hors.length, 'adresse')} hors de tout sous-réseau : ${p.hors.slice(0, 4).map(x => `<a data-act="go" data-id="${x.id}">${esc(x.hostname)}</a> (${esc(x.ip)})`).join(', ')}${p.hors.length > 4 ? '…' : ''}</span>` : 'Toutes les adresses saisies sont dans un sous-réseau connu'}${p.sansReseau.length ? ` · ${plural(p.sansReseau.length, 'VLAN')} sans sous-réseau` : ''}</div></div>`;
 }
+/* Liaisons entre bâtiments et entre sites : un schéma (un bâtiment par case, un trait par liaison) et le détail de chaque liaison */
+function liaisonsCard() {
+  const d = Store.db, ls = liaisons();
+  if (d.buildings.length < 2) return '';
+  // Bâtiments rangés par site, sur une ligne ; les traits passent au-dessus, d'autant plus haut que les cases sont éloignées
+  const bats = d.sites.flatMap(s => d.buildings.filter(b => b.siteId === s.id)), L = 150, H = 44, G = 26, haut = 30 + 22 * Math.max(1, ...ls.map(l => Math.abs(bats.indexOf(l.a) - bats.indexOf(l.b))));
+  const x = b => bats.indexOf(b) * (L + G) + L / 2, couleur = l => (l.actifs === l.cables.length ? COL.up : l.actifs ? COL.serious : COL.down);
+  const traits = ls.map(l => { const x1 = x(l.a), x2 = x(l.b), h = 22 * Math.abs(bats.indexOf(l.a) - bats.indexOf(l.b));
+    return `<path d="M${x1} ${haut} C${x1} ${haut - h - 14}, ${x2} ${haut - h - 14}, ${x2} ${haut}" fill="none" stroke="${couleur(l)}" stroke-width="${l.entreSites ? 3 : 2}" ${l.entreSites ? '' : 'stroke-dasharray="6 4"'}/><text x="${(x1 + x2) / 2}" y="${haut - h * 0.75 - 14}" text-anchor="middle" class="li-n">${l.cables.length}</text>`; }).join('');
+  const cases = bats.map(b => `<g data-act="go" data-id="${b.id}" class="li-bat"><rect x="${x(b) - L / 2}" y="${haut}" width="${L}" height="${H}" rx="8"/><text x="${x(b)}" y="${haut + 19}" text-anchor="middle" class="li-t">${esc(batLabel(b))}</text><text x="${x(b)}" y="${haut + 34}" text-anchor="middle" class="li-s">${esc(byNom(b.name))}</text></g>`).join('');
+  const lignes = ls.map(l => `<div class="fw-row" data-act="go" data-id="${l.cables[0].a}" data-tip="${esc(batLabel(l.a))} ↔ ${esc(batLabel(l.b))}|${l.bouts.slice(0, 3).map(([p, q]) => esc(`${p || '?'} ↔ ${q || '?'}`)).join('|')}|Clic : ouvrir le premier lien">
+      <b>${esc(batLabel(l.a))} ↔ ${esc(batLabel(l.b))}</b><span>${plural(l.cables.length, 'lien')} · ${esc(l.types.join(', '))}${l.longueur ? ` · ${l.longueur} m` : ''}${l.entreSites ? ' · <b>entre sites</b>' : ''}</span>
+      <span class="chip ${l.actifs === l.cables.length ? '' : 'warn'}">${l.actifs} / ${l.cables.length} actif${l.actifs > 1 ? 's' : ''}</span></div>`).join('');
+  return `<div class="dcard c7" id="liaisons-card">${titre('trace', 'Liaisons entre bâtiments et sites', `<span class="muted">${ls.length ? plural(ls.length, 'liaison') : 'aucune liaison'}</span>`)}
+    <div class="li-schema"><svg viewBox="0 0 ${bats.length * (L + G) - G} ${haut + H + 4}" style="max-width:${bats.length * (L + G) - G}px">${traits}${cases}</svg></div>
+    ${lignes || '<div class="empty">Aucun câble ne relie deux bâtiments. Une rocade se saisit comme un câble entre deux tiroirs optiques.</div>'}
+    <div class="dnote">Trait plein : liaison entre deux sites. Pointillé : entre deux bâtiments d'un même site. Le chiffre est le nombre de liens.</div></div>`;
+}
+const byNom = n => { const s = String(n).split(' — ')[1] || ''; return s.length > 24 ? s.slice(0, 23) + '…' : s; };
 Actions['fw-inv'] = el => { Object.assign(Inv, { q: el.dataset.q, group: '', type: '', bld: '', status: '', brand: '', page: 0 }); UI.dirty.add('inv'); showTab('inv'); };
 /* État de sécurité du serveur (mode serveur, administrateur) : la carte se remplit dès que le serveur a répondu */
 /* Charge l'état de sécurité pour l'administrateur : ses alertes rejoignent la liste des alertes et la pastille de l'onglet */
@@ -157,7 +180,7 @@ Views.dash = {
         <div class="dnote">${racks.some(x => x.pct >= RACK_FULL_PCT) ? `<span style="color:${COL.serious}">${ico('alert')}</span>En orange : baie remplie à ${RACK_FULL_PCT} % ou plus` : 'Aucune baie proche de la saturation'}</div></div>
       <div class="dcard c4">${title('bolt', 'Budget PoE par switch')}<div class="scroll">${hbars(poeRows, 100, r => `${r.raw.used}/${r.raw.budget} W`)}</div></div>
       <div class="dcard c4">${title('building', 'Type × bâtiment')}${matrix}</div>
-      ${firmwareCard()}${ageCard()}${adressageCard()}${securiteCard()}
+      ${firmwareCard()}${ageCard()}${adressageCard()}${liaisonsCard()}${securiteCard()}
       <div class="dcard c7">${title('history', 'Dernières actions', `<button class="btn sm" data-act="historique" data-tip="Historique|Filtrer toutes les actions, revenir à un état antérieur">${ico('list')}Tout voir (${d.history.length})</button>`)}
         <div class="scroll tline">${d.history.slice(0, 40).map(h => `<div class="tli"><span class="td">${ico(HIST_ICON[h.type] || 'edit')}</span><div><b>${esc(h.text)}</b><small>${HISTORY_TYPES[h.type] || h.type} · ${fmtDateTime(h.ts)}</small></div></div>`).join('') || '<div class="empty">Aucune action</div>'}</div></div>
     </div>`;

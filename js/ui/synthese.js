@@ -17,7 +17,7 @@ function synthese() {
   const s = computeStats(), d = Store.db, age = ageDuParc(), ip = planAdressage(), alertes = computeAlerts().filter(a => a.kind !== 'securite');
   const niveau = l => alertes.filter(a => a.level === l).length;
   const pleines = s.racks.filter(x => x.pct >= RACK_FULL_PCT), charges = s.swPorts.filter(x => pct(x.used, x.total) >= SEUIL_PORTS_PCT), poe = s.poe.filter(x => x.pct >= POE_WARN_PCT);
-  const fw = versionsFirmware().filter(l => l.v.size > 1);
+  const fw = versionsFirmware().filter(l => l.retard);
   const vieux = age.anciens.filter(x => x.ans >= RENOUVELLEMENT_ANS);
   return `<section class="pr-synthese"><h1>Synthèse du parc réseau</h1>
     <p class="pr-sous">${esc(d.sites.length > 1 ? `${d.sites.length} sites : ${d.sites.map(x => x.name).join(', ')}` : d.sites[0]?.name || 'Aucun site')} — ${plural(d.buildings.length, 'bâtiment')}, ${plural(d.floors.length, 'étage')}, ${plural(d.racks.length, 'baie')}</p>
@@ -35,8 +35,8 @@ function synthese() {
     ...pleines.map(x => [`Baie <b>${esc(x.r.name)}</b>`, `${x.used} U sur ${x.total} (${x.pct} %)`, esc(locLabel(x.r.roomId))]),
     ...charges.map(x => [`Switch <b>${esc(x.dev.hostname)}</b>`, `${x.used} ports sur ${x.total} (${pct(x.used, x.total)} %)`, esc(locLabel(x.dev.id))]),
     ...poe.map(x => [`PoE <b>${esc(x.dev.hostname)}</b>`, `${x.used} W sur ${x.budget} (${x.pct} %)`, esc(locLabel(x.dev.id))])], `Aucune baie à ${RACK_FULL_PCT} %, aucun switch à ${SEUIL_PORTS_PCT} % de ses ports, aucun budget PoE à ${POE_WARN_PCT} %`)}
-    <h2>Firmware : modèles avec plusieurs versions</h2>
-    ${table(['Modèle', 'Versions en service'], fw.map(l => [esc(`${l.c.brand} ${l.c.model}`), [...l.v].sort((a, b) => b[1] - a[1]).map(([v, n]) => `${esc(v)} × ${n}`).join(', ')]), 'Parc homogène : une seule version par modèle')}
+    <h2>Firmware : équipements à mettre à niveau</h2>
+    ${table(['Modèle', 'Version de référence', 'En retard', 'Versions en service'], fw.map(l => [esc(`${l.c.brand} ${l.c.model}`), esc(l.c.firmware), l.retard, [...l.v].sort((a, b) => b[1] - a[1]).map(([v, n]) => `${esc(v)} × ${n}`).join(', ') || '—']), 'Tous les équipements sont à la version de référence de leur modèle')}
     <h2>Plan d'adressage</h2>
     ${table(['VLAN', 'Sous-réseau', 'Adresses attribuées', 'Occupation', 'Prochaine adresse libre'], ip.vlans.map(v => [`${v.vlan.id} ${esc(v.vlan.name)}`, esc(v.vlan.subnet), `${v.utilisees} sur ${v.hotes}`, `${v.pct} %`, v.libre || 'aucune']), 'Aucun sous-réseau saisi')}
     ${ip.hors.length ? `<p class="pr-sous">${plural(ip.hors.length, 'adresse')} hors de tout sous-réseau : ${ip.hors.slice(0, 12).map(x => `${esc(x.hostname)} (${esc(x.ip)})`).join(', ')}${ip.hors.length > 12 ? '…' : ''}</p>` : ''}

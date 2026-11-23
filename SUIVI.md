@@ -133,7 +133,7 @@ js/demo.js                 jeu de données fictif (graine fixe)
 js/store.js                état, index, annulation, sauvegarde
 js/stockage.js             stockage local du mode démonstration (IndexedDB), copies de secours
 js/ecarts.js               écart entre deux états : changements à envoyer, retour en arrière
-js/services/               requetes, cablage, topologie, tracage, connexion, recherche, installation, impact, remplacement, doublons, import-csv, securite, adressage, cycle-de-vie
+js/services/               requetes, cablage, topologie, tracage, connexion, recherche, installation, impact, remplacement, doublons, import-csv, securite, adressage, cycle-de-vie, liaisons
 js/3d/                     three (chargement), facades, viewer, objets
 js/ui/socle.js             onglets, fenêtres, infobulles, notifications
 js/ui/carto/               carto, plan, fiches, baie, tracage, connexion, topologie
@@ -715,6 +715,23 @@ Demande : vérifier que la supervision est réellement fonctionnelle, sans doubl
 
 **Rien de tout cela n'a tourné contre un vrai PRTG ni un vrai switch.** Les simulateurs imitent les réponses documentées ; l'essai réel reste dans les rappels de la section 4.
 
+### 3.34 Localisation, liaisons entre sites, firmware de référence (lots 24, 26, 27)
+
+Trois ajouts qui ne changent pas le modèle de données.
+
+**Localisation (lot 24).** La fiche d'un site et celle d'un bâtiment affichent l'adresse du site et deux liens, « Voir sur la carte » et « Itinéraire », vers Google Maps.
+- Ce sont des **liens**, ouverts dans un nouvel onglet à la demande. Aucune carte n'est intégrée : la page ne doit appeler aucune adresse extérieure, et la politique de sécurité du contenu le bloquerait.
+- L'adresse est encodée dans le lien (`encodeURIComponent`), le lien ne transmet pas la page d'origine (`noreferrer`). En cliquant, l'utilisateur transmet l'adresse du site à Google ; l'infobulle le dit.
+- Un bâtiment n'a pas d'adresse propre : il reprend celle de son site. Un champ d'adresse par bâtiment demanderait une migration.
+
+**Liaisons entre bâtiments et sites (lot 26).** `js/services/liaisons.js` réunit en liaisons les câbles dont les deux bouts sont dans deux bâtiments différents (rocades de fibre entre tiroirs optiques, liens directs).
+- Carte du tableau de bord, dès qu'il y a deux bâtiments : un schéma (une case par bâtiment, un trait par liaison, plein entre deux sites, pointillé dans un même site) et le détail (nombre de liens, type de câble, longueur, liens actifs).
+- Section « Liaisons » sur la fiche d'un site et d'un bâtiment.
+- Limite : seul le câblage saisi compte. Un lien d'opérateur entre deux sites (fibre louée, VPN) n'apparaît que s'il est saisi comme un câble entre deux équipements.
+
+**Firmware de référence (lot 27).** La version inscrite sur le modèle (onglet Matériel) sert de référence. Un équipement qui en porte une autre, ou aucune, est « en retard » : carte du tableau de bord, fiche de l'équipement, synthèse imprimable.
+- **Pas de flux d'actualité des constructeurs.** Il n'existe pas de source commune : chaque constructeur a son site, souvent derrière un compte client, et le serveur NetCarto n'a pas vocation à sortir sur Internet. La référence se met à jour à la main quand une version est publiée. Un flux par constructeur reste possible si l'utilisateur le décide, en acceptant une sortie vers Internet depuis le serveur.
+
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
@@ -752,10 +769,10 @@ Demande : vérifier que la supervision est réellement fonctionnelle, sans doubl
 | 20 | **Installation Linux :** `installer.sh`, systemd, mise à jour, désinstallation | Élevé (high) | ✅ Fait (voir 3.21) |
 | 22 | **Three.js hébergé localement**, pour fonctionner sans Internet | Moyen | ✅ Fait (voir 3.22) |
 | 23 | **Supervision fiable et multi-sources :** audit du module (`connecteurs/`), fusion sans doublon ni conflit entre sources, priorité explicite, Juniper (noms d'interfaces Junos, modèles EX au catalogue), PRTG, ce que chaque source remonte réellement | Élevé (high) | ✅ Fait (voir 3.33) |
-| 24 | **Localisation des sites et des bâtiments :** adresse et lien d'itinéraire vers un service de cartes, sans carte intégrée dans la page (aucune adresse extérieure appelée) | Moyen | ⏳ À faire |
+| 24 | **Localisation des sites et des bâtiments :** adresse et lien d'itinéraire vers un service de cartes, sans carte intégrée dans la page (aucune adresse extérieure appelée) | Moyen | ✅ Fait (voir 3.34) |
 | 25 | **Interventions planifiées :** « à venir » sur un équipement, une prise ou une pièce, avec note, date, personne chargée et état ; visibles par toute l'équipe | Élevé (high) | ⏳ À faire |
-| 26 | **Liaisons entre sites :** vue des sites et des liens qui les relient (fibre, opérateur) | Moyen | ⏳ À faire |
-| 27 | **Firmware de référence par modèle :** version cible saisie par l'administrateur, écarts signalés. Un flux d'actualité des constructeurs demande une décision (accès à Internet depuis le serveur, pas de source commune aux constructeurs) | Moyen | ⏳ À faire |
+| 26 | **Liaisons entre sites :** vue des sites et des liens qui les relient (fibre, opérateur) | Moyen | ✅ Fait (voir 3.34) |
+| 27 | **Firmware de référence par modèle :** version cible saisie par l'administrateur, écarts signalés. Un flux d'actualité des constructeurs demande une décision (accès à Internet depuis le serveur, pas de source commune aux constructeurs) | Moyen | ✅ Fait pour la référence saisie (voir 3.34) ; flux automatique en attente de décision |
 
 **Ordre de réalisation (décision du 2026-11-19) :** 16, 17, 11, 18, 14, 19, 20, 22. Les lots 9 (reste), 13 et 15 viennent ensuite. Il n'y a pas de lot 21.
 
@@ -825,10 +842,10 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-23 | « J'ai créé un nouveau site : il m'affiche les mêmes bâtiments, et un clic ramène sur le site de démonstration » (capture d'écran) | ✅ Défaut corrigé : la vue d'un site montrait tous les étages de la base. Elle ne montre plus que les siens, et dit quoi faire quand le site est vide. Avec plusieurs sites, les emplacements, le filtre de l'inventaire et le tableau de bord nomment le site (`batLabel`), car deux sites peuvent avoir chacun leur « Bât. A ». |
 | 2026-11-23 | « Étudie ce que les switchs Juniper permettent de récupérer en temps réel (état des connexions et des ports) pour l'intégrer à la vue 3D ; étudie aussi les connecteurs et la connectique compatibles » | ✅ Lot 23 (voir 3.33) : la source SNMP standard suffit pour Juniper ; trois modèles EX au catalogue ; connectique décrite, QSFP et modules optiques non modélisés. |
 | 2026-11-23 | « Vérifie que les sources de données sont réellement fonctionnelles et pas seulement visuelles : communication entre Juniper, la vue 3D et les autres supervisions, sans bug, conflit, doublon ni problème de synchronisation. PRTG est impératif ; prévoir plusieurs solutions de supervision » | ✅ Lot 23 (voir 3.33) : dix défauts trouvés et corrigés (doublons, conflits, source en panne, relevé périmé) ; source `json` pour les autres outils. Non essayé sur un vrai PRTG. |
-| 2026-11-23 | « Ajouter la localisation des bâtiments avec Google Maps, pour s'y rendre » | ⏳ Lot 24. Un lien d'itinéraire, pas de carte intégrée : la page ne doit appeler aucune adresse extérieure. |
+| 2026-11-23 | « Ajouter la localisation des bâtiments avec Google Maps, pour s'y rendre » | ✅ Lot 24 (voir 3.34) : liens « Voir sur la carte » et « Itinéraire » sur la fiche d'un site et d'un bâtiment. Pas de carte intégrée : la page ne doit appeler aucune adresse extérieure. |
 | 2026-11-23 | « Programmer une intervention “à venir” (résoudre une alerte Wi-Fi, installer tel matériel) avec une note, pour que l'équipe voie qui fait quoi » | ⏳ Lot 25. |
-| 2026-11-23 | « Voir quels sites sont connectés entre eux, par exemple par une fibre » | ⏳ Lot 26. |
-| 2026-11-23 | « Firmware par modèle : une source d'actualité qui prévient quand une mise à jour est disponible ? » | ⏳ Lot 27. Version de référence saisie à la main d'abord ; le flux automatique demande une décision. |
+| 2026-11-23 | « Voir quels sites sont connectés entre eux, par exemple par une fibre » | ✅ Lot 26 (voir 3.34) : carte « Liaisons entre bâtiments et sites » avec schéma, et section « Liaisons » sur les fiches. |
+| 2026-11-23 | « Firmware par modèle : une source d'actualité qui prévient quand une mise à jour est disponible ? » | ✅ Lot 27 (voir 3.34) : la version du modèle sert de référence, les équipements en retard sont comptés. Pas de flux automatique : il demande une sortie vers Internet depuis le serveur, à décider. |
 | 2026-11-23 | « Cherche sur claudeskills.fr des skills utiles au projet, de la gestion de projet à la technique, et applique-les » | 🕓 Annuaire lu (environnement `inventaire-r-seau` créé pour autoriser le site). Les skills sont des dépôts GitHub de tiers : aucun installé sans relecture de leur contenu ni accord. Sélection proposée à l'utilisateur. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
