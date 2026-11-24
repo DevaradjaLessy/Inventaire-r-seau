@@ -24,7 +24,7 @@ fenetreMinutes = 10        # …sur cette durée ; au-delà, l'adresse attend la
 coutMotDePasse = 17        # coût des empreintes (scrypt, N = 2^17) ; ne le baissez pas
 
 [donnees]
-dossier = "donnees"     # dossier de la base ; un chemin relatif part du dossier de ce fichier
+dossier = "donnees-locales"   # dossier de la base ; un chemin relatif part du dossier de ce fichier
 
 [courriel]
 # Facultatif. Sans « hote », NetCarto n'envoie aucun courriel : un mot de passe perdu se traite alors

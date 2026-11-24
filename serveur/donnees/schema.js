@@ -28,7 +28,7 @@ const COLLECTIONS = {
   outlets:   { table: 'prises', cle: 'id', champs: [['id', 'id', 'id'], ['roomId', 'piece_id', 'ref'], ['label', 'repere', 'txt!'], ['x', 'x', 'num'], ['y', 'y', 'num'], ['usage', 'usage', 'txt!']] },
   cables:    { table: 'cables', cle: 'id', extremites: true, champs: [['id', 'id', 'id'], ['type', 'type', 'txt!'], ['length', 'longueur', 'num'], ['color', 'couleur', 'coul'], ['label', 'libelle', 'txt']] },
   interventions: { table: 'interventions', cle: 'id', ordre: 'cree_le, rowid', champs: [['id', 'id', 'id'], ['ref', 'ref', 'ref?'], ['title', 'titre', 'txt!'], ['note', 'note', 'txt'], ['date', 'date_prevue', 'date'], ['assignee', 'charge', 'txt'], ['status', 'statut', 'txt!'], ['createdBy', 'auteur', 'txt'], ['createdAt', 'cree_le', 'int'], ['doneAt', 'fait_le', 'int?']] },
-  history:   { table: 'journal', cle: 'id', ordre: 'date DESC, rowid DESC', champs: [['id', 'id', 'id'], ['ts', 'date', 'int'], ['type', 'type', 'txt!'], ['text', 'texte', 'txt'], ['ref', 'ref', 'ref?']] },
+  history:   { table: 'journal', cle: 'id', ordre: 'date DESC, rowid DESC', champs: [['id', 'id', 'id'], ['ts', 'date', 'int'], ['type', 'type', 'parmi:add|move|remove|edit|stock|import|catalog'], ['text', 'texte', 'txt'], ['ref', 'ref', 'ref?']] },
 };
 /* Ordre d'écriture qui respecte les dépendances (utile pour un remplacement complet) */
 const ORDRE = ['vlans', 'sites', 'buildings', 'floors', 'rooms', 'catalog', 'stock', 'racks', 'devices', 'ports', 'outlets', 'cables', 'interventions', 'history'];
@@ -49,6 +49,8 @@ function versColonne(v, type, prop, ou) {
   const facultatif = type.endsWith('~'), t = facultatif ? type.slice(0, -1) : type;
   if (facultatif && v === undefined) return null;
   const vide = v === null || v === undefined;
+  // Liste fermée : « parmi:a|b|c ». Pour un champ affiché dans la page, c'est la seule forme sûre.
+  if (t.startsWith('parmi:')) { if (typeof v !== 'string' || !t.slice(6).split('|').includes(v)) throw refus(ou, prop, `valeur hors de la liste permise (${t.slice(6).split('|').join(', ')})`); return v; }
   switch (t) {
     case 'id': if (typeof v !== 'string' || !ID.test(v)) throw refus(ou, prop, 'identifiant invalide (lettres, chiffres, tirets ; 64 caractères au plus)'); return v;
     case 'ref': if (typeof v !== 'string' || !ID.test(v)) throw refus(ou, prop, 'référence manquante ou invalide'); return v;

@@ -181,6 +181,46 @@ test('Supervision : simulation, écart saisi / mesuré, alerte, arrêt', async p
   await page.click('[data-act=sources]'); await page.selectOption('.modal [name=type]', 'none'); await page.click('[data-act=modal-ok]'); await page.waitForFunction(() => NetCarto.Live.state === 'off');
   assert.strictEqual(await page.evaluate(() => NetCarto.Live.port.size), 0);
 });
+test('Baie 3D : la molette zoome vers l\'endroit visé, sans traverser la façade ni perdre la baie de vue', async page => {
+  await page.evaluate(() => { const d = NetCarto.Store.db, sw = d.devices.find(x => x.hostname === 'SW-A1-ACC-01'); NetCarto.select(sw.rackId, { view: 'rack' }); });
+  await pret3D(page); await page.waitForTimeout(700);
+  // Position à l'écran d'un port du switch du haut de la baie, et état de la caméra
+  const etat = () => page.evaluate(() => { const v = NetCarto.Views3D.main, T = v.camera.position.constructor, d = NetCarto.Store.db, sw = d.devices.find(x => x.hostname === 'SW-A1-ACC-01'), p = d.ports.find(x => x.deviceId === sw.id && x.name === 'Gi1/0/12');
+    const r = v.renderer.domElement.getBoundingClientRect(), e = v.ports[v.portIdx.get(p.id)], ecran = (x, y, z) => { const q = new T(x, y, z).project(v.camera); return { x: r.left + (q.x + 1) / 2 * r.width, y: r.top + (1 - q.y) / 2 * r.height }; };
+    const g = v.geo, haut = ecran(0, g.yBase + g.H, g.zF), bas = ecran(0, g.yBase, g.zF);
+    return { port: ecran(e.x, e.y, g.zF), z: v.camera.position.z, zF: g.zF, dist: v.camera.position.distanceTo(v.controls.target), hauteurBaie: Math.abs(bas.y - haut.y), hauteurVue: r.height, milieuBaie: (haut.y + bas.y) / 2 - r.top }; });
+  // Un vrai cran de molette prend une seconde dans un navigateur sans carte graphique : trois vrais crans, le reste envoyé directement à la page
+  const molette = (x, y, dy, n) => page.evaluate(([x, y, dy, n]) => { const c = document.querySelector('#r3d-canvas canvas'); for (let i = 0; i < n; i++) c.dispatchEvent(new WheelEvent('wheel', { deltaY: dy, clientX: x, clientY: y, bubbles: true, cancelable: true })); }, [x, y, dy, n]);
+  const depart = await etat();
+  assert.ok(depart.hauteurBaie > depart.hauteurVue * 0.6, 'au départ, la baie occupe la vue');
+  // Vingt crans de molette vers l'avant, souris posée sur le port : il reste sous la souris et grossit
+  await page.mouse.move(depart.port.x, depart.port.y);
+  for (let i = 0; i < 3; i++) await page.mouse.wheel(0, -100);
+  await molette(depart.port.x, depart.port.y, -100, 17); await page.waitForTimeout(400);
+  const pres = await etat();
+  assert.ok(Math.hypot(pres.port.x - depart.port.x, pres.port.y - depart.port.y) < 40, `le port visé doit rester sous la souris (écart ${Math.round(Math.hypot(pres.port.x - depart.port.x, pres.port.y - depart.port.y))} px)`);
+  assert.ok(pres.hauteurBaie > depart.hauteurBaie * 3, 'la vue doit s\'être nettement rapprochée');
+  // En insistant, la caméra s'arrête devant la façade : elle n'entre pas dans la baie
+  await molette(depart.port.x, depart.port.y, -100, 60); await page.waitForTimeout(400);
+  const butee = await etat();
+  assert.ok(butee.z > butee.zF + 0.1, `la caméra reste devant la façade (z = ${butee.z.toFixed(3)}, façade à ${butee.zF.toFixed(3)})`);
+  assert.ok(Math.hypot(butee.port.x - depart.port.x, butee.port.y - depart.port.y) < 60, 'en butée, le port visé est toujours sous la souris');
+  // Vers l'arrière, sans limite de crans : la baie reste lisible, elle ne devient pas un point au loin
+  await molette(depart.port.x, depart.port.y, 100, 150); await page.waitForTimeout(400);
+  const loin = await etat();
+  assert.ok(loin.hauteurBaie > loin.hauteurVue * 0.3, `la baie reste visible en entier et lisible (${Math.round(loin.hauteurBaie)} px sur ${Math.round(loin.hauteurVue)})`);
+  assert.ok(Math.abs(loin.milieuBaie - loin.hauteurVue / 2) < loin.hauteurVue * 0.12, `en reculant, la baie revient au centre de la vue (milieu à ${Math.round(loin.milieuBaie)} px sur ${Math.round(loin.hauteurVue)})`);
+  // Pavé tactile : une rafale de petits mouvements fait un petit zoom, pas un cran entier par mouvement
+  await page.click('[data-act=r3d-fit]'); await page.waitForTimeout(700);
+  const avant = await etat();
+  await molette(depart.port.x, depart.port.y, -4, 40); await page.waitForTimeout(400);
+  const apres = await etat(), rapport = apres.hauteurBaie / avant.hauteurBaie;
+  assert.ok(rapport > 1.05 && rapport < 1.5, `40 petits mouvements de pavé tactile = un zoom doux (×${rapport.toFixed(2)})`);
+  // Le bouton « Cadrer » ramène la vue d'ensemble
+  await page.click('[data-act=r3d-fit]'); await page.waitForTimeout(800);
+  const cadre = await etat();
+  assert.ok(Math.abs(cadre.hauteurBaie - depart.hauteurBaie) < depart.hauteurBaie * 0.08, 'le cadrage revient à la vue d\'ensemble');
+});
 test('Sans Internet : la vue 3D fonctionne avec la copie locale de Three.js, rien n\'est demandé à l\'extérieur', async (page, { requetes }) => {
   await choisir(page, 'BAIE-A0-01'); await page.waitForSelector('#r3d-canvas canvas', { timeout: 20000 });
   assert.strictEqual(await page.evaluate(() => import('/js/3d/three.js').then(m => m.threeReady)), true);
@@ -648,6 +688,10 @@ test('Sécurité : aucun texte saisi n\'est interprété comme du code, où qu\'
     for (const x of d.history) T(x, ['text']);
     for (const x of d.interventions) T(x, ['title', 'note', 'assignee', 'createdBy']);
     const err = S.validate(d); if (err) return err;
+    // Le type d'une entrée d'historique est une liste fermée : une base importée qui en sort est refusée…
+    const piege = JSON.parse(JSON.stringify(d)); piege.history[0].type = charge; if (!S.validate(piege)) return 'un type d\'historique hors liste est accepté';
+    // … et s'il arrivait quand même jusqu'à la page (serveur ancien, base modifiée à la main), il s'affiche comme du texte
+    d.history[0].type = charge;
     S.save = () => {}; S.db = d; S.undoStack = []; S.reindex(); S.emit(); return null;
   }, CHARGE);
   assert.strictEqual(erreur, null, 'la base piégée doit rester une base valide');
@@ -693,6 +737,37 @@ test('Sécurité : aucun texte saisi n\'est interprété comme du code, où qu\'
   await page.evaluate(i => NetCarto.Store.commit('edit', 'Note sur ' + NetCarto.Store.idx.id.get(i).hostname, db => { db.devices[0].notes += '!'; }), ids.sw);
   await page.keyboard.press('Control+z'); await controle('notification d\'annulation');
   assert.strictEqual(defauts.length, 0, 'texte interprété comme du code : ' + defauts.join(' // '));
+});
+test('Sécurité : rien de ce que renvoie une supervision (noms, messages, erreurs) n\'est interprété comme du code', async page => {
+  // Une source compromise ou mal réglée peut renvoyer n'importe quel texte : il s'affiche dans la fenêtre des sources, les fiches, les alertes
+  const ids = await page.evaluate(charge => {
+    const d = NetCarto.Store.db, sw = d.devices.find(x => x.hostname === 'SW-A1-ACC-01'), ap = d.devices.find(x => x.hostname === 'AP-A1-01'), p = d.ports.find(x => x.deviceId === sw.id && x.name === 'Gi1/0/1');
+    Object.assign(NetCarto.Live.cfg, { type: 'relais' });
+    NetCarto.Live.apply({ version: 1, ts: Date.now(), source: charge,
+      sources: [{ nom: charge, ok: false, erreur: charge, equipements: 0, ts: Date.now() }, { nom: 'snmp' + charge, ok: true, erreur: '', equipements: 2, ts: Date.now() }],
+      devices: [
+        { ip: sw.ip, hostname: charge, state: 'warning', message: charge, sources: [charge], ecarts: [charge + ' dit « up », ' + charge + ' dit « down »'],
+          ports: [{ name: 'Gi1/0/1', status: 'error', errors: 12, macs: [charge, '02:00:00:00:00:01'], macCount: 2 }, { name: charge, status: 'up' }, { name: 'Port' + charge, status: 'down' },
+            // Des mesures qui devraient être des nombres : un texte à leur place est écarté, pas affiché
+            { name: 'Gi1/0/2', status: 'up', errors: charge, macCount: charge, poeW: charge, speedMbps: charge, inMbps: charge, outMbps: charge, totalMbps: charge, vlan: charge, macs: [{ piege: charge }, 7] }] },
+        { ip: ap.ip, hostname: 'x', state: 'down', message: charge, ports: [] },
+        { ip: '198.51.100.7', hostname: charge, state: 'up', ports: [] }, { ip: charge, hostname: '', state: 'up', ports: [] }] });
+    NetCarto.Live.state = 'ok'; NetCarto.Live.source = charge; NetCarto.Live.emit();
+    const p2 = d.ports.find(x => x.deviceId === sw.id && x.name === 'Gi1/0/2'), m = NetCarto.Live.port.get(p2.id);
+    return { sw: sw.id, port: p.id, port2: p2.id, ap: ap.id, mesures: [m.errors, m.macCount, m.poeW, m.speedMbps, m.inMbps, m.outMbps, m.totalMbps, m.vlan, m.macs.length] };
+  }, CHARGE);
+  assert.deepStrictEqual(ids.mesures, [null, null, null, null, null, null, null, null, 0], 'une mesure qui n\'est pas un nombre est écartée'); delete ids.mesures;
+  const propre = async ou => { await page.waitForTimeout(150); assert.deepStrictEqual(await page.evaluate(() => [window.__xss || 0, document.querySelectorAll('img[src="x"], svg[onload], [onerror]').length]), [0, 0], `injection interprétée : ${ou}`); };
+  await propre('après le relevé');
+  await page.click('[data-act=sources]'); await page.waitForSelector('#src-state .src-liste'); await propre('fenêtre des sources');
+  assert.match(await page.locator('#src-state').innerText(), /en erreur/); assert.match(await page.locator('#src-state').innerText(), /Ports non reconnus/);
+  await page.hover('[data-act=sources]', { force: true }).catch(() => {}); await page.click('[data-act=modal-close]');
+  for (const [nom, id] of Object.entries(ids)) { await page.evaluate(i => NetCarto.select(i, { keep: true }), id); await propre('fiche ' + nom); }
+  await page.click('[data-tab=dash]'); await page.waitForSelector('.alist .al:has-text("Problème signalé par la supervision")'); await propre('tableau de bord');
+  assert.strictEqual(await page.locator('.alist .al', { hasText: 'Source de supervision en erreur' }).count(), 1);
+  // Un état d'erreur global, avec un message piégé
+  await page.evaluate(charge => { NetCarto.Live.state = 'error'; NetCarto.Live.error = charge; NetCarto.Live.emit(); }, CHARGE);
+  await propre('supervision en erreur'); await page.click('[data-act=sources]'); await propre('fenêtre des sources en erreur'); await page.click('[data-act=modal-close]');
 });
 test('Sécurité : les exports CSV ne contiennent pas de formule exécutable par un tableur', async page => {
   await page.evaluate(() => NetCarto.Store.commit('edit', 'Piège', db => { db.devices[0].hostname = '=HYPERLINK("http://exemple.invalid","clic")'; db.devices[1].serial = '+cmd|calc'; db.devices[2].firmware = '@SUM(A1)'; db.devices[3].serial = '-2+3'; }));
@@ -1045,8 +1120,8 @@ test('Serveur : modification faite ailleurs entre-temps → prévenu, données r
   const autre = await api(page, '/lots', 'POST', { changements: [{ collection: 'devices', op: 'modifier', cle: dev.id, avant: dev, apres: { ...dev, notes: 'changé par un collègue' } }] });
   assert.strictEqual(autre.code, 200);
   await page.click('#detail [data-act=dev-edit]'); await page.fill('.modal [name=firmware]', 'IOS-XE 99'); await page.click('[data-act=modal-ok]');
-  await page.waitForSelector('.toast.warn'); await synchro(page);
-  assert.match(await page.locator('.toast.warn').first().innerText(), /modifié entre-temps/);
+  const avis = await (await page.waitForSelector('.toast.warn')).innerText();   // lu tout de suite : la notification s'efface seule
+  await synchro(page); assert.match(avis, /modifié entre-temps/);
   assert.deepStrictEqual(await page.evaluate(i => { const x = NetCarto.Store.idx.id.get(i); return [x.notes, x.firmware]; }, dev.id), ['changé par un collègue', dev.firmware]);
   assert.strictEqual((await api(page, '/equipements/' + dev.id)).json.notes, 'changé par un collègue');
 }, { serveur: true, erreursAttendues: /409/ });
@@ -1131,8 +1206,7 @@ test('Serveur injoignable : la modification est annulée à l\'écran et l\'util
   const dev = await page.evaluate(() => { const x = NetCarto.Store.db.devices.find(d => d.hostname === 'SW-A1-ACC-01'); NetCarto.select(x.id); return x; });
   await ctx.app.arreter();
   await page.click('#detail [data-act=dev-edit]'); await page.fill('.modal [name=notes]', 'perdu ?'); await page.click('[data-act=modal-ok]');
-  await page.waitForSelector('.toast.err');
-  assert.match(await page.locator('.toast.err').first().innerText(), /Serveur injoignable/);
+  assert.match(await (await page.waitForSelector('.toast.err')).innerText(), /Serveur injoignable/);   // lu tout de suite : la notification s'efface seule
   await synchro(page);
   assert.strictEqual(await page.evaluate(i => NetCarto.Store.idx.id.get(i).notes, dev.id), dev.notes);
   assert.match(await page.locator('#srv-tag').innerText(), /Hors ligne/);

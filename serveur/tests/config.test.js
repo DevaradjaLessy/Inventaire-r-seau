@@ -41,6 +41,11 @@ test('erreurs de configuration expliquées', t => {
   assert.throws(() => chargerConfig({ env: { SMTP_MDP: 'x' }, args: ['--config', f] }), /securite.*"aucune".*mot de passe.*clair/s);
   fs.writeFileSync(f, courriel('securite = "aucune"'));
   assert.strictEqual(chargerConfig({ env: {}, args: ['--config', f] }).courriel.securite, 'aucune', 'sans compte, une liaison en clair reste permise (relais interne)');
+  // L'adresse d'expédition part dans un en-tête : ni retour à la ligne, ni texte autour de l'adresse entre chevrons
+  for (const mauvais of ['netcarto@exemple.interne\\r\\nBcc: intrus@exemple.test', 'NetCarto <netcarto@exemple.interne> suite', '<a@b> NetCarto <netcarto@exemple.interne>']) {
+    fs.writeFileSync(f, `[courriel]\nhote = "smtp.exemple.interne"\nexpediteur = "${mauvais}"\nadresse = "https://netcarto.exemple.interne:8443"\n`);
+    assert.throws(() => chargerConfig({ env: {}, args: ['--config', f] }), /courriel\.expediteur/, mauvais);
+  }
   fs.writeFileSync(f, courriel('autorite = "ac-interne.pem"'));
   assert.throws(() => chargerConfig({ env: {}, args: ['--config', f] }), /courriel\.autorite.*introuvable/);
   fs.writeFileSync(path.join(dossier, 'ac-interne.pem'), 'x');

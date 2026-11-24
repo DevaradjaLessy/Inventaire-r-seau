@@ -13,6 +13,8 @@
 #
 # Options :
 #   --node <archive>   utilise cette archive Node.js (node-v22.x-linux-x64.tar.gz, prise sur nodejs.org) au lieu de la télécharger
+#   --somme <sha256>   somme de contrôle attendue de l'archive donnée par --node (colonne de gauche de SHASUMS256.txt, sur nodejs.org) :
+#                      l'installation s'arrête si l'archive ne lui correspond pas
 #   --hors-ligne       ne télécharge rien : demande --node, et les dépendances déjà présentes dans la copie du dépôt
 #                      (préparées sur un poste relié à Internet : « npm ci --omit=dev » dans serveur/ et connecteurs/)
 set -euo pipefail
@@ -22,23 +24,35 @@ SOURCE="$(cd "$ICI/../.." && pwd)"
 # shellcheck source=installation/linux/commun.sh
 . "$ICI/commun.sh"
 
-MODE=installation; ARCHIVE_NODE=""; HORS_LIGNE=non
+MODE=installation; ARCHIVE_NODE=""; SOMME_NODE=""; HORS_LIGNE=non
 while [ $# -gt 0 ]; do
   case "$1" in
     --mise-a-jour) MODE=mise-a-jour ;;
     --hors-ligne) HORS_LIGNE=oui ;;
     --node) [ $# -ge 2 ] || echec "l'option --node demande le chemin d'une archive."; ARCHIVE_NODE="$2"; shift ;;
-    --aide|-h) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --somme) [ $# -ge 2 ] || echec "l'option --somme demande une somme de contrôle SHA-256."; SOMME_NODE="$2"; shift ;;
+    --aide|-h) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echec "option inconnue : $1 (voir --aide)" ;;
   esac
   shift
 done
 if [ -n "$ARCHIVE_NODE" ] && [ ! -f "$ARCHIVE_NODE" ]; then echec "archive Node.js introuvable : $ARCHIVE_NODE"; fi
+if [ -n "$SOMME_NODE" ] && [ -z "$ARCHIVE_NODE" ]; then echec "l'option --somme accompagne l'option --node."; fi
 
 exiger_root
 exiger_debian
 [ -f "$SOURCE/serveur/netcarto.js" ] && [ -f "$SOURCE/index.html" ] || echec "fichiers de NetCarto introuvables à côté de ce script (attendus dans $SOURCE)."
 if [ -e "$APP" ] && [ ! -e "$APP/$TEMOIN" ]; then echec "le dossier $APP existe déjà et n'a pas été créé par ce script. Rien n'a été modifié."; fi
+# Une archive apportée à la main n'a pas été vérifiée par ce script : sa somme est contrôlée si elle est donnée, affichée sinon
+if [ -n "$ARCHIVE_NODE" ]; then
+  if [ -n "$SOMME_NODE" ]; then
+    somme_correcte "$ARCHIVE_NODE" "$SOMME_NODE" || echec "l'archive Node.js ne correspond pas à la somme de contrôle donnée par --somme. Rien n'a été modifié."
+    dire "Archive Node.js fournie : somme de contrôle vérifiée."
+  else
+    dire "Archive Node.js fournie, SHA-256 : $(sha256sum -- "$ARCHIVE_NODE" | awk '{ print $1 }')"
+    dire "À comparer à SHASUMS256.txt sur nodejs.org (ou donnez-la avec --somme pour un contrôle automatique)."
+  fi
+fi
 DEJA=non; [ -e "$APP/$TEMOIN" ] && DEJA=oui
 if [ "$MODE" = mise-a-jour ] && [ "$DEJA" = non ]; then echec "NetCarto n'est pas installé sur cette machine : lancez installer.sh."; fi
 
@@ -89,6 +103,7 @@ dire "Node.js $("$NOEUD" --version) en place."
 etape "Programme"
 # Seuls les fichiers utiles au serveur sont copiés : ni tests, ni dépendances locales, ni données d'essai
 (cd "$SOURCE" && tar -cf - --exclude=node_modules --exclude=tests --exclude=donnees-locales --exclude='netcarto.toml' \
+    --exclude='*.sqlite' --exclude='*.sqlite-*' --exclude='.env' --exclude='.env.*' --exclude='*.key' --exclude='*.pem' --exclude='connecteurs/config.json' \
     index.html css js serveur connecteurs installation/README.md installation/netcarto) | tar -xf - -C "$NOUVEAU" --no-same-owner
 cp "$SOURCE/installation/netcarto.toml" "$NOUVEAU/installation/netcarto.toml"
 cp "$ICI/netcarto.service" "$NOUVEAU/installation/netcarto.service"

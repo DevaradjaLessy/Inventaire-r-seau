@@ -9,10 +9,11 @@ FROM node:22-bookworm-slim AS dependances
 WORKDIR /opt/netcarto
 COPY serveur/package.json serveur/package-lock.json serveur/
 COPY connecteurs/package.json connecteurs/package-lock.json connecteurs/
+# Aucun script d'installation de paquet n'est exécuté : les dépendances sont du JavaScript seul
 RUN --mount=type=secret,id=ca,required=false \
     if [ -s /run/secrets/ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca; fi; \
-    npm ci --omit=dev --no-audit --no-fund --prefix serveur && \
-    npm ci --omit=dev --no-audit --no-fund --prefix connecteurs
+    npm ci --omit=dev --ignore-scripts --no-audit --no-fund --prefix serveur && \
+    npm ci --omit=dev --ignore-scripts --no-audit --no-fund --prefix connecteurs
 
 # --- Étape 2 : image finale ---
 FROM node:22-bookworm-slim

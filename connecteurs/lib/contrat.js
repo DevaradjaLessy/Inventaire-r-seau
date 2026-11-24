@@ -16,14 +16,16 @@ const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 function port(p) {
   return {
-    name: String(p.name || ''), status: STATUSES.includes(p.status) ? p.status : null,
+    name: String(p.name || '').slice(0, 120), status: STATUSES.includes(p.status) ? p.status : null,
     speedMbps: num(p.speedMbps), inMbps: num(p.inMbps), outMbps: num(p.outMbps), totalMbps: num(p.totalMbps),
-    poeW: num(p.poeW), vlan: num(p.vlan), macs: Array.isArray(p.macs) ? p.macs.map(String) : [],
+    poeW: num(p.poeW), vlan: num(p.vlan), macs: Array.isArray(p.macs) ? p.macs.filter(m => typeof m === 'string').map(m => m.slice(0, 40)) : [],
     errors: num(p.errors), macCount: num(p.macCount),
   };
 }
 function equipement(d) {
-  return { ip: String(d.ip || ''), hostname: String(d.hostname || ''), state: STATES.includes(d.state) ? d.state : 'unknown', message: String(d.message || ''), ports: (d.ports || []).filter(p => p && p.name).map(port) };
+  // Une source peut renvoyer n'importe quoi : tout ce qui n'a pas la forme attendue devient une valeur vide, sans lever d'erreur
+  const texte = (v, max) => (typeof v === 'string' || typeof v === 'number' ? String(v).slice(0, max) : '');
+  return { ip: texte(d.ip, 255), hostname: texte(d.hostname, 255), state: STATES.includes(d.state) ? d.state : 'unknown', message: texte(d.message, 500), ports: (Array.isArray(d.ports) ? d.ports : []).filter(p => p && typeof p === 'object' && typeof p.name === 'string' && p.name).map(port) };
 }
 const EST_IP = /^(\d{1,3}\.){3}\d{1,3}$|^[0-9a-f:]*:[0-9a-f:.]+$/i;
 /* Nom d'interface ramené à une forme courte et comparable : « GigabitEthernet1/0/1 » et « Gi1/0/1 » désignent le même port.
@@ -48,7 +50,8 @@ function fusionner(listes, noms = []) {
   const sortie = [], parIp = new Map(), parNom = new Map();
   listes.forEach((liste, rang) => {
     const source = noms[rang] || `source ${rang + 1}`;
-    for (const brut of liste) {
+    for (const brut of Array.isArray(liste) ? liste : []) {
+      if (!brut || typeof brut !== 'object') continue;
       const d = equipement(brut);
       // Un « ip » qui n'est pas une adresse est un nom DNS : il sert de nom d'hôte de rechange
       let dns = '';

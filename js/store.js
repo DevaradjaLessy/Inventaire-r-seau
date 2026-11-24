@@ -1,5 +1,5 @@
 /* Store : état, index, historique, annulation, sauvegarde locale. Toute modification passe par Store.commit(type, texte, mutation). */
-import { APP, CATEGORIES, DEVICE_STATUS, INTERV_STATUS, OUTLET_USAGE, PORT_KIND, PORT_ROLE, PORT_STATUS } from './config.js';
+import { APP, CATEGORIES, DEVICE_STATUS, HISTORY_TYPES, INTERV_STATUS, OUTLET_USAGE, PORT_KIND, PORT_ROLE, PORT_STATUS } from './config.js';
 import { nextId, setRandomIds } from './utils.js';
 import { buildDemo, emptyDb } from './demo.js';
 import { defaire, diff, ecartEntre, lotInverse } from './ecarts.js';
@@ -96,7 +96,7 @@ const Store = {
       stock: e => id(e.catalogId) && nb(e.available) && nb(e.threshold),
       vlans: e => Number.isInteger(e.id) && col(e.color),
       interventions: e => id(e.id) && ref(e.ref) && typeof e.title === 'string' && !!e.title.trim() && date(e.date) && e.status in INTERV_STATUS && nb(e.createdAt) && nb(e.doneAt),
-      history: e => e && typeof e === 'object',
+      history: e => e.type in HISTORY_TYPES,
     };
     for (const [k, ok] of Object.entries(RULES)) {
       const i = d[k].findIndex(e => { try { return !e || typeof e !== 'object' || !ok(e); } catch { return true; } });

@@ -4,7 +4,7 @@
 'use strict';
 const test = require('node:test'), assert = require('node:assert');
 const fs = require('fs'), path = require('path'), tls = require('tls');
-const { requete, serveurDeTest, dossierTemporaire, cookieDe, RACINE, MDP } = require('./aide');
+const { requete, serveurDeTest, dossierTemporaire, cookieDe, demo, RACINE, MDP } = require('./aide');
 const { demarrer } = require('../app');
 const { hacher, verifier, controlerMotDePasse, reglerCout } = require('../securite/mots-de-passe');
 const { DEFAUTS } = require('../config');
@@ -222,6 +222,22 @@ test('Corps de requête : 25 Mo seulement pour un lot ou une base ; 64 Ko pour t
   assert.notStrictEqual((await requete('POST', s.api + '/lots', { type: 'edit', texte: gros.slice(0, 1000), changements: [], bourrage: gros }, s.tech)).code, 413);
 });
 
+test('Historique : le type d\'une entrée est pris dans une liste fermée, jamais un texte libre', async t => {
+  // Ce champ s'affiche dans le tableau de bord de tous les comptes : un texte libre permettait d'y glisser du balisage
+  const s = await serveurDeTest(t);
+  await requete('PUT', s.api + '/base', await demo(), s.admin);
+  const entree = type => ({ changements: [{ collection: 'history', op: 'creer', cle: 'h-essai-' + type.length, apres: { id: 'h-essai-' + type.length, ts: Date.now() + 86400000, type, text: 'Essai', ref: null } }] });
+  for (const mauvais of ['<div id="user-new"><input name="u-role" value="administrateur"></div>', 'Edit', 'x', '']) {
+    const r = await requete('POST', s.api + '/lots', entree(mauvais), s.tech);
+    assert.strictEqual(r.code, 400, `type « ${mauvais.slice(0, 20)} » : ${r.texte}`); assert.match(r.json.erreur, /type/);
+  }
+  assert.strictEqual((await requete('POST', s.api + '/lots', entree('edit'), s.tech)).code, 200);
+  const base = (await requete('GET', s.api + '/base', undefined, s.admin)).json;
+  assert.ok(base.history.every(h => ['add', 'move', 'remove', 'edit', 'stock', 'import', 'catalog'].includes(h.type)));
+  // Même contrôle quand toute la base est remplacée (import d'un fichier piégé)
+  const piege = await demo(); piege.history[0].type = '<img src=x onerror=alert(1)>';
+  assert.strictEqual((await requete('PUT', s.api + '/base', piege, s.admin)).code, 400);
+});
 test('Sessions par compte : vingt au plus, les plus anciennes sont fermées', async t => {
   const s = await serveurDeTest(t, { config: { securite: { tentativesParAdresse: 100000 } } });
   const premiere = cookieDe(await connexion(s, 'tech', MDP));

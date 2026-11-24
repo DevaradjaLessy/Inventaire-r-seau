@@ -8,7 +8,7 @@ const test = require('node:test'), assert = require('node:assert');
 const fs = require('fs'), os = require('os'), path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 
-const RACINE = path.join(__dirname, '..', '..'), IMAGE = process.env.NETCARTO_TEST_IMAGE || 'jrei/systemd-debian:12', NOM = 'netcarto-essai-linux-' + process.pid, MDP = 'Mot-de-passe-de-test-1';   // mot de passe fictif
+const RACINE = path.join(__dirname, '..', '..'), IMAGE = process.env.NETCARTO_TEST_IMAGE || 'jrei/systemd-debian:12@sha256:b7a3c619de739e611f19c6b6079e07fd8c1049189ba9a37a3a6c72d671997dc6', NOM = 'netcarto-essai-linux-' + process.pid, MDP = 'Mot-de-passe-de-test-1';   // mot de passe fictif
 const disponible = process.platform === 'linux' && spawnSync('docker', ['info'], { stdio: 'ignore', timeout: 15000 }).status === 0;
 /* Commande dans le conteneur : renvoie { code, sortie (stdout + stderr) } */
 const dans = (cmd, entree) => { const r = spawnSync('docker', ['exec', ...(entree !== undefined ? ['-i'] : []), NOM, 'bash', '-c', cmd], { encoding: 'utf8', input: entree }); return { code: r.status, sortie: (r.stdout || '') + (r.stderr || '') }; };
@@ -40,8 +40,18 @@ test('Installation Linux : service systemd, compte sans privilège, mise à jour
   for (let i = 0; i < 30 && !/running|degraded/.test(dans('systemctl is-system-running').sortie); i++) await new Promise(r => setTimeout(r, 1000));
   const installer = `bash /src/depot/installation/linux/installer.sh --hors-ligne --node /src/${archive}`;
 
+  await t.test('archive Node.js apportée à la main : une somme de contrôle fausse arrête tout avant la moindre écriture', () => {
+    const r = dans(`${installer} --somme ${'0'.repeat(64)}`);
+    assert.notStrictEqual(r.code, 0); assert.match(r.sortie, /ne correspond pas à la somme de contrôle/);
+    assert.strictEqual(ok('ls -d /opt/netcarto* /etc/netcarto /var/lib/netcarto 2>/dev/null | wc -l'), '0', 'aucun dossier créé');
+    assert.match(dans(`${installer} --somme pas-une-somme`).sortie, /ne correspond pas à la somme de contrôle/);
+    assert.match(dans('bash /src/depot/installation/linux/installer.sh --somme ' + 'a'.repeat(64)).sortie, /accompagne l'option --node/);
+  });
+
   await t.test('première installation', () => {
-    const s = ok(installer);
+    // La bonne somme est acceptée, en majuscules comme en minuscules
+    const somme = require('crypto').createHash('sha256').update(fs.readFileSync(path.join(prep, archive))).digest('hex').toUpperCase();
+    const s = ok(`${installer} --somme ${somme}`); assert.match(s, /somme de contrôle vérifiée/);
     assert.match(s, /NetCarto \d+\.\d+\.\d+ est en service/); assert.match(s, /créez le compte administrateur avec ce code[\s\S]*[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}/);
     assert.strictEqual(ok('systemctl is-active netcarto'), 'active'); assert.strictEqual(ok('systemctl is-enabled netcarto'), 'enabled');
     assert.strictEqual(ok('for p in /proc/[0-9]*; do if [ "$(cat $p/comm 2>/dev/null)" = node ]; then stat -c %U $p; fi; done | sort -u'), 'netcarto', 'le serveur tourne sous le compte du service');
@@ -58,7 +68,7 @@ test('Installation Linux : service systemd, compte sans privilège, mise à jour
     const v = dans('systemd-analyze verify /etc/systemd/system/netcarto.service 2>&1 | grep -i "netcarto.service" || true').sortie.trim();
     assert.strictEqual(v, '', 'systemd ne doit rien reprocher au fichier du service');
     const niveau = parseFloat(/Overall exposure level for netcarto\.service: ([\d.]+)/.exec(ok('systemd-analyze security netcarto --no-pager | tail -n 2'))[1]);
-    assert.ok(niveau < 3.5, `niveau d'exposition ${niveau} (0 = cloisonné, 10 = ouvert)`);
+    assert.ok(niveau < 2.5, `niveau d'exposition ${niveau} (0 = cloisonné, 10 = ouvert)`);
     // Le service ne peut écrire que dans son dossier de données
     assert.match(ok('systemctl show netcarto -p ProtectSystem -p ReadWritePaths -p NoNewPrivileges -p User'), /ProtectSystem=strict[\s\S]*ReadWritePaths=\/var\/lib\/netcarto[\s\S]*NoNewPrivileges=yes|User=netcarto/);
   });

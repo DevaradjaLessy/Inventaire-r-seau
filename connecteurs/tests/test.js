@@ -261,6 +261,18 @@ test('Zabbix : hôte injoignable, hôte sans problème, hôte en maintenance', a
   const inconnu = await cas(18908, { sansProbleme: true, hote: h => { h.interfaces[0].available = '0'; } });
   assert.strictEqual(inconnu.state, 'unknown');
 });
+test('Fusion : une réponse mal formée d\'une source est ignorée, elle ne fait pas tomber toute la supervision', () => {
+  const bon = { ip: '10.0.0.1', hostname: 'SW', state: 'up', ports: [{ name: 'Gi1/0/1', status: 'up' }] };
+  const r = fusionner([[null, 'texte', 42, { ip: '10.0.0.2', ports: 'abc' }, { ip: '10.0.0.3', ports: [null, 'x', { name: 'Gi1/0/1', status: 'up', errors: '<img>', macs: 'pas une liste' }] }, bon], 'pas une liste', null], ['a', 'b', 'c']);
+  assert.deepStrictEqual(r.map(d => [d.ip, d.ports.length]), [['10.0.0.2', 0], ['10.0.0.3', 1], ['10.0.0.1', 1]]);
+  assert.deepStrictEqual([r[1].ports[0].errors, r[1].ports[0].macs], [null, []], 'une valeur du mauvais type devient une valeur absente');
+});
+test('Source HTTP : une réponse démesurée est coupée, au lieu de remplir la mémoire', async () => {
+  const { getJson } = require('../lib/http');
+  const srv = http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'application/json' }); const bloc = 'x'.repeat(1024 * 1024); let n = 0; const envoi = () => { if (n++ > 64 || res.destroyed) return res.end(); res.write(bloc, envoi); }; envoi(); });
+  await new Promise(ok => srv.listen(18909, '127.0.0.1', ok));
+  try { await assert.rejects(getJson('http://127.0.0.1:18909/', { timeoutMs: 5000 }), /trop volumineuse/); } finally { srv.close(); }
+});
 test('Fusion : « inactif » et « désactivé » ne se contredisent pas, la valeur la plus précise est gardée', () => {
   // Zabbix ne connaît que l'état opérationnel (port inactif) ; le SNMP sait que le port est désactivé par l'administrateur
   const z = [{ ip: '10.0.0.1', state: 'up', ports: [{ name: 'ge-0/0/1', status: 'down' }, { name: 'ge-0/0/2', status: 'down' }] }];

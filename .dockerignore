@@ -7,4 +7,10 @@ tests
 **/netcarto.toml
 !installation/netcarto.toml
 **/.env
+**/.env.*
+**/*.sqlite
+**/*.sqlite-*
+**/*.key
+**/*.pem
+connecteurs/config.json
 *.md

@@ -9,6 +9,9 @@ import { drawFacade, facadeLayout, FACE_W, gabarit, labelCanvas, portModeColor, 
 import { OBJECTS } from './objets.js';
 import { run, Tip } from '../ui/socle.js';
 
+/* Zoom de la vue 3D : distance minimale au point visé (en mètres) et recul maximal (en multiple de la vue d'ensemble) */
+const ZOOM_PRES = 0.16, RECUL_MAX = 1.8;
+
 class Viewer3D {
   constructor(host, o = {}) {
     Object.assign(this, { host, o, ok: false, mode: 'none', cablesOn: true, kind: null, key: '', ports: [], portIdx: new Map(), devGroups: new Map(), cableMeshes: new Map(), bodies: [], texCache: new Map(), matCache: new Map(), hl: null, anim: null, dirty: true, lastLed: 0, queue: null, selId: null, hover: null });
@@ -65,6 +68,8 @@ class Viewer3D {
     el.addEventListener('pointerleave', () => { this.setHover(null); Tip.hide(); });
     el.addEventListener('pointerup', e => { if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5) this.onClick(e); down = null; });
     el.dataset.tipkeep = '1';
+    // Molette et pavé tactile : le zoom est pris ici, avant les contrôles d'orbite (voir zoomVers)
+    this.host.addEventListener('wheel', e => this.onWheel(e), { capture: true, passive: false });
     new ResizeObserver(() => this.resize()).observe(this.host);
     this.applyTheme();
     this.ok = true;
@@ -94,7 +99,7 @@ class Viewer3D {
     if (!this.host.offsetParent) return;
     if (this.renderer.domElement.width < 2) this.resize();
     if (this.anim) this.stepAnim(t);
-    this.controls.update();
+    this.controls.update(); this.garderDehors();
     if (t - this.lastLed > 100) { this.lastLed = t; if (this.updateLeds(t)) this.dirty = true; if (this.hlMesh) { this.hlMesh.material.opacity = 0.55 + 0.45 * Math.sin(t / 160); this.dirty = true; } }
     if (this.errMesh && t - this.lastErr > 60) { this.lastErr = t; this.errMesh.material.opacity = 0.45 + 0.55 * Math.abs(Math.sin(t / 380)); this.dirty = true; }
     if (this.dirty) { this.dirty = false; this.renderer.render(this.scene, this.camera); this.placeLabel(); }
@@ -253,6 +258,9 @@ class Viewer3D {
     const rc = catOf(rack), { g, geo } = this.buildEnclosure(rc, rack.heightU, rack.name);
     this.geo = geo; this.root.add(g); this.addFloor(geo.W * 2.2, geo.D * 1.9, -geo.D / 2 - (geo.wall ? 0.004 : 0.75));
     this.key.target.position.set(0, geo.yBase + geo.H / 2, 0);
+    // Recul maximal : un peu moins de deux fois la vue d'ensemble, pour que la baie reste lisible
+    this.controls.maxDistance = ((geo.H / 2) / Math.tan(this.camera.fov * Math.PI / 360) * 1.12 + geo.zF) * RECUL_MAX;
+    this.centre = new T.Vector3(0, geo.yBase + geo.H / 2 - 0.05, 0);
     const ledPorts = [], plugs = [];
     for (const dev of Store.idx.devByRack.get(rackId) || []) {
       const cat = catOf(dev), { g: dg, L } = this.buildDevice(cat, dev);
@@ -361,6 +369,7 @@ class Viewer3D {
       }
     }
     const dist = size / Math.tan(this.camera.fov * Math.PI / 360) * 0.95;
+    this.controls.maxDistance = dist * 3; this.centre = new THREE.Vector3(0, cy, 0);
     this.controls.target.set(0, cy, 0); this.camera.position.set(dist * 0.42, cy + dist * 0.42, dist * 0.82);
     this.controls.autoRotate = !dev; this.controls.autoRotateSpeed = 1.2;
     this.key.target.position.set(0, cy, 0);
@@ -485,6 +494,54 @@ class Viewer3D {
     else if (h?.devId) this.o.onDevice?.(h.devId);
   }
   /* --- Caméra --- */
+  /* Point de la scène visé à l'écran (x, y en pixels) : la première surface visible sous la souris.
+     Sans surface, le point du rayon à la profondeur du centre d'intérêt. */
+  pointVise(cx, cy) {
+    const r = this.renderer.domElement.getBoundingClientRect();
+    this.ray.setFromCamera(new THREE.Vector2((cx - r.left) / r.width * 2 - 1, -(cy - r.top) / r.height * 2 + 1), this.camera);
+    const visible = o => { for (let x = o; x; x = x.parent) if (!x.visible) return false; return true; };
+    const plein = o => { const m = [].concat(o.material || [])[0]; return o.isMesh && m && !(m.transparent && m.opacity < 0.3); };
+    const hit = this.ray.intersectObjects(this.root.children, true).find(h => plein(h.object) && visible(h.object));
+    if (hit) return hit.point.clone();
+    const rayon = this.ray.ray, d = this.controls.target.clone().sub(rayon.origin).dot(rayon.direction);
+    return rayon.at(Math.max(d, 0.3), new THREE.Vector3());
+  }
+  /* Molette ou pavé tactile. L'amplitude suit le mouvement : un cran de molette fait environ 10 %,
+     et les nombreux petits mouvements d'un pavé tactile s'additionnent au lieu de compter chacun pour un cran. */
+  onWheel(e) {
+    if (!this.ok || !this.controls.enableZoom) return;
+    e.preventDefault(); e.stopPropagation(); Tip.hide();
+    let d = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 300 : 1);
+    if (e.ctrlKey) d *= 8;   // pincement sur un pavé tactile : le navigateur l'envoie comme une molette avec Ctrl, en petites valeurs
+    if (!d) return;
+    // Le point visé est gardé tant que la souris ne bouge pas : le zoom ne dérive pas pendant un même geste
+    const a = this.ancreZoom, t = performance.now();
+    const ancre = a && t - a.t < 400 && Math.hypot(e.clientX - a.x, e.clientY - a.y) < 4 ? a : { x: e.clientX, y: e.clientY, P: this.pointVise(e.clientX, e.clientY) };
+    ancre.t = t; this.ancreZoom = ancre;
+    this.zoomVers(ancre.P, Math.exp(clamp(d, -300, 300) * 0.001 * this.controls.zoomSpeed));
+  }
+  /* Rapproche (k < 1) ou éloigne (k > 1) la caméra du point P, qui reste à la même place à l'écran.
+     Butées : jamais plus près que ZOOM_PRES de P, donc jamais à travers une façade ; jamais plus loin que le recul maximal. */
+  zoomVers(P, k) {
+    const ct = this.controls, cam = this.camera, dP = cam.position.distanceTo(P), D = cam.position.distanceTo(ct.target);
+    if (!(dP > 1e-4) || !(D > 1e-4)) return;
+    ct.autoRotate = false; this.anim = null;
+    if (k < 1) k = Math.max(k, Math.min(1, Math.max(ZOOM_PRES / dP, ct.minDistance / D))); else k = Math.min(k, Math.max(1, ct.maxDistance / D));
+    if (k === 1) return;
+    cam.position.sub(P).multiplyScalar(k).add(P); ct.target.sub(P).multiplyScalar(k).add(P);
+    // En reculant, la vue revient peu à peu vers le centre de la scène : au recul maximal, on retrouve la vue d'ensemble
+    if (k > 1 && this.centre) { const f = clamp((D * k - D) / Math.max(ct.maxDistance - D, 1e-6), 0, 1), dep = this.centre.clone().sub(ct.target).multiplyScalar(f); ct.target.add(dep); cam.position.add(dep); }
+    ct.update(); this.dirty = true;
+  }
+  /* La caméra ne reste jamais à l'intérieur de la baie (rotation serrée, pincement sur un écran tactile) : elle ressort par la face la plus proche */
+  garderDehors() {
+    const g = this.geo, c = this.camera.position, m = 0.06;
+    if (this.kind !== 'rack' || !g || this.anim) return;
+    const dedans = [['x', 1, g.W / 2 + m - c.x], ['x', -1, c.x + g.W / 2 + m], ['z', 1, g.zF + m - c.z], ['z', -1, c.z + g.D / 2 + m], ['y', 1, g.yTop + m - c.y]];
+    if (c.y < 0 || dedans.some(f => f[2] <= 0)) return;
+    const [axe, sens, prof] = dedans.reduce((a, b) => b[2] < a[2] ? b : a);
+    c[axe] += sens * prof; this.controls.update(); this.dirty = true;
+  }
   flyTo(pos, target, animate = true) {
     if (!animate) { this.camera.position.copy(pos); this.controls.target.copy(target); this.controls.update(); this.dirty = true; return; }
     this.anim = { t0: performance.now(), p0: this.camera.position.clone(), q0: this.controls.target.clone(), p1: pos, q1: target };

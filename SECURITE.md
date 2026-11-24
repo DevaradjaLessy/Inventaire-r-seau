@@ -10,6 +10,8 @@ L'audit a trouvé **16 points**, dont 1 de gravité haute et 6 de gravité moyen
 
 Une **campagne d'attaques** a ensuite été menée contre la version corrigée (section 8). Sur 40 essais, 3 défenses ont cédé, toutes liées à des tentatives envoyées en rafale. Elles sont corrigées, ainsi que 6 autres points trouvés en chemin. Rejouée, la campagne ne passe plus nulle part.
 
+Une **relecture avec des grilles extérieures** (section 9) a ensuite trouvé 6 points dans le code, dont 1 de gravité haute, et 8 écarts dans la tenue du dépôt et de l'installation. Les 14 sont corrigés ; 5 autres points sont laissés en l'état et expliqués.
+
 Ce document n'est pas une certification. Il ne remplace ni un test d'intrusion mené par un tiers, ni la revue de votre propre politique de sécurité.
 
 ## 2. Méthode et périmètre
@@ -156,13 +158,53 @@ Aucun n'a donné lieu à une attaque réussie. Ils ferment des contournements qu
 
 La campagne confirme les priorités de la section 7 : la **double authentification** est la seule mesure qui réduirait à la fois le risque de session volée et celui de mot de passe deviné.
 
-## 9. Vérifier par vous-même
+## 9. Relecture avec des grilles extérieures
+
+*Menée le 24 novembre 2026. Deux relectures indépendantes : l'une du code modifié depuis la campagne d'attaques, l'autre de la tenue du dépôt et de l'installation. Elles ont suivi des listes de contrôle publiques : `TikiTribe/claude-secure-coding-rules`, `Consensys/repo-security-review`, `Security-Phoenix-demo/security-skills-claude-code`, `trilwu/secskills` et `anthropics/claude-code-security-review`. Ces dépôts ont servi de grilles de lecture ; rien n'en a été installé.*
+
+### 9.1 Failles trouvées et corrigées
+
+| # | Faille | Gravité | Correction |
+|---|---|---|---|
+| 26 | **Balisage injecté par le type d'une entrée d'historique.** Le serveur acceptait n'importe quel texte dans le champ `type` de l'historique, et le tableau de bord l'affichait sans le neutraliser. Un technicien pouvait y placer du balisage. La politique de sécurité du contenu bloquait tout script, mais pas un faux bouton : posé sur la page, il pouvait faire créer un compte administrateur par un administrateur qui cliquait dessus. | **Haute** : il faut un compte de technicien, mais le gain est le rôle d'administrateur | Le type est pris dans une liste fermée, au serveur (refus 400) comme au contrôle des fichiers importés. Le tableau de bord neutralise la valeur. Le formulaire de création de compte ne lit que ses propres champs. |
+| 27 | **Nom d'une source de supervision affiché tel quel** dans l'infobulle du bouton « Sources ». Une source compromise, ou un relais mal réglé, pouvait y placer du balisage. | Faible | Le nom est neutralisé. Un scénario charge un relevé où chaque texte est piégé (noms, messages, erreurs, écarts) et visite tous les écrans qui l'affichent. |
+| 28 | **Mesures attendues en nombre, acceptées en texte.** Erreurs de trame, nombre d'adresses MAC, puissance PoE, débit : un texte à la place du nombre arrivait jusqu'à la fiche du port. | Faible | Une mesure est un nombre ou rien. Une adresse MAC est un texte ou rien. |
+| 29 | **Réponse mal formée d'une source.** Un élément inattendu dans la réponse (un nombre à la place d'un équipement, une liste de ports qui n'en est pas une) arrêtait la fusion des sources. | Faible : la supervision s'arrêtait, pas l'inventaire | Les éléments mal formés sont écartés ; les autres sources continuent. |
+| 30 | **Réponse sans limite de taille.** Une source pouvait envoyer une réponse démesurée et saturer la mémoire du serveur. | Faible | Réponse coupée à 32 Mo, avec le message « Réponse trop volumineuse ». |
+| 31 | **Adresse d'expéditeur mal contrôlée.** Le réglage `courriel.expediteur` était vérifié par un motif non ancré : un retour à la ligne y passait. | Faible : réglage réservé à l'administrateur du serveur | Motif ancré, retour à la ligne refusé au démarrage. |
+
+### 9.2 Tenue du dépôt et de l'installation
+
+| # | Écart | Correction |
+|---|---|---|
+| 32 | Le fichier d'exemple rangeait la base dans `serveur/donnees/`, qui est un dossier de code, non ignoré par git. Une base réelle pouvait partir dans un commit. | L'exemple indique `donnees-locales`, dossier ignoré. |
+| 33 | Pas de `.gitignore` à la racine du dépôt. | Ajouté : `.env`, bases SQLite, clés, certificats, réglages locaux. |
+| 34 | L'image Docker et le script d'installation copiaient tout le contenu de `serveur/` et de `connecteurs/`, y compris une base, une clé ou un fichier de réglages laissés là. | Exclus de l'image (`.dockerignore`) et de la copie du script. |
+| 35 | Une archive Node.js apportée à la main (`--node`) n'était pas vérifiée. Le téléchargement pouvait suivre une redirection hors HTTPS. | Option `--somme` : l'installation s'arrête avant toute écriture si l'archive ne correspond pas. Sans l'option, la somme est affichée pour comparaison. `curl` est limité à HTTPS et TLS 1.2 au moins. |
+| 36 | La construction de l'image exécutait les scripts d'installation des paquets. | `npm ci --ignore-scripts` : les dépendances sont du JavaScript seul. |
+| 37 | Les tests d'interface n'avaient pas de fichier de verrouillage. | `tests/package-lock.json`, sur la version de Playwright réellement utilisée. |
+| 38 | L'image des essais d'installation était désignée par son étiquette. | Désignée par son condensat. |
+| 39 | Le service systemd pouvait utiliser tous les appels système et voyait les processus des autres comptes. | `SystemCallFilter=@system-service`, `ProtectProc=invisible`, `ProcSubset=pid`, `RemoveIPC`. Le niveau d'exposition mesuré par `systemd-analyze security` sur Ubuntu 24.04 est de 1,5 sur 10 ; les essais d'installation exigent moins de 2,5 sur Debian 12, Ubuntu 22.04 et 24.04. |
+
+### 9.3 Points relevés et laissés en l'état
+
+| Point | Pourquoi il reste | Ce qui le couvre |
+|---|---|---|
+| Le libellé d'une opération au journal d'audit vient du poste qui l'envoie. Un technicien peut intituler « Mise à jour » une suppression. | Le libellé sert à lire le journal, pas à faire foi | Le détail de chaque objet créé, modifié ou supprimé est écrit par le serveur, avec le compte réel |
+| Le champ « créée par » d'une intervention vient lui aussi du poste. | Même raison | Le journal d'audit porte le compte réel |
+| Une source de supervision peut être réglée en `http://`. Son jeton circule alors en clair. | PRTG est souvent installé sans HTTPS sur un réseau interne | À régler en HTTPS dès que la source le permet ; un compte en lecture seule côté supervision |
+| L'image Docker part d'une image de base désignée par son étiquette, et démarre en root avant de passer au compte du service. | L'épingler par condensat demande de la mettre à jour à la main ; le démarrage en root prépare les dossiers | Conteneur en lecture seule, privilèges retirés, compte sans privilège pour le serveur |
+| Le dépôt n'a ni intégration continue, ni alerte de dépendances, ni recherche automatique de secrets. | Ce sont des réglages du dépôt GitHub, à décider par son propriétaire | Trois suites de tests lancées avant chaque commit, `npm audit` sans alerte, aucun secret dans l'arbre ni dans l'historique |
+
+## 10. Vérifier par vous-même
 
 | Sujet | Test |
 |---|---|
-| Injection dans l'interface, exports CSV | `tests/netcarto.test.js`, bloc « Sécurité de l'interface » (3 scénarios) |
+| Injection dans l'interface, exports CSV | `tests/netcarto.test.js`, bloc « Sécurité de l'interface » (3 scénarios, dont le relevé de supervision piégé) |
 | Serveur : contenu, tentatives, indices, tailles, en-têtes, empreintes, proxy, journal, droits, TLS, rafales, session volée, IPv6, sessions par compte | `serveur/tests/securite.test.js` |
 | Campagne d'attaques complète (40 essais) | `npm run attaques` dans `serveur/` |
+| Réponses mal formées ou démesurées d'une source de supervision | `connecteurs/tests/test.js` |
+| Somme de contrôle de l'archive Node.js, cloisonnement du service systemd | `installation/tests/linux.test.js` (Docker nécessaire) |
 | Comptes, rôles, récupération | `serveur/tests/comptes.test.js`, `serveur/tests/administration.test.js` |
 
 Réglages ajoutés par cet audit : `securite.tentativesParAdresse` (20), `securite.fenetreMinutes` (10), `securite.coutMotDePasse` (17), `serveur.proxyDeConfiance` (false).

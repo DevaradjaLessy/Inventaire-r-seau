@@ -120,7 +120,9 @@ const Live = {
         const p = idx.get(normIf(mp.name || ''));
         // Sans port correspondant : noté pour le diagnostic, sauf une unité logique (« ge-0/0/0.0 »), qui n'est pas un port
         if (!p) { if (mp.name && !/\.\d+$/.test(mp.name)) inconnus.push(String(mp.name)); continue; }
-        const mesure = { status: ['up', 'down', 'disabled', 'error'].includes(mp.status) ? mp.status : null, speedMbps: mp.speedMbps ?? null, inMbps: mp.inMbps ?? null, outMbps: mp.outMbps ?? null, totalMbps: mp.totalMbps ?? null, poeW: mp.poeW ?? null, vlan: mp.vlan ?? null, macs: mp.macs || [], errors: mp.errors ?? null, macCount: mp.macCount ?? null, ts, nom: String(mp.name), qui };
+        // Une mesure est un nombre ou rien : une source mal réglée ou compromise ne fait entrer aucun texte par là
+        const nb = v => typeof v === 'number' && Number.isFinite(v) ? v : null;
+        const mesure = { status: ['up', 'down', 'disabled', 'error'].includes(mp.status) ? mp.status : null, speedMbps: nb(mp.speedMbps), inMbps: nb(mp.inMbps), outMbps: nb(mp.outMbps), totalMbps: nb(mp.totalMbps), poeW: nb(mp.poeW), vlan: nb(mp.vlan), macs: Array.isArray(mp.macs) ? mp.macs.filter(a => typeof a === 'string') : [], errors: nb(mp.errors), macCount: nb(mp.macCount), ts, nom: String(mp.name), qui };
         const deja = this.port.get(p.id);
         if (!deja) { this.port.set(p.id, mesure); continue; }
         const eteints = ['down', 'disabled'];

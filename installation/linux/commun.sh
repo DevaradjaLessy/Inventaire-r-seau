@@ -55,12 +55,20 @@ supprimer_dossier() {
 # Écrit le nom du fichier téléchargé sur la sortie standard.
 telecharger_node() {
   local dossier="$1" archi="$2" sommes archive
-  sommes="$(curl -fsSL "https://nodejs.org/dist/$NODE_BRANCHE/SHASUMS256.txt")" || { dire "téléchargement impossible depuis nodejs.org (accès à Internet nécessaire, ou option --node)." >&2; return 1; }
+  sommes="$(curl --proto '=https' --tlsv1.2 -fsSL "https://nodejs.org/dist/$NODE_BRANCHE/SHASUMS256.txt")" || { dire "téléchargement impossible depuis nodejs.org (accès à Internet nécessaire, ou option --node)." >&2; return 1; }
   archive="$(printf '%s\n' "$sommes" | awk -v a="linux-$archi.tar.gz" '$2 ~ a"$" { print $2 }' | head -n 1)"
   [ -n "$archive" ] || { dire "archive Node.js introuvable pour linux-$archi." >&2; return 1; }
-  curl -fsSL -o "$dossier/$archive" "https://nodejs.org/dist/$NODE_BRANCHE/$archive" || { dire "téléchargement de $archive impossible." >&2; return 1; }
+  curl --proto '=https' --tlsv1.2 -fsSL -o "$dossier/$archive" "https://nodejs.org/dist/$NODE_BRANCHE/$archive" || { dire "téléchargement de $archive impossible." >&2; return 1; }
   (cd "$dossier" && printf '%s\n' "$sommes" | grep " $archive\$" | sha256sum -c --quiet - >&2) || { dire "l'archive Node.js téléchargée ne correspond pas à sa somme de contrôle." >&2; rm -f -- "$dossier/$archive"; return 1; }
   printf '%s\n' "$archive"
+}
+
+# Vérifie la somme de contrôle SHA-256 ($2) du fichier $1
+somme_correcte() {
+  local fichier="$1" attendue
+  attendue="$(printf '%s' "$2" | tr 'A-F' 'a-f')"
+  [[ "$attendue" =~ ^[0-9a-f]{64}$ ]] || return 1
+  [ "$(sha256sum -- "$fichier" | awk '{ print $1 }')" = "$attendue" ]
 }
 
 # Vrai si le programme Node.js $1 convient (22.5 ou plus récent)

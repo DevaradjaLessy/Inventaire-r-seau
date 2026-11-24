@@ -41,6 +41,13 @@ LockPersonality=true
 CapabilityBoundingSet=
 AmbientCapabilities=
 SystemCallArchitectures=native
+# Appels système : ceux d'un service ordinaire, rien de plus (ni montage, ni module, ni débogage d'un autre processus)
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# Le service ne voit que ses propres processus
+ProtectProc=invisible
+ProcSubset=pid
+RemoveIPC=true
 UMask=0027
 
 [Install]

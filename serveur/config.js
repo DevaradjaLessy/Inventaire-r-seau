@@ -33,7 +33,7 @@ function controlerCourriel(c) {
   if (!c.hote) return;
   if (!Number.isInteger(c.port) || c.port < 1 || c.port > 65535) throw new Error('Réglage « courriel.port » invalide.');
   if (!['starttls', 'tls', 'aucune'].includes(c.securite)) throw new Error('Réglage « courriel.securite » invalide : "starttls", "tls" ou "aucune" attendu.');
-  if (!/^[^\s@<>]+@[^\s@<>]+$|<[^\s@<>]+@[^\s@<>]+>$/.test(c.expediteur || '')) throw new Error('Réglage « courriel.expediteur » obligatoire : adresse d\'expédition, par exemple "NetCarto <netcarto@exemple.interne>".');
+  if (!/^[^\s@<>]+@[^\s@<>]+$|^[^<>\r\n]*<[^\s@<>]+@[^\s@<>]+>$/.test(c.expediteur || '') || /[\r\n]/.test(c.expediteur || '')) throw new Error('Réglage « courriel.expediteur » obligatoire : adresse d\'expédition, par exemple "NetCarto <netcarto@exemple.interne>".');
   // Un compte sur une liaison sans chiffrement enverrait son mot de passe en clair sur le réseau
   if (c.securite === 'aucune' && c.utilisateur) throw new Error('Réglage « courriel.securite » : avec "aucune", le mot de passe du compte d\'envoi circulerait en clair. Choisissez "starttls" ou "tls", ou retirez « utilisateur » si votre relais interne n\'en demande pas.');
   // Autorité de certification interne : fichier PEM du certificat qui a signé celui du serveur d'envoi

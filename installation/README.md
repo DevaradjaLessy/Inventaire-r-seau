@@ -191,11 +191,19 @@ Sur un poste relié à Internet : récupérez le dépôt, lancez `npm ci --omit=
 sudo installation/linux/installer.sh --hors-ligne --node /chemin/vers/node-v22.x.y-linux-x64.tar.gz
 ```
 
+Pour être sûr que l'archive est bien celle publiée par Node.js, donnez sa somme de contrôle, lue dans le fichier `SHASUMS256.txt` du même dossier de nodejs.org :
+
+```bash
+sudo installation/linux/installer.sh --hors-ligne --node /chemin/vers/node-v22.x.y-linux-x64.tar.gz --somme <somme SHA-256>
+```
+
+Si l'archive ne correspond pas, l'installation s'arrête avant toute écriture. Sans `--somme`, le script affiche la somme de l'archive : comparez-la vous-même.
+
 Les mêmes options valent pour `mettre-a-jour.sh`.
 
 ### À savoir
 
-- **Cloisonnement.** Le service ne peut écrire que dans `/var/lib/netcarto` ; le reste du système lui est en lecture seule, et il n'a aucun privilège (voir `installation/linux/netcarto.service`).
+- **Cloisonnement.** Le service ne peut écrire que dans `/var/lib/netcarto` ; le reste du système lui est en lecture seule, il n'a aucun privilège, ses appels système sont limités à ceux d'un service ordinaire et il ne voit que ses propres processus (voir `installation/linux/netcarto.service`).
 - **Pare-feu.** Si `ufw` est actif, ouvrez le port : `sudo ufw allow 8443/tcp`.
 - **Autres systèmes Linux.** Le script refuse de s'exécuter ailleurs que sur Debian ou Ubuntu : utilisez Docker.
 
