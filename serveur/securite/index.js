@@ -21,6 +21,20 @@ const empreinte = jeton => crypto.createHash('sha256').update(String(jeton)).dig
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // sans caractères ambigus (0/O, 1/I)
 const code = () => [0, 1, 2].map(() => Array.from(crypto.randomBytes(4), b => ALPHABET[b % ALPHABET.length]).join('')).join('-');
 
+/* Préférences d'affichage d'un compte. Forme fermée : seules les clés connues sont gardées, et chaque valeur a une forme imposée.
+   Aujourd'hui : { tableau: { masques: [identifiants de cartes du tableau de bord] } }. Tout le reste est refusé ou écarté. */
+const CARTE = /^[a-z0-9-]{1,40}$/, CARTES_MAX = 60;
+function preferencesValides(v) {
+  const refus = m => new ErreurMetier('invalide', `Préférences refusées : ${m}`);
+  if (!v || typeof v !== 'object' || Array.isArray(v)) throw refus('un objet est attendu.');
+  const out = {};
+  if (Object.hasOwn(v, 'tableau')) {
+    const m = v.tableau && typeof v.tableau === 'object' && !Array.isArray(v.tableau) ? v.tableau.masques : null;
+    if (!Array.isArray(m) || m.length > CARTES_MAX || !m.every(x => typeof x === 'string' && CARTE.test(x))) throw refus(`« tableau.masques » doit être une liste d'au plus ${CARTES_MAX} identifiants de cartes.`);
+    if (m.length) out.tableau = { masques: [...new Set(m)] };
+  }
+  return out;
+}
 function creerSecurite({ depot, config = {}, horloge = () => Date.now(), courrier = null, journal = () => {} }) {
   const c = depot.comptes, regle = { ...DEFAUTS, ...config };
   reglerCout(regle.coutMotDePasse);
@@ -28,6 +42,15 @@ function creerSecurite({ depot, config = {}, horloge = () => Date.now(), courrie
   const evenement = (nom, champs) => journal(`SECURITE ${nom} ${Object.entries(champs).map(([k, v]) => `${k}=${propre(v)}`).join(' ')}`);
   const limiteur = creerLimiteur({ max: regle.tentativesParAdresse, fenetreMs: regle.fenetreMinutes * 60000, horloge, surBlocage: ip => evenement('adresse_bloquee', { adresse: ip, minutes: regle.fenetreMinutes }) });
   const publique = (u, t = horloge()) => u && ({ id: u.id, identifiant: u.identifiant, nom: u.nom, courriel: u.courriel || '', role: u.role, actif: !!u.actif, verrouille: !!u.verrouille_jusqu_a && u.verrouille_jusqu_a > t, derniereConnexion: u.derniere_connexion || null });
+  /* Le compte tel que le voit son propre titulaire : avec ses préférences d'affichage */
+  const lirePreferences = texte => { try { return preferencesValides(JSON.parse(texte || '{}')); } catch { return {}; } };
+  const pourSoi = (u, t = horloge()) => u && ({ ...publique(u, t), preferences: lirePreferences(u.preferences) });
+  /* Chaque compte règle son propre affichage, quel que soit son rôle : ce n'est pas une modification de l'inventaire */
+  function changerPreferences(utilisateur, valeur) {
+    const preferences = preferencesValides(valeur);
+    c.modifier(utilisateur.id, { preferences: JSON.stringify(preferences) });
+    return preferences;
+  }
   const audit = (auteur, action, cible, apres = null, ip = '') => c.ajouterAudit({ date: Date.now(), utilisateur_id: auteur?.id || null, identifiant: auteur?.identifiant || '', action, collection: 'utilisateurs', cle: cible?.id || '', libelle: cible?.identifiant || '', avant: null, apres, ip });
   let codeInitialisation = c.nombre() === 0 ? code() : null;
 
@@ -81,7 +104,7 @@ function creerSecurite({ depot, config = {}, horloge = () => Date.now(), courrie
     c.plafonnerSessions(u.id, SESSIONS_PAR_COMPTE);   // un compte n'empile pas les sessions : les plus anciennes sont fermées
     c.purgerSessions(t - regle.sessionHeures * 3600000);
     audit(u, 'connexion', u, null, ip);
-    return { jeton, utilisateur: publique(c.parId(u.id), t), dureeSecondes: regle.sessionHeures * 3600 };
+    return { jeton, utilisateur: pourSoi(c.parId(u.id), t), dureeSecondes: regle.sessionHeures * 3600 };
   }
   /* Utilisateur de la session, ou null si elle est absente, expirée, ou si le compte est désactivé */
   function session(jeton) {
@@ -90,7 +113,7 @@ function creerSecurite({ depot, config = {}, horloge = () => Date.now(), courrie
     if (!s) return null;
     if (!s.actif || t - s.creee_le > regle.sessionHeures * 3600000 || t - s.vue_le > regle.inactiviteMinutes * 60000) { c.supprimerSession(e); return null; }
     if (t - s.vue_le > 30000) c.toucherSession(e, t);
-    return publique(s, t);
+    return pourSoi(s, t);
   }
   const deconnecter = jeton => { if (jeton) c.supprimerSession(empreinte(jeton)); };
   /* Un mauvais « mot de passe actuel » compte comme un échec de connexion : après le seuil, le compte est verrouillé et toutes
@@ -217,7 +240,7 @@ function creerSecurite({ depot, config = {}, horloge = () => Date.now(), courrie
     };
   }
   return {
-    ROLES, limiteur, etat, lienReinitialisation, demanderReinitialisation, reinitialiser, recuperationParCourriel: () => !!courrier?.actif, creerUtilisateur, connecter, session, deconnecter, changerMotDePasse, modifierUtilisateur, supprimerUtilisateur, initialiser,
+    ROLES, limiteur, etat, changerPreferences, lienReinitialisation, demanderReinitialisation, reinitialiser, recuperationParCourriel: () => !!courrier?.actif, creerUtilisateur, connecter, session, deconnecter, changerMotDePasse, modifierUtilisateur, supprimerUtilisateur, initialiser,
     lister: () => c.lister().map(u => publique(u)), trouver: identifiant => publique(c.parIdentifiant(identifiant)),
     aInitialiser: () => c.nombre() === 0, get codeInitialisation() { return codeInitialisation; },
   };

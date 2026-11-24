@@ -18,7 +18,7 @@ function creerComptes(p) {
     creer: u => ecrire(() => p.lancer('INSERT INTO utilisateurs (id, identifiant, nom, courriel, role, mot_de_passe, actif, cree_le) VALUES (?, ?, ?, ?, ?, ?, 1, ?)', [u.id, u.identifiant, u.nom, u.courriel || '', u.role, u.mot_de_passe, u.cree_le])),
     /* champs : objet { colonne: valeur } parmi les colonnes modifiables */
     modifier(id, champs) {
-      const permis = ['nom', 'courriel', 'role', 'mot_de_passe', 'actif', 'echecs', 'verrouille_jusqu_a', 'derniere_connexion'], cols = Object.keys(champs).filter(k => permis.includes(k));
+      const permis = ['nom', 'courriel', 'role', 'mot_de_passe', 'actif', 'echecs', 'verrouille_jusqu_a', 'derniere_connexion', 'preferences'], cols = Object.keys(champs).filter(k => permis.includes(k));
       if (cols.length) ecrire(() => p.lancer(`UPDATE utilisateurs SET ${cols.map(c => c + ' = ?').join(', ')} WHERE id = ?`, [...cols.map(c => champs[c]), id]));
     },
     supprimer: id => p.lancer('DELETE FROM utilisateurs WHERE id = ?', [id]),

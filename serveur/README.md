@@ -224,6 +224,7 @@ Préfixe : `/api/v1`. Tout est en JSON.
 | `POST /recuperation/lien` | administrateur | `{ id }` : lien de réinitialisation à remettre à un collègue |
 | `DELETE /session` | connecté | déconnexion |
 | `PUT /session/mot-de-passe` | connecté | changer son mot de passe |
+| `PUT /session/preferences` | connecté, tout rôle | régler son propre affichage `{ preferences: { tableau: { masques: [...] } } }` ; forme contrôlée, toute autre clé est écartée |
 | `GET /revision`, `GET /base` | connecté | révision, base complète |
 | `GET /{ressource}`, `GET /{ressource}/{id}` | connecté | lecture, filtres `?champ=valeur` |
 | `GET /supervision/etat`, `/supervision/sante` | connecté | module de supervision |

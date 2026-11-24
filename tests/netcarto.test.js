@@ -153,6 +153,85 @@ test('Tableau de bord : résumé de la supervision — équipements, ports, traf
   await page.evaluate(() => { NetCarto.Live.cfg.type = 'none'; NetCarto.Live.vider(); NetCarto.Live.state = 'off'; NetCarto.Live.emit(); });
   await page.click('[data-tab=dash]'); assert.match(await page.locator('#sup-card').innerText(), /Aucune source de supervision active/);
 });
+test('Tableau de bord : la tuile Alertes donne le total, la répartition par gravité en une barre, et le détail en toutes lettres', async page => {
+  await page.click('[data-tab=dash]');
+  // Référence : la liste des alertes, juste en dessous
+  const n = await page.evaluate(() => { const c = { Critique: 0, 'Sérieux': 0, Avertissement: 0 }; document.querySelectorAll('.alist .al .lv').forEach(e => { c[e.textContent.trim()]++; }); return [c.Critique, c['Sérieux'], c.Avertissement]; });
+  assert.ok(n[0] > 0 && n[1] > 0 && n[2] > 0, 'le jeu de démonstration a des alertes des trois gravités');
+  await page.setViewportSize({ width: 1440, height: 900 }); await page.waitForTimeout(150);   // trois tuiles par ligne : la tuile est large
+  const tuile = page.locator('#kpi-alertes');
+  assert.strictEqual((await tuile.locator('.v').innerText()).trim(), String(n[0] + n[1] + n[2]));
+  const mot = (k, un, plusieurs) => `${k} ${k > 1 ? plusieurs : un}`;
+  const detail = `${mot(n[0], 'critique', 'critiques')} · ${mot(n[1], 'sérieuse', 'sérieuses')} · ${mot(n[2], 'avertissement', 'avertissements')}`;
+  assert.strictEqual((await tuile.locator('.s').innerText()).trim(), detail);
+  // La barre : un segment par gravité présente, large en proportion, et lisible par un lecteur d'écran
+  const barre = await tuile.locator('.kpi-barre').evaluate(b => ({ nom: b.getAttribute('aria-label'), role: b.getAttribute('role'), parts: [...b.children].map(i => +getComputedStyle(i).flexGrow), largeurs: [...b.children].map(i => i.getBoundingClientRect().width) }));
+  assert.deepStrictEqual(barre.parts, n); assert.strictEqual(barre.role, 'img'); assert.strictEqual(barre.nom, detail);
+  assert.ok(barre.largeurs.every(l => l >= 6), 'chaque segment reste visible');
+  // La tuile garde exactement la taille des autres indicateurs, sur un écran large (six sur une ligne) comme sur un écran étroit
+  const tailles = () => page.evaluate(() => { const t = [...document.querySelectorAll('.dash > .kpi')].map(e => e.getBoundingClientRect()), a = document.querySelector('#kpi-alertes').getBoundingClientRect(), autre = t.find(r => Math.abs(r.top - a.top) > 1 || Math.abs(r.left - a.left) > 1); return { a: [Math.round(a.width), Math.round(a.height)], autre: [Math.round(autre.width), Math.round(autre.height)], hauteurs: [...new Set(t.map(r => Math.round(r.height)))] }; });
+  for (const largeur of [1700, 1440, 1115]) { await page.setViewportSize({ width: largeur, height: 900 }); await page.waitForTimeout(150); const t = await tailles(); assert.deepStrictEqual(t.a, t.autre, `à ${largeur} px, la tuile Alertes a la taille des autres`); assert.strictEqual(t.hauteurs.length, 1, `à ${largeur} px, toutes les tuiles ont la même hauteur`); }
+  // Six tuiles sur une ligne : la tuile est étroite, le détail passe en abrégé sans déborder ; le détail complet reste dans l'infobulle
+  await page.setViewportSize({ width: 1700, height: 900 }); await page.waitForTimeout(150);
+  assert.match((await tuile.locator('.s').innerText()).trim(), /^\d+ crit\. · \d+ sér\. · \d+ avert\.$/);
+  assert.ok(await tuile.locator('.s').evaluate(e => e.scrollWidth <= e.clientWidth + 1), 'le détail abrégé tient dans la tuile');
+  assert.strictEqual(await tuile.getAttribute('data-tip'), 'Alertes|' + detail);
+  await page.setViewportSize({ width: 1440, height: 900 }); await page.waitForTimeout(150);
+  // Liste des alertes : chaque ligne porte sa gravité en toutes lettres et dit ce qu'un clic ouvre
+  const lignes = await page.evaluate(() => [...document.querySelectorAll('.alist .al')].map(a => ({ go: a.querySelector('.al-go')?.textContent.trim(), niveau: a.querySelector('small .lv')?.textContent.trim(), titre: a.querySelector('b').textContent })));
+  assert.ok(lignes.every(l => /^(Ouvrir le port|Ouvrir la fiche|Ouvrir la baie|Voir le stock|Voir l'intervention|Ouvrir)$/.test(l.go) && /^(Critique|Sérieux|Avertissement)$/.test(l.niveau)), JSON.stringify(lignes.slice(0, 3)));
+  assert.strictEqual(lignes.find(l => /^Port en erreur/.test(l.titre)).go, 'Ouvrir le port');
+  assert.strictEqual(lignes.find(l => /^Équipement en panne/.test(l.titre)).go, 'Ouvrir la fiche');
+  assert.strictEqual(lignes.find(l => /^Baie presque pleine/.test(l.titre)).go, 'Ouvrir la baie');
+  // Sans aucune alerte : la tuile le dit, la barre est pleine et calme
+  await page.click('[data-act=reset]'); await page.check('input[value=vide]'); await page.click('[data-act=modal-ok]'); await page.click('[data-tab=dash]');
+  assert.strictEqual((await page.locator('#kpi-alertes .v').innerText()).trim(), '0');
+  assert.match(await page.locator('#kpi-alertes .s').innerText(), /Aucune alerte/);
+  assert.strictEqual(await page.locator('#kpi-alertes .kpi-barre > i').count(), 1);
+});
+test('Tableau de bord : chacun masque les cartes dont il n\'a pas besoin et les remet ; son choix est gardé', async page => {
+  await page.click('[data-tab=dash]');
+  const cartes = () => page.evaluate(() => [...document.querySelectorAll('#tab-dash [data-carte]')].map(e => e.dataset.carte));
+  const toutes = await cartes();
+  assert.ok(toutes.includes('parc') && toutes.includes('alertes') && toutes.includes('supervision') && toutes.length >= 18, toutes.join(','));
+  assert.strictEqual(await page.locator('#tab-dash .carte-x').count(), 0, 'hors personnalisation, aucune croix sur les cartes');
+  // Personnaliser : chaque carte reçoit sa croix ; masquer « Parc par type » et la tuile « Baies »
+  await page.click('[data-act=dash-perso]');
+  assert.strictEqual(await page.locator('#tab-dash .carte-x').count(), toutes.length);
+  assert.match(await page.locator('#dash-perso').innerText(), /Masquez les cartes/);
+  await page.click('[data-carte=parc] .carte-x'); await page.click('[data-carte=baies-occupees] .carte-x');
+  assert.deepStrictEqual((await cartes()).filter(c => c === 'parc' || c === 'baies-occupees'), []);
+  // Les cartes masquées sont proposées, par leur nom, pour être remises
+  const remises = await page.locator('#dash-perso [data-act=dash-afficher]').allInnerTexts();
+  assert.deepStrictEqual(remises.map(t => t.trim()).sort(), ['Baies', 'Parc par type']);
+  await page.click('[data-act=dash-perso]');
+  assert.strictEqual(await page.locator('#dash-perso').count(), 0); assert.strictEqual(await page.locator('#tab-dash .carte-x').count(), 0);
+  // Le choix tient au rechargement de la page
+  await page.reload(); await page.waitForFunction(() => window.NetCarto?.Store.db); await page.click('[data-tab=dash]');
+  assert.strictEqual((await cartes()).length, toutes.length - 2); assert.strictEqual(await page.locator('[data-carte=parc]').count(), 0);
+  // Remettre une carte, puis tout afficher
+  await page.click('[data-act=dash-perso]'); await page.click('#dash-perso [data-act=dash-afficher][data-c=parc]');
+  assert.strictEqual(await page.locator('[data-carte=parc]').count(), 1); assert.strictEqual(await page.locator('[data-carte=baies-occupees]').count(), 0);
+  await page.click('#dash-perso [data-act=dash-tout]');
+  assert.deepStrictEqual(await cartes(), toutes, 'toutes les cartes reviennent, dans leur ordre');
+  // Un réglage illisible ou piégé dans le navigateur est ignoré : le tableau de bord s'affiche en entier
+  await page.evaluate(() => localStorage.setItem('netcarto.preferences', JSON.stringify({ tableau: { masques: ['<img src=x onerror=window.__xss=1>', 12, 'parc'] } })));
+  await page.reload(); await page.waitForFunction(() => window.NetCarto?.Store.db); await page.click('[data-tab=dash]');
+  assert.deepStrictEqual((await cartes()).length, toutes.length - 1, 'seul l\'identifiant connu est pris en compte'); assert.strictEqual(await page.evaluate(() => window.__xss || 0), 0);
+});
+test('Tableau de bord (mode serveur) : les cartes masquées sont gardées avec le compte, pas avec le poste', async page => {
+  await page.click('[data-tab=dash]');
+  const avant = await page.locator('#tab-dash [data-carte]').count();
+  await page.click('[data-act=dash-perso]'); await page.click('[data-carte=age] .carte-x');
+  await page.waitForFunction(() => NetCarto.Sync.utilisateur.preferences?.tableau?.masques?.includes('age'));
+  assert.deepStrictEqual((await api(page, '/session')).json.utilisateur.preferences, { tableau: { masques: ['age'] } });
+  assert.strictEqual(await page.evaluate(() => localStorage.getItem('netcarto.preferences')), null, 'rien dans le navigateur : le réglage suit le compte');
+  await page.reload(); await page.waitForFunction(() => window.NetCarto?.Store.db); await page.click('[data-tab=dash]');
+  assert.strictEqual(await page.locator('#tab-dash [data-carte]').count(), avant - 1); assert.strictEqual(await page.locator('[data-carte=age]').count(), 0);
+  await page.click('[data-act=dash-perso]'); await page.click('#dash-perso [data-act=dash-tout]');
+  await page.waitForFunction(() => !NetCarto.Sync.utilisateur.preferences?.tableau);
+  assert.deepStrictEqual((await api(page, '/session')).json.utilisateur.preferences, {});
+}, { serveur: true });
 test('Tableau de bord et alertes cliquables', async page => {
   await page.click('[data-tab=dash]');
   assert.strictEqual(await page.$$eval('.kpi', a => a.length), 6); assert.strictEqual(await page.$$eval('.al', a => a.length), 10); assert.strictEqual(await page.$$eval('.rg', a => a.length), 6);

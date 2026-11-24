@@ -93,6 +93,32 @@ test('rôles : lecture, technicien, administrateur', async t => {
   assert.strictEqual((await requete('POST', api + '/utilisateurs', { identifiant: 'x', nom: 'X', role: 'lecture', motDePasse: MDP }, tech)).code, 403);
 });
 
+test('préférences d\'affichage : chaque compte a les siennes, même en lecture seule ; leur forme est contrôlée', async t => {
+  const { api, admin, lecteur } = await serveurDeTest(t);
+  // Au départ : aucune préférence
+  assert.deepStrictEqual((await requete('GET', api + '/session', undefined, lecteur)).json.utilisateur.preferences, {});
+  // Un compte en lecture seule règle son propre affichage : ce n'est pas une modification de l'inventaire
+  const pose = await requete('PUT', api + '/session/preferences', { preferences: { tableau: { masques: ['parc', 'age', 'parc'] } } }, lecteur);
+  assert.strictEqual(pose.code, 200, pose.texte); assert.deepStrictEqual(pose.json.preferences, { tableau: { masques: ['parc', 'age'] } }, 'doublons retirés');
+  assert.deepStrictEqual((await requete('GET', api + '/session', undefined, lecteur)).json.utilisateur.preferences, { tableau: { masques: ['parc', 'age'] } });
+  // Elles tiennent à la reconnexion, et ne touchent pas les autres comptes
+  const autre = cookieDe(await requete('POST', api + '/session', { identifiant: 'lecteur', motDePasse: MDP }));
+  assert.deepStrictEqual((await requete('GET', api + '/session', undefined, autre)).json.utilisateur.preferences.tableau.masques, ['parc', 'age']);
+  assert.deepStrictEqual((await requete('GET', api + '/session', undefined, admin)).json.utilisateur.preferences, {});
+  // Une clé inconnue n'est pas gardée ; une forme inattendue est refusée, et rien n'est changé
+  assert.deepStrictEqual((await requete('PUT', api + '/session/preferences', { preferences: { tableau: { masques: ['liaisons'] }, autre: { x: 1 }, __proto__: { role: 'administrateur' } } }, admin)).json.preferences, { tableau: { masques: ['liaisons'] } });
+  for (const mauvais of [{ tableau: { masques: ['<img src=x onerror=1>'] } }, { tableau: { masques: 'parc' } }, { tableau: { masques: [12] } }, { tableau: { masques: Array.from({ length: 61 }, (_, i) => 'w' + i) } }, { tableau: 'x' }, ['parc'], 'parc', null]) {
+    const r = await requete('PUT', api + '/session/preferences', { preferences: mauvais }, lecteur);
+    assert.strictEqual(r.code, 400, JSON.stringify(mauvais).slice(0, 60));
+  }
+  assert.deepStrictEqual((await requete('GET', api + '/session', undefined, lecteur)).json.utilisateur.preferences, { tableau: { masques: ['parc', 'age'] } });
+  // Sans session : refusé. La liste des comptes vue par l'administrateur ne montre pas les préférences des autres
+  assert.strictEqual((await requete('PUT', api + '/session/preferences', { preferences: {} })).code, 401);
+  assert.ok((await requete('GET', api + '/utilisateurs', undefined, admin)).json.every(u => !('preferences' in u)));
+  // Tout remettre à zéro
+  assert.deepStrictEqual((await requete('PUT', api + '/session/preferences', { preferences: {} }, lecteur)).json.preferences, {});
+});
+
 test('gestion des utilisateurs par un administrateur', async t => {
   const { api, admin } = await serveurDeTest(t);
   const cree = await requete('POST', api + '/utilisateurs', { identifiant: 'Alice', nom: 'Alice Martin', role: 'technicien', motDePasse: MDP }, admin);
@@ -202,7 +228,7 @@ test('une base du lot 16 (version 1) reçoit les nouvelles tables sans perdre se
   p.lancer('INSERT INTO meta (cle, valeur) VALUES (\'initialisee\', \'1\'), (\'revision\', \'7\')');
   p.fermer();
   const { app, api, admin } = await serveurDeTest(t, { dossier });
-  assert.strictEqual(app.depot.versionSchema(), 4);
+  assert.strictEqual(app.depot.versionSchema(), 5);
   assert.deepStrictEqual((await requete('GET', api + '/sites', undefined, admin)).json.map(x => x.name), ['Ancien site']);
   assert.strictEqual((await requete('GET', api + '/batiments', undefined, admin)).json.length, 1);
   assert.strictEqual((await requete('GET', api + '/revision', undefined, admin)).json.revision, 7);

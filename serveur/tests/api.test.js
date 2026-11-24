@@ -12,7 +12,7 @@ async function serveur(t, extra = {}) {
 test('informations, santé et base de départ', async t => {
   const { api, appel } = await serveur(t);
   const info = await appel('GET', api + '/info');
-  assert.strictEqual(info.code, 200); assert.deepStrictEqual([info.json.app, info.json.mode, info.json.schema], ['NetCarto', 'serveur', 4]);
+  assert.strictEqual(info.code, 200); assert.deepStrictEqual([info.json.app, info.json.mode, info.json.schema], ['NetCarto', 'serveur', 5]);
   assert.match(info.entetes['content-type'], /application\/json/); assert.strictEqual(info.entetes['cache-control'], 'no-store');
   assert.deepStrictEqual((await requete('GET', api + '/sante')).json, { ok: true, base: 'ok' });
   const b = (await appel('GET', api + '/base')).json;

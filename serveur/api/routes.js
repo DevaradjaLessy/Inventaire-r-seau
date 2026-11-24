@@ -10,6 +10,7 @@
    Tout compte connecté
      DELETE /session                    déconnexion
      PUT    /session/mot-de-passe       changer son mot de passe  { actuel, nouveau }
+     PUT    /session/preferences        régler son propre affichage  { preferences } ; permis à tout rôle
      GET    /revision, /base, /{ressource}[/{id}], /supervision/etat|sante
    Technicien et administrateur
      POST   /lots                       lot de modifications, tout ou rien
@@ -100,6 +101,7 @@ function creerApi({ depot, sauvegardes, releveur, securite, config, https, certi
     exiger(moi);
     if (a === 'recuperation' && b === 'lien') { methode(req, 'POST'); exiger(moi, 'administrateur'); const v = await lireJson(req, max); return securite.lienReinitialisation(v.id, moi); }
     if (a === 'session' && b === 'mot-de-passe') { methode(req, 'PUT'); const v = await lireJson(req, max); await sensible(() => securite.changerMotDePasse(moi, jeton, v.actuel, v.nouveau, { ip })); return { ok: true }; }
+    if (a === 'session' && b === 'preferences') { methode(req, 'PUT'); const v = await lireJson(req, max); return { ok: true, preferences: securite.changerPreferences(moi, v.preferences) }; }
     if (a === 'revision' && !b) { methode(req, 'GET'); return { revision: depot.revision() }; }
     if (a === 'base' && !b) {
       methode(req, 'GET', 'PUT');

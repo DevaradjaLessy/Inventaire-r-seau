@@ -1,6 +1,6 @@
 /* Onglet Tableau de bord : indicateurs, barres, matrice, alertes, historique. */
 import { CATEGORIES, COL, HISTORY_TYPES, POE_WARN_PCT, PORT_STATUS, RACK_FULL_PCT, RENOUVELLEMENT_ANS } from '../config.js';
-import { $, clamp, esc, fmtDate, fmtDateTime, groupBy, pct, plural, sum } from '../utils.js';
+import { $, clamp, esc, fmtDate, fmtDateTime, groupBy, pct, plural, sum, typeOf } from '../utils.js';
 import { ico } from '../icones.js';
 import { Cache, Store } from '../store.js';
 import { batLabel, cablesOf, catOf, computeAlerts, isPassive, locLabel, locOf, poeUsage, portsOf, rackUsage } from '../services/requetes.js';
@@ -10,10 +10,11 @@ import { ageDuParc } from '../services/cycle-de-vie.js';
 import { liaisons } from '../services/liaisons.js';
 import { Securite } from '../services/securite.js';
 import { Sync } from '../sync.js';
-import { Actions, estAdmin, levelColor, renderActive, renderShell, showTab, UI, Views, vlanChip } from './socle.js';
+import { Actions, estAdmin, levelColor, renderActive, renderShell, showTab, toast, UI, Views, vlanChip } from './socle.js';
 import { Inv } from './inventaire.js';
 import { interventionsCard } from './planning.js';
 import { supervisionCard } from './supervision.js';
+import { Preferences } from '../services/preferences.js';
 
 /* Statistiques globales (hors équipements hors service) */
 function computeStats() {
@@ -38,6 +39,21 @@ function computeStats() {
 }
 const HIST_ICON = { add: 'plus', move: 'move', remove: 'out', edit: 'edit', stock: 'box', import: 'upload', catalog: 'list' };
 const LEVEL_LABEL = { crit: 'Critique', serious: 'Sérieux', warn: 'Avertissement' };
+/* Ce qu'un clic sur une alerte ouvre, dit sur la ligne */
+const OUVRE = { port: 'Ouvrir le port', device: 'Ouvrir la fiche', rack: 'Ouvrir la baie', catalog: 'Voir le stock', intervention: 'Voir l\'intervention' };
+const ouvre = a => (a.act === 'interv-voir' ? OUVRE.intervention : OUVRE[typeOf(a.ref || '')] || 'Ouvrir');
+/* Tuile « Alertes » : le total, une barre découpée par gravité (un segment par gravité présente, large en proportion), et le détail en toutes lettres */
+const GRAVITES = [['crit', 'critique', 'critiques', 'crit.'], ['serious', 'sérieuse', 'sérieuses', 'sér.'], ['warn', 'avertissement', 'avertissements', 'avert.']];
+function alertesTuile(alerts) {
+  const parts = GRAVITES.map(([l, un, plusieurs, court]) => ({ l, n: alerts.filter(a => a.level === l).length, un, plusieurs, court })).filter(x => x.n);
+  const abrege = parts.map(x => `${x.n} ${x.court}`).join(' · ') || 'Aucune alerte';
+  const detail = parts.map(x => `${x.n} ${x.n > 1 ? x.plusieurs : x.un}`).join(' · ') || 'Aucune alerte';
+  const barre = parts.map(x => `<i style="flex:${x.n} 1 0;background:${levelColor(x.l)}"></i>`).join('') || `<i style="flex:1 1 0;background:${COL.up}"></i>`;
+  // La barre est sur la ligne du chiffre : la tuile garde la taille des autres. Étroite, elle abrège le détail (le texte complet reste dans l'infobulle).
+  return `<div class="dcard kpi kpi-al" id="kpi-alertes" data-tip="Alertes|${detail}"><div class="kt"><div class="lbl">Alertes</div>
+    <div class="kpi-ligne"><div class="v ${parts[0]?.l === 'crit' ? 'crit' : ''}">${alerts.length}</div><div class="kpi-barre" role="img" aria-label="${detail}">${barre}</div></div>
+    <div class="s"><span class="long">${detail}</span><span class="court">${abrege}</span></div></div></div>`;
+}
 /* Anneau de progression (0 à 100 %), avec une icône au centre */
 function ring(p, icon, color = 'var(--accent)') {
   const r = 22, c = 2 * Math.PI * r, v = clamp(p, 0, 100);
@@ -142,6 +158,19 @@ function securiteCard() {
   remplirSecurite();
   return `<div class="dcard c7">${titre('alert', 'Sécurité du serveur', `<button class="btn sm" data-act="compte-audit">${ico('history')}Journal d'audit</button>`)}<div class="sec-etat"><div class="empty">Chargement…</div></div></div>`;
 }
+/* Personnalisation du tableau de bord : chacun masque les cartes dont il n'a pas besoin, et les remet quand il veut */
+const Dash = { edition: false };
+function bandePerso(connues) {
+  if (!Dash.edition) return '';
+  const masquees = connues.filter(c => c.masquee);
+  return `<div class="dcard c12 dash-perso" id="dash-perso"><div><b>Personnalisation.</b> Masquez les cartes dont vous n'avez pas besoin avec la croix. Votre choix est gardé pour ${Store.mode === 'serveur' ? 'votre compte : il vous suit d\'un poste à l\'autre' : 'ce navigateur'}.</div>
+    ${masquees.length ? `<div class="row wrap" style="gap:8px"><span class="muted">Cartes masquées, à remettre d'un clic :</span>${masquees.map(c => `<button class="btn sm" data-act="dash-afficher" data-c="${c.id}">${ico('plus')}${esc(c.nom)}</button>`).join('')}<button class="btn sm" data-act="dash-tout">Tout afficher</button></div>` : '<div class="muted">Aucune carte masquée.</div>'}</div>`;
+}
+const poserMasques = liste => Preferences.masquerCartes(liste).then(() => Views.dash.render(), e => { toast(e.message, 'err'); Views.dash.render(); });
+Actions['dash-perso'] = () => { Dash.edition = !Dash.edition; Views.dash.render(); };
+Actions['dash-masquer'] = el => poserMasques([...Preferences.cartesMasquees(), el.dataset.c]);
+Actions['dash-afficher'] = el => poserMasques(Preferences.cartesMasquees().filter(c => c !== el.dataset.c));
+Actions['dash-tout'] = () => poserMasques([]);
 Views.dash = {
   render() {
     const s = computeStats(), d = Store.db, alerts = computeAlerts();
@@ -161,33 +190,42 @@ Views.dash = {
     const states = ['up', 'down', 'disabled', 'error'].map(k => ({ k, n: (s.portStates.get(k) || []).length, color: PORT_STATUS[k].color, label: PORT_STATUS[k].label }));
     const nLevel = l => alerts.filter(a => a.level === l).length, crit = nLevel('crit');
     const pill = l => nLevel(l) ? `<span class="pill" style="--c:${levelColor(l)}"><i></i>${nLevel(l)} ${LEVEL_LABEL[l].toLowerCase()}${nLevel(l) > 1 ? 's' : ''}</span>` : '';
+    /* Chaque carte a un identifiant et un nom. Une carte masquée par la personne n'est pas affichée ; en personnalisation, chaque carte porte sa croix. */
+    const masques = Preferences.cartesMasquees(), connues = [];
+    const carte = (id, nom, html) => {
+      if (!html) return '';
+      connues.push({ id, nom, masquee: masques.includes(id) });
+      if (masques.includes(id)) return '';
+      const croix = Dash.edition ? `<button class="btn sm icon carte-x" data-act="dash-masquer" data-c="${id}" data-tip="Masquer cette carte" aria-label="Masquer la carte « ${nom} »">${ico('x')}</button>` : '';
+      return html.replace(/^\s*<div class="dcard([^"]*)"/, (m, cls) => `<div data-carte="${id}" class="dcard${cls}${Dash.edition ? ' perso' : ''}"`).replace('>', '>' + croix);
+    };
     const sites = d.sites.length > 1 ? `${d.sites.length} sites : ${d.sites.map(x => x.name).join(', ')}` : d.sites[0]?.name || 'Aucun site';
-    $('#tab-dash').innerHTML = `<div class="dash">
-      <div class="dhead c12"><div><h2>Tableau de bord</h2><div class="muted">${esc(sites)} · ${plural(d.buildings.length, 'bâtiment')} · ${plural(d.floors.length, 'étage')} · mis à jour le ${fmtDateTime(d.meta.updatedAt)}</div></div><span class="grow"></span><button class="btn" data-act="synthese" data-tip="Synthèse du parc|Document d'une à deux pages à imprimer ou à enregistrer en PDF : chiffres clés, âge du parc, capacité, adressage">${ico('list')}Synthèse</button><button class="btn" data-act="vlans" data-tip="VLAN|Ajouter, renommer, recolorer ou supprimer un VLAN">${ico('floor')}VLAN (${d.vlans.length})</button></div>
-      ${kpi('box', 'Équipements', s.devices, `dont ${s.active} actifs · ${plural(d.racks.length, 'baie')}`)}
-      ${kpi('switch', 'Ports occupés', `${pct(s.portsUsed, s.ports)}<small> %</small>`, `${s.portsUsed} sur ${s.ports} ports`, pct(s.portsUsed, s.ports))}
-      ${kpi('rack', 'Baies', `${pct(s.uUsed, s.uTotal)}<small> %</small>`, `${s.uUsed} U sur ${s.uTotal}`, pct(s.uUsed, s.uTotal))}
-      ${kpi('bolt', 'PoE consommé', `${s.poeUsed}<small> W</small>`, `sur ${s.poeBudget} W de budget`, pct(s.poeUsed, s.poeBudget))}
-      ${kpi('outlet', 'Prises brassées', `${pct(s.patched, s.outlets)}<small> %</small>`, `${s.patched} sur ${s.outlets} · ${s.outletsUp} actives`, pct(s.patched, s.outlets))}
-      ${kpi('alert', 'Alertes', alerts.length, crit ? `dont ${crit} critique${crit > 1 ? 's' : ''}` : 'aucune critique', null, alerts.length ? (crit ? COL.crit : COL.serious) : null)}
-      ${supervisionCard()}
-      <div class="dcard c5">${title('alert', 'Alertes', `<span class="row" style="gap:6px">${pill('crit')}${pill('serious')}${pill('warn')}</span>`)}
-        <div class="scroll alist">${alerts.map(a => `<div class="al" style="--c:${levelColor(a.level)}" data-act="${a.act || 'go'}" data-id="${a.ref}"><span class="ai">${ico(a.icon)}</span><div><b>${esc(a.text)}</b><small>${esc(a.sub)}</small></div><span class="lv">${LEVEL_LABEL[a.level]}</span></div>`).join('') || '<div class="empty">Aucune alerte</div>'}</div></div>
-      <div class="dcard c4">${title('box', 'Parc par type', `<span class="muted">${s.devices} équipements</span>`)}${hbars(catRows, Math.max(...catRows.map(r => r.v), 1), r => r.v)}</div>
-      <div class="dcard c3">${title('switch', 'États des ports')}
+    const entete = `<div class="dhead c12"><div><h2>Tableau de bord</h2><div class="muted">${esc(sites)} · ${plural(d.buildings.length, 'bâtiment')} · ${plural(d.floors.length, 'étage')} · mis à jour le ${fmtDateTime(d.meta.updatedAt)}</div></div><span class="grow"></span><button class="btn ${Dash.edition ? 'on' : ''}" data-act="dash-perso" data-tip="Personnaliser|Masquer les cartes dont vous n'avez pas besoin, ou les remettre. Votre choix est gardé pour vous.">${ico('edit')}${Dash.edition ? 'Terminer' : 'Personnaliser'}</button><button class="btn" data-act="synthese" data-tip="Synthèse du parc|Document d'une à deux pages à imprimer ou à enregistrer en PDF : chiffres clés, âge du parc, capacité, adressage">${ico('list')}Synthèse</button><button class="btn" data-act="vlans" data-tip="VLAN|Ajouter, renommer, recolorer ou supprimer un VLAN">${ico('floor')}VLAN (${d.vlans.length})</button></div>`;
+    const corps = `
+      ${carte('equipements', 'Équipements', kpi('box', 'Équipements', s.devices, `dont ${s.active} actifs · ${plural(d.racks.length, 'baie')}`))}
+      ${carte('ports-occupes', 'Ports occupés', kpi('switch', 'Ports occupés', `${pct(s.portsUsed, s.ports)}<small> %</small>`, `${s.portsUsed} sur ${s.ports} ports`, pct(s.portsUsed, s.ports)))}
+      ${carte('baies-occupees', 'Baies', kpi('rack', 'Baies', `${pct(s.uUsed, s.uTotal)}<small> %</small>`, `${s.uUsed} U sur ${s.uTotal}`, pct(s.uUsed, s.uTotal)))}
+      ${carte('poe-consomme', 'PoE consommé', kpi('bolt', 'PoE consommé', `${s.poeUsed}<small> W</small>`, `sur ${s.poeBudget} W de budget`, pct(s.poeUsed, s.poeBudget)))}
+      ${carte('prises', 'Prises brassées', kpi('outlet', 'Prises brassées', `${pct(s.patched, s.outlets)}<small> %</small>`, `${s.patched} sur ${s.outlets} · ${s.outletsUp} actives`, pct(s.patched, s.outlets)))}
+      ${carte('alertes-total', 'Alertes (total)', alertesTuile(alerts))}
+      ${carte('supervision', 'Supervision en direct', supervisionCard())}
+      ${carte('alertes', 'Alertes (liste)', `<div class="dcard c5">${title('alert', 'Alertes', `<span class="row" style="gap:6px">${pill('crit')}${pill('serious')}${pill('warn')}</span>`)}
+        <div class="scroll alist">${alerts.map(a => `<div class="al" style="--c:${levelColor(a.level)}" data-act="${a.act || 'go'}" data-id="${a.ref}"><span class="ai">${ico(a.icon)}</span><div><b>${esc(a.text)}</b><small><span class="lv">${LEVEL_LABEL[a.level]}</span>${esc(a.sub)}</small></div><span class="al-go">${ouvre(a)}</span></div>`).join('') || '<div class="empty">Aucune alerte</div>'}</div></div>`)}
+      ${carte('parc', 'Parc par type', `<div class="dcard c4">${title('box', 'Parc par type', `<span class="muted">${s.devices} équipements</span>`)}${hbars(catRows, Math.max(...catRows.map(r => r.v), 1), r => r.v)}</div>`)}
+      ${carte('etats-ports', 'États des ports', `<div class="dcard c3">${title('switch', 'États des ports')}
         ${donut(states, s.ports || 1, s.ports, 'ports réseau')}
-        <div class="dleg">${states.map(x => `<div><span class="st2"><i style="background:${x.color}"></i>${x.label}</span><b>${x.n}</b><span class="muted">${pct(x.n, s.ports)} %</span></div>`).join('')}</div></div>
-      ${interventionsCard()}
-      <div class="dcard c7">${title('history', 'Dernières actions', `<button class="btn sm" data-act="historique" data-tip="Historique|Filtrer toutes les actions, revenir à un état antérieur">${ico('list')}Tout voir (${d.history.length})</button>`)}
-        <div class="scroll tline">${d.history.slice(0, 40).map(h => `<div class="tli"><span class="td">${ico(HIST_ICON[h.type] || 'edit')}</span><div><b>${esc(h.text)}</b><small>${HISTORY_TYPES[h.type] || esc(h.type)} · ${fmtDateTime(h.ts)}</small></div></div>`).join('') || '<div class="empty">Aucune action</div>'}</div></div>
-      <div class="dcard c4">${title('switch', 'Occupation des ports par switch')}<div class="scroll">${hbars(swRows, 100, r => `${r.raw.used}/${r.raw.total}`)}</div></div>
-      <div class="dcard c4">${title('rack', 'Remplissage des baies', `<span class="muted">${s.uUsed}/${s.uTotal} U</span>`)}
+        <div class="dleg">${states.map(x => `<div><span class="st2"><i style="background:${x.color}"></i>${x.label}</span><b>${x.n}</b><span class="muted">${pct(x.n, s.ports)} %</span></div>`).join('')}</div></div>`)}
+      ${carte('interventions', 'Interventions à venir', interventionsCard())}
+      ${carte('actions', 'Dernières actions', `<div class="dcard c7">${title('history', 'Dernières actions', `<button class="btn sm" data-act="historique" data-tip="Historique|Filtrer toutes les actions, revenir à un état antérieur">${ico('list')}Tout voir (${d.history.length})</button>`)}
+        <div class="scroll tline">${d.history.slice(0, 40).map(h => `<div class="tli"><span class="td">${ico(HIST_ICON[h.type] || 'edit')}</span><div><b>${esc(h.text)}</b><small>${HISTORY_TYPES[h.type] || esc(h.type)} · ${fmtDateTime(h.ts)}</small></div></div>`).join('') || '<div class="empty">Aucune action</div>'}</div></div>`)}
+      ${carte('occupation', 'Occupation des ports par switch', `<div class="dcard c4">${title('switch', 'Occupation des ports par switch')}<div class="scroll">${hbars(swRows, 100, r => `${r.raw.used}/${r.raw.total}`)}</div></div>`)}
+      ${carte('remplissage', 'Remplissage des baies', `<div class="dcard c4">${title('rack', 'Remplissage des baies', `<span class="muted">${s.uUsed}/${s.uTotal} U</span>`)}
         <div class="rgs">${racks.map(x => `<div class="rg ${x.pct >= RACK_FULL_PCT ? 'warn' : ''}" data-act="go" data-id="${x.r.id}" data-tip="${esc(x.r.name)}|${x.used} U occupées sur ${x.total}|${esc(locLabel(x.r.roomId))}"><b>${x.pct} %</b><div class="tube"><i style="height:${x.pct}%"></i></div><span>${esc(x.r.name.replace(/^(BAIE|COFFRET)-/, ''))}</span><small>${x.used}/${x.total} U</small></div>`).join('')}</div>
-        <div class="dnote">${racks.some(x => x.pct >= RACK_FULL_PCT) ? `<span style="color:${COL.serious}">${ico('alert')}</span>En orange : baie remplie à ${RACK_FULL_PCT} % ou plus` : 'Aucune baie proche de la saturation'}</div></div>
-      <div class="dcard c4">${title('bolt', 'Budget PoE par switch')}<div class="scroll">${hbars(poeRows, 100, r => `${r.raw.used}/${r.raw.budget} W`)}</div></div>
-      <div class="dcard c4">${title('building', 'Type × bâtiment')}${matrix}</div>
-      ${firmwareCard()}${ageCard()}${adressageCard()}${liaisonsCard()}${securiteCard()}
-    </div>`;
+        <div class="dnote">${racks.some(x => x.pct >= RACK_FULL_PCT) ? `<span style="color:${COL.serious}">${ico('alert')}</span>En orange : baie remplie à ${RACK_FULL_PCT} % ou plus` : 'Aucune baie proche de la saturation'}</div></div>`)}
+      ${carte('budget-poe', 'Budget PoE par switch', `<div class="dcard c4">${title('bolt', 'Budget PoE par switch')}<div class="scroll">${hbars(poeRows, 100, r => `${r.raw.used}/${r.raw.budget} W`)}</div></div>`)}
+      ${carte('matrice', 'Type × bâtiment', `<div class="dcard c4">${title('building', 'Type × bâtiment')}${matrix}</div>`)}
+      ${carte('firmware', 'Firmware par modèle', firmwareCard())}${carte('age', 'Âge du parc', ageCard())}${carte('adressage', 'Plan d\'adressage', adressageCard())}${carte('liaisons', 'Liaisons entre bâtiments et sites', liaisonsCard())}${carte('securite', 'Sécurité du serveur', securiteCard())}`;
+    $('#tab-dash').innerHTML = `<div class="dash">${entete}${bandePerso(connues)}${corps}</div>`;
   },
 };
 

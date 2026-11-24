@@ -495,6 +495,18 @@ table.it .acts{display:flex;gap:2px;justify-content:flex-end;opacity:.55}
 .kpi .v{font-size:28px;font-weight:700;line-height:1.15;margin:5px 0 3px;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
 .kpi .v small{font-size:14px;font-weight:600;color:var(--txt2);letter-spacing:0}
 .kpi .s{color:var(--txt3);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Personnalisation du tableau de bord : chaque carte porte une croix pour la masquer */
+.dcard.perso{position:relative;overflow:visible;outline:1px dashed var(--line3);outline-offset:-1px}
+.carte-x{position:absolute;top:-10px;right:-10px;z-index:2;background:var(--panel);border-radius:50%}
+.dash-perso{gap:10px;border-color:var(--accent)}
+/* Tuile « Alertes » : barre découpée par gravité */
+.kpi-al{container-type:inline-size}
+.kpi-al .v.crit{color:var(--danger-txt)}
+.kpi-ligne{display:flex;align-items:center;gap:12px}
+.kpi-barre{flex:1;min-width:0;display:flex;gap:2px;height:8px;border-radius:4px;overflow:hidden}
+.kpi-barre i{min-width:6px}
+.kpi-al .court{display:none}
+@container (max-width:330px){.kpi-al .long{display:none}.kpi-al .court{display:inline}}
 .ring{position:relative;width:56px;height:56px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--accent)}
 .ring svg:not(.ico){position:absolute;inset:0;width:100%;height:100%}
 .ring .ico{width:18px;height:18px}
@@ -513,13 +525,16 @@ table.it .acts{display:flex;gap:2px;justify-content:flex-end;opacity:.55}
 .pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;background:color-mix(in srgb,var(--c) 14%,transparent);white-space:nowrap}
 .pill i{width:7px;height:7px;border-radius:50%;background:var(--c)}
 .alist{display:flex;flex-direction:column;gap:6px;margin:0 -6px;padding:0 6px}
-.al{display:flex;gap:12px;align-items:center;padding:10px 12px;border-radius:10px;cursor:pointer;border:1px solid var(--line);background:var(--panel2)}
-@media (hover:hover){.al:hover{border-color:var(--line3)}}
-.al .ai{width:32px;height:32px;border-radius:9px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent)}
+/* Une alerte : cadre teinté par sa gravité, pastille d'icône, titre et précision sur deux lignes au besoin, et ce qu'un clic ouvre */
+.al{display:flex;gap:14px;align-items:center;padding:13px 14px;border-radius:12px;cursor:pointer;border:1px solid color-mix(in srgb,var(--c) 30%,var(--line));background:var(--panel2)}
+@media (hover:hover){.al:hover{border-color:color-mix(in srgb,var(--c) 60%,var(--line))}.al:hover .al-go{border-color:var(--txt2)}}
+.al .ai{width:36px;height:36px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--c);background:color-mix(in srgb,var(--c) 16%,transparent)}
 .al>div{flex:1;min-width:0}
-.al b{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.al small{display:block;color:var(--txt2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
-.al .lv{font-size:11.5px;font-weight:600;color:var(--txt2);white-space:nowrap}
+.al b{display:block;font-weight:600;overflow-wrap:anywhere}
+.al small{display:block;color:var(--txt2);overflow-wrap:anywhere;margin-top:3px;font-size:12.5px}
+.al .lv{font-weight:600;color:color-mix(in srgb,var(--c) 65%,var(--txt))}
+.al .lv::after{content:" · ";color:var(--txt2);font-weight:400}
+.al .al-go{flex:none;display:inline-flex;align-items:center;height:34px;padding:0 12px;border-radius:9px;border:1px solid var(--line3);font-size:12.5px;font-weight:600;color:var(--txt);white-space:nowrap}
 /* Anneau des états de ports */
 .donut{position:relative;width:150px;height:150px;margin:2px auto 16px}
 .donut svg{width:100%;height:100%}
@@ -714,7 +729,7 @@ svg.plan,svg.topo{touch-action:none}
   .kpi{padding:12px} .kpi .v{font-size:22px}
   .ring{width:44px;height:44px} .ring .ico{width:15px;height:15px}
   .dt{flex-wrap:wrap;margin-bottom:12px}
-  .al .lv{display:none}
+  .al{gap:10px;padding:11px 12px} .al .al-go{display:none}
   .ip-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto} .ip-row .tr{display:none} .ip-row .lib{grid-column:1/-1}
   .hb{grid-template-columns:minmax(70px,110px) minmax(0,1fr) auto;gap:10px 8px}
   .rg .tube{width:24px;height:90px}
