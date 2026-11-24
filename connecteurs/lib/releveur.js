@@ -4,7 +4,12 @@
 const { fusionner } = require('./contrat');
 
 const TYPES = { simulation: '../sources/simulation', prtg: '../sources/prtg', snmp: '../sources/snmp', zabbix: '../sources/zabbix', json: '../sources/json' };
-const DELAI_MS = 60000;   // au-delà, une source qui n'a pas répondu est comptée en erreur pour ce relevé
+const DELAI_MS = 60000;
+/* Vrai si la source envoie un secret (jeton, clé, compte) sur une liaison non chiffrée vers une autre machine.
+   Une adresse de la machine elle-même (localhost, 127.x, ::1) ne passe pas par le réseau. */
+const SECRETS = ['apiToken', 'jeton', 'token', 'passhash', 'password', 'motDePasse', 'username'];
+const AVIS_CLAIR = 'liaison non chiffrée (http://) : le secret d\'accès circule en clair sur le réseau. Passez la source en https:// et donnez-lui un compte en lecture seule.';
+const enClair = c => /^http:\/\//i.test(c.url || '') && !/^http:\/\/(localhost|127\.\d+\.\d+\.\d+|\[::1\])([:/]|$)/i.test(c.url) && SECRETS.some(k => c[k]);   // au-delà, une source qui n'a pas répondu est comptée en erreur pour ce relevé
 
 /* configs : liste de sources ({ type, … }), dans l'ordre de priorité (la première fait foi en cas de désaccord) ;
    journal : fonction qui reçoit les messages d'erreur ; options : { delaiMs, fabriques (sources fournies par les tests) } */
@@ -15,7 +20,9 @@ function creerReleveur(configs = [], journal = () => {}, options = {}) {
     const src = fabriques[c.type] ? fabriques[c.type](c) : require(TYPES[c.type])(c);
     // Deux sources du même nom se distinguent par leur rang : « snmp », « snmp (2) »
     const n = (noms.get(src.nom) || 0) + 1; noms.set(src.nom, n);
-    return { src, nom: n > 1 ? `${src.nom} (${n})` : src.nom, devices: [], ok: null, erreur: '', ts: 0 };
+    const nom = n > 1 ? `${src.nom} (${n})` : src.nom, avertissement = enClair(c) ? AVIS_CLAIR : '';
+    if (avertissement) journal(`[${nom}] Attention : ${avertissement}`);
+    return { src, nom, avertissement, devices: [], ok: null, erreur: '', ts: 0 };
   });
   let enCours = null;
   let minuterie = null;
@@ -36,7 +43,7 @@ function creerReleveur(configs = [], journal = () => {}, options = {}) {
     })).finally(() => { enCours = null; });
     return enCours;
   }
-  const sante = () => sources.map(s => ({ nom: s.nom, ok: s.ok, erreur: s.erreur, equipements: s.devices.length, ts: s.ts }));
+  const sante = () => sources.map(s => ({ nom: s.nom, ok: s.ok, erreur: s.erreur, avertissement: s.avertissement, equipements: s.devices.length, ts: s.ts }));
   return {
     nombre: sources.length,
     relever,

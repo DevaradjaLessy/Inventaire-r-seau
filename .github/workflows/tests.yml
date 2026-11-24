@@ -1,0 +1,57 @@
+# Tests lancés par GitHub à chaque envoi de code : serveur, campagne d'attaques, supervision.
+# La suite d'interface (Chromium, 15 à 20 minutes) et les essais d'installation (Docker) se lancent à la main :
+# voir CLAUDE.md. Les actions sont désignées par leur commit, tenu à jour par Dependabot.
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  serveur:
+    name: Serveur et campagne d'attaques
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: Dépendances
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund --prefix serveur
+          npm ci --ignore-scripts --no-audit --no-fund --prefix connecteurs
+      - name: Tests du serveur
+        run: npm test --prefix serveur
+      - name: Campagne d'attaques
+        run: npm run attaques --prefix serveur
+      - name: Vulnérabilités connues des dépendances
+        run: |
+          npm audit --omit=dev --prefix serveur
+          npm audit --omit=dev --prefix connecteurs
+
+  supervision:
+    name: Supervision
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: Dépendances
+        run: npm ci --ignore-scripts --no-audit --no-fund --prefix connecteurs
+      - name: Tests de la supervision
+        run: npm test --prefix connecteurs

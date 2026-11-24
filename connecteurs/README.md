@@ -92,6 +92,7 @@ Ouvrez ensuite `http://<serveur>:8787/` : c'est NetCarto, servi par le relais. D
 
 - `apiToken` : clé d'API créée dans PRTG pour un compte en lecture seule. À défaut : `username` et `passhash`.
 - `insecureTls` : mettre `true` seulement si PRTG utilise un certificat auto-signé.
+- Avec une adresse en `http://`, la clé circule en clair sur le réseau. NetCarto fonctionne quand même, mais le signale dans la fenêtre « Sources de données » et au journal du serveur. Passez en `https://` dès que PRTG le permet. Il en va de même pour les sources Zabbix et JSON.
 - Un port est reconnu quand le nom du capteur contient l'interface, par exemple `(001) GigabitEthernet1/0/1 Traffic`.
 - À vérifier chez vous : les codes d'état et le format des débits peuvent différer selon la version et la langue de PRTG.
 

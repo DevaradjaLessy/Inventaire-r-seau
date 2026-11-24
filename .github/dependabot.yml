@@ -1,0 +1,19 @@
+# Mises à jour proposées par GitHub, une fois par semaine : bibliothèques, image Docker de base, actions.
+# Chaque proposition arrive en demande de fusion ; rien n'est fusionné sans relecture.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /serveur
+    schedule: { interval: weekly }
+  - package-ecosystem: npm
+    directory: /connecteurs
+    schedule: { interval: weekly }
+  - package-ecosystem: npm
+    directory: /tests
+    schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directory: /installation/docker
+    schedule: { interval: weekly }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }

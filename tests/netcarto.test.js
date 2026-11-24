@@ -221,6 +221,41 @@ test('Baie 3D : la molette zoome vers l\'endroit visé, sans traverser la façad
   const cadre = await etat();
   assert.ok(Math.abs(cadre.hauteurBaie - depart.hauteurBaie) < depart.hauteurBaie * 0.08, 'le cadrage revient à la vue d\'ensemble');
 });
+test('Accessibilité : notifications annoncées, mouvement réduit respecté, survol réservé aux souris, vue 3D utilisable au clavier', async page => {
+  // Notifications : la zone est annoncée par un lecteur d'écran, une erreur l'est tout de suite
+  assert.deepStrictEqual(await page.evaluate(() => { const z = document.querySelector('#toasts'); return [z.getAttribute('aria-live'), z.getAttribute('role')]; }), ['polite', 'status']);
+  await page.evaluate(() => NetCarto.toast('Refus de démonstration', 'err'));
+  assert.strictEqual(await page.locator('.toast.err').first().getAttribute('role'), 'alert');
+  // Feuille de style : chaque règle de survol est réservée aux pointeurs qui survolent (sur un écran tactile, le survol reste collé après un appui)
+  const css = await page.evaluate(() => fetch('css/style.css').then(r => r.text()));
+  let reste = '', i = 0;
+  for (;;) { const d = css.indexOf('@media (hover:hover){', i); if (d < 0) { reste += css.slice(i); break; } reste += css.slice(i, d); let n = 0, j = css.indexOf('{', d); for (; j < css.length; j++) { if (css[j] === '{') n++; else if (css[j] === '}' && --n === 0) break; } i = j + 1; }
+  assert.ok(css.includes('@media (hover:hover){'), 'bloc des survols présent');
+  assert.deepStrictEqual((reste.replace(/\/\*[\s\S]*?\*\//g, '').match(/[^{}]*:hover[^{}]*\{/g) || []).map(x => x.trim()), [], 'règles de survol hors du bloc réservé');
+  // Avec une souris, le survol agit toujours
+  const fond = () => page.evaluate(() => getComputedStyle(document.querySelector('[data-act=sources]')).backgroundColor);
+  const avant = await fond(); await page.hover('[data-act=sources]'); await page.waitForTimeout(250);
+  assert.notStrictEqual(await fond(), avant, 'le survol d\'un bouton change son fond'); await page.mouse.move(2, 2);
+  // Vue 3D : le canevas se prend au clavier, a un nom, et + / - zooment
+  await page.evaluate(() => { const d = NetCarto.Store.db, sw = d.devices.find(x => x.hostname === 'SW-A1-ACC-01'); NetCarto.select(sw.rackId, { view: 'rack' }); });
+  await pret3D(page); await page.waitForTimeout(600);
+  const cv = page.locator('#r3d-canvas canvas');
+  assert.strictEqual(await cv.getAttribute('tabindex'), '0'); assert.match(await cv.getAttribute('aria-label'), /Vue 3D/);
+  assert.match(css, /\.v3d canvas:focus-visible\{[^}]*outline:/, 'le canevas montre qu\'il a le focus');
+  const dist = () => page.evaluate(() => { const v = NetCarto.Views3D.main; return v.camera.position.distanceTo(v.controls.target); });
+  const d0 = await dist(); await cv.focus(); await page.keyboard.press('+'); await page.keyboard.press('+'); await page.waitForTimeout(200);
+  const d1 = await dist(); assert.ok(d1 < d0 * 0.9, `« + » rapproche (${d0.toFixed(2)} → ${d1.toFixed(2)})`);
+  await page.keyboard.press('-'); await page.waitForTimeout(200); assert.ok(await dist() > d1 * 1.05, '« - » éloigne');
+  // Mouvement réduit demandé au système : plus d'animation en boucle, la caméra se place d'un coup, l'aperçu d'un objet ne tourne pas tout seul
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.evaluate(() => NetCarto.toast('Sans animation'));
+  assert.ok(await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.toast:last-child')).animationDuration)) < 0.01, 'animation des notifications coupée');
+  await page.click('[data-act=r3d-fit]');
+  assert.strictEqual(await page.evaluate(() => !NetCarto.Views3D.main.anim), true, 'la caméra se place sans animation');
+  await page.evaluate(() => { const d = NetCarto.Store.db, ap = d.devices.find(x => x.roomId && !x.rackId); NetCarto.select(ap.id, { view: 'rack' }); });
+  await page.waitForFunction(() => NetCarto.Views3D.main.kind === 'object'); 
+  assert.strictEqual(await page.evaluate(() => NetCarto.Views3D.main.controls.autoRotate), false, 'l\'aperçu d\'un objet ne tourne pas tout seul');
+});
 test('Sans Internet : la vue 3D fonctionne avec la copie locale de Three.js, rien n\'est demandé à l\'extérieur', async (page, { requetes }) => {
   await choisir(page, 'BAIE-A0-01'); await page.waitForSelector('#r3d-canvas canvas', { timeout: 20000 });
   assert.strictEqual(await page.evaluate(() => import('/js/3d/three.js').then(m => m.threeReady)), true);
@@ -744,7 +779,7 @@ test('Sécurité : rien de ce que renvoie une supervision (noms, messages, erreu
     const d = NetCarto.Store.db, sw = d.devices.find(x => x.hostname === 'SW-A1-ACC-01'), ap = d.devices.find(x => x.hostname === 'AP-A1-01'), p = d.ports.find(x => x.deviceId === sw.id && x.name === 'Gi1/0/1');
     Object.assign(NetCarto.Live.cfg, { type: 'relais' });
     NetCarto.Live.apply({ version: 1, ts: Date.now(), source: charge,
-      sources: [{ nom: charge, ok: false, erreur: charge, equipements: 0, ts: Date.now() }, { nom: 'snmp' + charge, ok: true, erreur: '', equipements: 2, ts: Date.now() }],
+      sources: [{ nom: charge, ok: false, erreur: charge, equipements: 0, ts: Date.now() }, { nom: 'snmp' + charge, ok: true, erreur: '', avertissement: charge, equipements: 2, ts: Date.now() }],
       devices: [
         { ip: sw.ip, hostname: charge, state: 'warning', message: charge, sources: [charge], ecarts: [charge + ' dit « up », ' + charge + ' dit « down »'],
           ports: [{ name: 'Gi1/0/1', status: 'error', errors: 12, macs: [charge, '02:00:00:00:00:01'], macCount: 2 }, { name: charge, status: 'up' }, { name: 'Port' + charge, status: 'down' },
@@ -1162,7 +1197,7 @@ test('Supervision : deux sources voient le même switch et une troisième est en
   // La fenêtre « Sources de données » dit tout cela
   await page.click('[data-act=sources]');
   const fen = (await page.locator('#src-state').innerText()).replace(/\s+/g, ' ');
-  for (const attendu of [/prtg.*1 équipement|prtg.*2 équipements/, /snmp/, /zabbix.*en erreur/i, /INCONNU-PRTG/, /SW-A1-ACC-01.*3 ports reconnus.*2 non reconnus.*Gi9\/9\/9/, /prtg dit « down », snmp dit « up »/]) assert.match(fen, attendu);
+  for (const attendu of [/prtg.*1 équipement|prtg.*2 équipements/, /prtg.*liaison non chiffrée/, /snmp/, /zabbix.*en erreur/i, /INCONNU-PRTG/, /SW-A1-ACC-01.*3 ports reconnus.*2 non reconnus.*Gi9\/9\/9/, /prtg dit « down », snmp dit « up »/]) assert.match(fen, attendu);
   await page.click('[data-act=modal-close]');
   // Fiche du port : erreurs de trame, et l'adresse MAC vue est rattachée à l'équipement de l'inventaire
   await page.evaluate(i => NetCarto.select(i, { keep: true }), r.p3.id); assert.match(await page.locator('#detail').innerText(), /Erreurs de trame\s*250/);
@@ -1174,7 +1209,7 @@ test('Supervision : deux sources voient le même switch et une troisième est en
   const vieux = await page.evaluate(() => { try { NetCarto.Live.apply({ version: 1, ts: Date.now() - 3600e3, devices: [{ ip: '10.10.99.18', state: 'down' }] }); return 'accepté'; } catch (e) { return e.message; } });
   assert.match(vieux, /date de .* la supervision ne tourne plus/); assert.strictEqual(await page.evaluate(() => NetCarto.Live.dev.size), 0);
 }, { serveur: true, erreursAttendues: /./, supervision: [
-  { type: 'simulation', nom: 'prtg', devices: [{ ip: 'sw-a1-acc-01.exemple.interne', hostname: 'SW-A1-ACC-01', ports: [{ name: 'GigabitEthernet1/0/1', status: 'up', totalMbps: 12 }, { name: 'GigabitEthernet1/0/2', status: 'down' }] }, { ip: '192.0.2.77', hostname: 'INCONNU-PRTG' }] },
+  { type: 'simulation', nom: 'prtg', url: 'http://prtg.exemple.interne', apiToken: 'jeton-fictif', devices: [{ ip: 'sw-a1-acc-01.exemple.interne', hostname: 'SW-A1-ACC-01', ports: [{ name: 'GigabitEthernet1/0/1', status: 'up', totalMbps: 12 }, { name: 'GigabitEthernet1/0/2', status: 'down' }] }, { ip: '192.0.2.77', hostname: 'INCONNU-PRTG' }] },
   { type: 'simulation', nom: 'snmp', devices: [{ ip: '10.10.99.18', hostname: '', ports: [{ name: 'Gi1/0/1', status: 'up', speedMbps: 1000, macs: ['02:00:00:00:00:99'], macCount: 1 }, { name: 'Gi1/0/2', status: 'up' }, { name: 'Gi1/0/3', status: 'error', errors: 250 }, { name: 'Vlan99', status: 'up' }, { name: 'Gi9/9/9', status: 'up' }] }] },
   { type: 'json', nom: 'zabbix', url: 'http://127.0.0.1:1/etat', timeoutMs: 800 }] });
 test('Noms d\'interface : l\'interface et le relais les ramènent à la même forme', async page => {

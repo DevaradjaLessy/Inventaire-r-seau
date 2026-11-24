@@ -88,6 +88,7 @@ Store.on(() => { TABS.filter(t => !t.admin).forEach(t => UI.dirty.add(t.id)); re
 function toast(msg, kind = 'ok', action = null) {
   const el = document.createElement('div');
   el.className = 'toast ' + kind;
+  if (kind === 'err') el.setAttribute('role', 'alert');   // une erreur est annoncée tout de suite par un lecteur d'écran
   el.innerHTML = `<span>${esc(msg)}</span>${action ? `<button class="btn sm">${esc(action.label)}</button>` : ''}`;
   if (action) el.querySelector('button').onclick = () => { action.fn(); el.remove(); };
   $('#toasts').appendChild(el);

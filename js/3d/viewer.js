@@ -11,6 +11,8 @@ import { run, Tip } from '../ui/socle.js';
 
 /* Zoom de la vue 3D : distance minimale au point visé (en mètres) et recul maximal (en multiple de la vue d'ensemble) */
 const ZOOM_PRES = 0.16, RECUL_MAX = 1.8;
+/* Vrai si l'utilisateur a demandé à son système de réduire les animations : la caméra se place alors d'un coup et rien ne tourne tout seul */
+const mouvementReduit = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
 
 class Viewer3D {
   constructor(host, o = {}) {
@@ -68,6 +70,9 @@ class Viewer3D {
     el.addEventListener('pointerleave', () => { this.setHover(null); Tip.hide(); });
     el.addEventListener('pointerup', e => { if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5) this.onClick(e); down = null; });
     el.dataset.tipkeep = '1';
+    // Clavier : le canevas se prend avec Tab, a un nom pour un lecteur d'écran, et « + » / « - » zooment vers le centre d'intérêt
+    el.tabIndex = 0; el.setAttribute('role', 'img'); el.setAttribute('aria-label', 'Vue 3D. Glisser pour tourner, molette ou touches plus et moins pour zoomer.');
+    el.addEventListener('keydown', e => { const k = e.key === '+' || e.key === '=' ? 0.85 : e.key === '-' ? 1 / 0.85 : 0; if (k && !e.ctrlKey && !e.metaKey) { e.preventDefault(); this.zoomVers(this.controls.target.clone(), k); } });
     // Molette et pavé tactile : le zoom est pris ici, avant les contrôles d'orbite (voir zoomVers)
     this.host.addEventListener('wheel', e => this.onWheel(e), { capture: true, passive: false });
     new ResizeObserver(() => this.resize()).observe(this.host);
@@ -371,7 +376,7 @@ class Viewer3D {
     const dist = size / Math.tan(this.camera.fov * Math.PI / 360) * 0.95;
     this.controls.maxDistance = dist * 3; this.centre = new THREE.Vector3(0, cy, 0);
     this.controls.target.set(0, cy, 0); this.camera.position.set(dist * 0.42, cy + dist * 0.42, dist * 0.82);
-    this.controls.autoRotate = !dev; this.controls.autoRotateSpeed = 1.2;
+    this.controls.autoRotate = !dev && !mouvementReduit(); this.controls.autoRotateSpeed = 1.2;
     this.key.target.position.set(0, cy, 0);
     this.controls.update(); this.finishScene();
   }
@@ -543,7 +548,7 @@ class Viewer3D {
     c[axe] += sens * prof; this.controls.update(); this.dirty = true;
   }
   flyTo(pos, target, animate = true) {
-    if (!animate) { this.camera.position.copy(pos); this.controls.target.copy(target); this.controls.update(); this.dirty = true; return; }
+    if (!animate || mouvementReduit()) { this.anim = null; this.camera.position.copy(pos); this.controls.target.copy(target); this.controls.update(); this.dirty = true; return; }
     this.anim = { t0: performance.now(), p0: this.camera.position.clone(), q0: this.controls.target.clone(), p1: pos, q1: target };
   }
   stepAnim(t) {

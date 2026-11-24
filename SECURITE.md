@@ -10,7 +10,7 @@ L'audit a trouvé **16 points**, dont 1 de gravité haute et 6 de gravité moyen
 
 Une **campagne d'attaques** a ensuite été menée contre la version corrigée (section 8). Sur 40 essais, 3 défenses ont cédé, toutes liées à des tentatives envoyées en rafale. Elles sont corrigées, ainsi que 6 autres points trouvés en chemin. Rejouée, la campagne ne passe plus nulle part.
 
-Une **relecture avec des grilles extérieures** (section 9) a ensuite trouvé 6 points dans le code, dont 1 de gravité haute, et 8 écarts dans la tenue du dépôt et de l'installation. Les 14 sont corrigés ; 5 autres points sont laissés en l'état et expliqués.
+Une **relecture avec des grilles extérieures** (section 9) a ensuite trouvé 6 points dans le code, dont 1 de gravité haute, et 10 écarts dans la tenue du dépôt et de l'installation. Les 16 sont corrigés ; 5 autres points sont laissés en l'état et expliqués.
 
 Ce document n'est pas une certification. Il ne remplace ni un test d'intrusion mené par un tiers, ni la revue de votre propre politique de sécurité.
 
@@ -185,6 +185,8 @@ La campagne confirme les priorités de la section 7 : la **double authentificati
 | 37 | Les tests d'interface n'avaient pas de fichier de verrouillage. | `tests/package-lock.json`, sur la version de Playwright réellement utilisée. |
 | 38 | L'image des essais d'installation était désignée par son étiquette. | Désignée par son condensat. |
 | 39 | Le service systemd pouvait utiliser tous les appels système et voyait les processus des autres comptes. | `SystemCallFilter=@system-service`, `ProtectProc=invisible`, `ProcSubset=pid`, `RemoveIPC`. Le niveau d'exposition mesuré par `systemd-analyze security` sur Ubuntu 24.04 est de 1,5 sur 10 ; les essais d'installation exigent moins de 2,5 sur Debian 12, Ubuntu 22.04 et 24.04. |
+| 40 | L'image Docker partait d'une image de base désignée par son étiquette, qui change dans le temps. | Désignée par son condensat ; Dependabot propose le nouveau quand l'image officielle est corrigée. |
+| 41 | Aucun test ne se lançait de lui-même à l'envoi du code. | GitHub lance les tests du serveur, la campagne d'attaques, les tests de la supervision et `npm audit` à chaque envoi. Les actions utilisées sont désignées par leur commit, avec des droits en lecture seule. |
 
 ### 9.3 Points relevés et laissés en l'état
 
@@ -192,9 +194,9 @@ La campagne confirme les priorités de la section 7 : la **double authentificati
 |---|---|---|
 | Le libellé d'une opération au journal d'audit vient du poste qui l'envoie. Un technicien peut intituler « Mise à jour » une suppression. | Le libellé sert à lire le journal, pas à faire foi | Le détail de chaque objet créé, modifié ou supprimé est écrit par le serveur, avec le compte réel |
 | Le champ « créée par » d'une intervention vient lui aussi du poste. | Même raison | Le journal d'audit porte le compte réel |
-| Une source de supervision peut être réglée en `http://`. Son jeton circule alors en clair. | PRTG est souvent installé sans HTTPS sur un réseau interne | À régler en HTTPS dès que la source le permet ; un compte en lecture seule côté supervision |
-| L'image Docker part d'une image de base désignée par son étiquette, et démarre en root avant de passer au compte du service. | L'épingler par condensat demande de la mettre à jour à la main ; le démarrage en root prépare les dossiers | Conteneur en lecture seule, privilèges retirés, compte sans privilège pour le serveur |
-| Le dépôt n'a ni intégration continue, ni alerte de dépendances, ni recherche automatique de secrets. | Ce sont des réglages du dépôt GitHub, à décider par son propriétaire | Trois suites de tests lancées avant chaque commit, `npm audit` sans alerte, aucun secret dans l'arbre ni dans l'historique |
+| Une source de supervision peut être réglée en `http://`. Son secret d'accès circule alors en clair. | PRTG est souvent installé sans HTTPS sur un réseau interne : refuser empêcherait de s'en servir | NetCarto le signale : avertissement dans la fenêtre « Sources de données » et ligne au journal du serveur, sans jamais y écrire le secret. À régler en HTTPS dès que la source le permet, avec un compte en lecture seule côté supervision |
+| Le conteneur démarre en root, le temps de préparer ses dossiers, avant de passer au compte du service. | Démarrer sans root rendrait la première installation fragile (droits des dossiers) | Conteneur en lecture seule, privilèges retirés, serveur toujours sous un compte sans privilège |
+| Les alertes de dépendances et la recherche automatique de secrets sont des réglages du dépôt GitHub. | Seul son propriétaire peut les activer | Le dépôt porte déjà ce qui dépend du code : tests lancés par GitHub à chaque envoi (`.github/workflows/tests.yml`), mises à jour proposées chaque semaine (`.github/dependabot.yml`) |
 
 ## 10. Vérifier par vous-même
 

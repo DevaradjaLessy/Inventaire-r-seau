@@ -135,6 +135,23 @@ test('Releveur : une source en panne ou qui ne répond plus n\'arrête pas les a
   const deux = creerReleveur([{ type: 'bonne' }, { type: 'bonne' }], () => {}, { fabriques });
   assert.deepStrictEqual(deux.etat().sources.map(s => s.nom), ['bonne', 'bonne (2)']);
 });
+test('Releveur : une source interrogée en http:// avec un secret est signalée, sans que le secret apparaisse', async () => {
+  const { creerReleveur } = require('../lib/releveur');
+  const fabriques = { x: c => ({ nom: c.nom, relever: async () => [] }) }, lignes = [];
+  const r = creerReleveur([
+    { type: 'x', nom: 'prtg', url: 'http://prtg.exemple.interne', apiToken: 'jeton-fictif-1234' },
+    { type: 'x', nom: 'chiffree', url: 'https://prtg.exemple.interne', apiToken: 'jeton-fictif-1234' },
+    { type: 'x', nom: 'locale', url: 'http://127.0.0.1:8080/etat', jeton: 'jeton-fictif-1234' },
+    { type: 'x', nom: 'ouverte', url: 'http://supervision.exemple.interne/etat.json' },
+    { type: 'x', nom: 'compte', url: 'HTTP://prtg2.exemple.interne', username: 'lecture', passhash: '0000' },
+  ], m => lignes.push(m), { fabriques });
+  await r.relever();
+  const avis = Object.fromEntries(r.etat().sources.map(s => [s.nom, s.avertissement]));
+  assert.match(avis.prtg, /non chiffrée/); assert.match(avis.compte, /non chiffrée/);
+  assert.deepStrictEqual([avis.chiffree, avis.locale, avis.ouverte], ['', '', ''], 'https, adresse locale ou absence de secret : rien à signaler');
+  assert.strictEqual(lignes.filter(l => /non chiffrée/.test(l)).length, 2, 'une ligne au journal par source concernée, une seule fois');
+  assert.ok(!lignes.join('\n').includes('jeton-fictif') && !JSON.stringify(r.etat()).includes('jeton-fictif'), 'le secret ne sort ni au journal ni dans l\'état');
+});
 test('SNMP : sur un switch Juniper, seuls les ports physiques sont remontés ; les erreurs de trame donnent l\'état « error »', async () => {
   const snmp = require('net-snmp'), T = snmp.ObjectType, RO = snmp.MaxAccess['read-only'];
   const agent = snmp.createAgent({ port: 18962, disableAuthorization: true, address: '127.0.0.1' }, () => {});

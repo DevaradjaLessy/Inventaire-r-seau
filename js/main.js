@@ -5,7 +5,7 @@ import { topology } from './services/topologie.js';
 import { trace } from './services/tracage.js';
 import { connect, disconnect } from './services/connexion.js';
 import { installFromStock, removeDevice } from './services/installation.js';
-import { showTab, UI, Views } from './ui/socle.js';
+import { showTab, toast, UI, Views } from './ui/socle.js';
 import { Carto, select, Views3D } from './ui/carto/carto.js';
 import './config.js';
 import './utils.js';
@@ -72,4 +72,4 @@ showTab(UI.tab);
 if (api) { const securite = () => chargerSecurite().catch(() => { /* serveur injoignable : l'étiquette d'état le dit déjà */ }); securite(); setInterval(securite, 300000); }
 Live.load();
 Live.start();   // relevés de supervision, si une source est configurée
-window.NetCarto = { impactOf, planAdressage, ageDuParc, liaisons, normIf, Sync, addRoom, deleteStructure, deleteVlan, Live, Store, UI, Views, Views3D, Carto, trace, topology, connect, disconnect, installFromStock, removeDevice, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic
+window.NetCarto = { toast, impactOf, planAdressage, ageDuParc, liaisons, normIf, Sync, addRoom, deleteStructure, deleteVlan, Live, Store, UI, Views, Views3D, Carto, trace, topology, connect, disconnect, installFromStock, removeDevice, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic

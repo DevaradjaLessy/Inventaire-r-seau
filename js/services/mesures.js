@@ -104,7 +104,7 @@ const Live = {
     const byIp = new Map(), byName = new Map();
     for (const d of Store.db.devices) { if (d.status === 'retired') continue; if (d.ip) byIp.set(d.ip, d); byName.set(court(d.hostname), d); }
     this.vider();
-    this.sources = Array.isArray(snap.sources) ? snap.sources.map(s => ({ nom: String(s.nom || ''), ok: s.ok, erreur: String(s.erreur || ''), equipements: +s.equipements || 0, ts: +s.ts || 0 })) : [];
+    this.sources = Array.isArray(snap.sources) ? snap.sources.map(s => ({ nom: String(s.nom || ''), ok: s.ok, erreur: String(s.erreur || ''), avertissement: String(s.avertissement || ''), equipements: +s.equipements || 0, ts: +s.ts || 0 })) : [];
     for (const m of snap.devices) {
       const d = byIp.get(m.ip) || byName.get(court(m.hostname)) || (m.ip && !/^[\d.:a-f]+$/i.test(m.ip) ? byName.get(court(m.ip)) : null);
       if (!d) { this.unmatched.push(m.hostname || m.ip || '?'); continue; }
