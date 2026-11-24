@@ -7,7 +7,7 @@
 # --- Étape 1 : dépendances (elles ne sont retéléchargées que si les fichiers package changent) ---
 # L'image de base est désignée par son condensat : c'est toujours la même, octet pour octet.
 # Dependabot propose le nouveau condensat quand l'image officielle est corrigée (.github/dependabot.yml).
-FROM node:22-bookworm-slim@sha256:66cb8ef75184df13dc0dcf866330488996b485d404db60555756865300ced4a5 AS dependances
+FROM node:25-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS dependances
 WORKDIR /opt/netcarto
 COPY serveur/package.json serveur/package-lock.json serveur/
 COPY connecteurs/package.json connecteurs/package-lock.json connecteurs/
@@ -18,7 +18,7 @@ RUN --mount=type=secret,id=ca,required=false \
     npm ci --omit=dev --ignore-scripts --no-audit --no-fund --prefix connecteurs
 
 # --- Étape 2 : image finale ---
-FROM node:22-bookworm-slim@sha256:66cb8ef75184df13dc0dcf866330488996b485d404db60555756865300ced4a5
+FROM node:25-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370
 ENV NODE_ENV=production \
     NETCARTO_CONFIG=/etc/netcarto/netcarto.toml
 # Compte du service, sans privilège ni interpréteur de commandes
