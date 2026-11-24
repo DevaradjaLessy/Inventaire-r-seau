@@ -2,13 +2,13 @@
    installation, service, droits, mise à jour, retour arrière, désinstallation et garde-fou de suppression.
    Ignoré si Docker n'est pas disponible ou ne permet pas les conteneurs privilégiés.
    L'installation se fait hors ligne (options --node et --hors-ligne) ; l'archive Node.js est téléchargée et
-   vérifiée par la fonction du script d'installation elle-même. */
+   vérifiée par la fonction du script d'installation elle-même.    Un autre système s'essaie en donnant son image : NETCARTO_TEST_IMAGE=jrei/systemd-ubuntu:24.04 (image avec systemd). */
 'use strict';
 const test = require('node:test'), assert = require('node:assert');
 const fs = require('fs'), os = require('os'), path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 
-const RACINE = path.join(__dirname, '..', '..'), IMAGE = 'jrei/systemd-debian:12', NOM = 'netcarto-essai-linux-' + process.pid, MDP = 'Mot-de-passe-de-test-1';   // mot de passe fictif
+const RACINE = path.join(__dirname, '..', '..'), IMAGE = process.env.NETCARTO_TEST_IMAGE || 'jrei/systemd-debian:12', NOM = 'netcarto-essai-linux-' + process.pid, MDP = 'Mot-de-passe-de-test-1';   // mot de passe fictif
 const disponible = process.platform === 'linux' && spawnSync('docker', ['info'], { stdio: 'ignore', timeout: 15000 }).status === 0;
 /* Commande dans le conteneur : renvoie { code, sortie (stdout + stderr) } */
 const dans = (cmd, entree) => { const r = spawnSync('docker', ['exec', ...(entree !== undefined ? ['-i'] : []), NOM, 'bash', '-c', cmd], { encoding: 'utf8', input: entree }); return { code: r.status, sortie: (r.stdout || '') + (r.stderr || '') }; };

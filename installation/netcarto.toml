@@ -34,6 +34,7 @@ dossier = "/var/lib/netcarto"
 # securite = "starttls"           # "starttls" (port 587), "tls" (port 465) ou "aucune"
 # utilisateur = "netcarto"
 # motDePasse = "env:SMTP_MDP"     # jamais en clair ici : lu dans la variable d'environnement SMTP_MDP
+# autorite = "ac-interne.pem"     # si le certificat du serveur d'envoi vient de votre autorité interne : son certificat (PEM)
 # expediteur = "NetCarto <netcarto@exemple.interne>"
 # adresse = "https://netcarto.exemple.interne:8443"   # adresse par laquelle vos collègues ouvrent NetCarto (sert aux liens)
 

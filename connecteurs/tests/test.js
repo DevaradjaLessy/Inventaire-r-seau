@@ -172,6 +172,9 @@ test('SNMP : adresses MAC apprises par port, à partir de la table de commutatio
   const r = macsParPort(fdb, new Map([['3', 501], ['7', 504]]));
   assert.deepStrictEqual(r.get('501'), ['00:11:22:33:44:55', '00:11:22:33:44:56']); assert.deepStrictEqual(r.get('504'), ['aa:bb:cc:dd:ee:ff']);
   assert.strictEqual(r.size, 2, 'port de pont inconnu ou nul : ignoré');
+  // La même adresse apprise dans plusieurs VLAN (constaté sur RouterOS) n'est comptée qu'une fois
+  const multi = macsParPort(new Map([['0.82.84.0.18.52.88', 2], ['1.82.84.0.18.52.88', 2], ['20.82.84.0.18.52.88', 2], ['20.82.84.0.18.52.89', 2]]), new Map([['2', 3]]));
+  assert.deepStrictEqual([multi.get('3'), multi.total.get('3')], [['52:54:00:12:34:58', '52:54:00:12:34:59'], 2]);
   // Table BRIDGE (sans VLAN dans l'indice) : six octets seulement
   assert.deepStrictEqual(macsParPort(new Map([['0.17.34.51.68.85', 3]]), new Map([['3', 501]])).get('501'), ['00:11:22:33:44:55']);
   // Un port qui voit beaucoup d'adresses est un lien vers un autre switch : on garde le nombre, pas la liste
@@ -199,6 +202,84 @@ test('Source JSON : n\'importe quel outil de supervision peut publier son état 
     await assert.rejects(json({ type: 'json', url: 'http://127.0.0.1:18903/autre' }).relever(), /format/);
     assert.throws(() => json({ type: 'json', url: 'ftp://exemple.invalid' }), /http/);
   } finally { srv.close(); delete process.env.NETCARTO_TEST_JETON; }
+});
+/* --- Simulateur Zabbix : répond à l'API JSON-RPC avec de vraies réponses enregistrées sur un Zabbix 7.0 --- */
+function fauxZabbix(port, modifs = {}) {
+  const lire = f => JSON.parse(JSON.stringify(require(`./zabbix/${f}.json`).result)), appels = [];
+  const srv = http.createServer((req, res) => {
+    let b = ''; req.on('data', c => { b += c; }); req.on('end', () => {
+      const q = JSON.parse(b), rep = r => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ jsonrpc: '2.0', id: q.id, ...r })); };
+      appels.push({ methode: q.method, params: q.params, type: req.headers['content-type'] });
+      if (req.headers.authorization !== 'Bearer jeton-de-test') return rep({ error: { code: -32602, message: 'Invalid params.', data: 'Not authorized.' } });
+      if (q.method === 'hostgroup.get') return rep({ result: (q.params.filter?.name || []).includes('Essai NetCarto') ? [{ groupid: '22', name: 'Essai NetCarto' }] : [] });
+      if (q.method === 'host.get') { const h = lire('host.get'); (modifs.hote || (() => {}))(h[0]); return rep({ result: h }); }
+      if (q.method === 'item.get') return rep({ result: lire('item.get') });
+      if (q.method === 'problem.get') return rep({ result: modifs.sansProbleme ? [] : lire('problem.get').filter(p => p.r_eventid === '0') });
+      rep({ error: { code: -32601, message: 'Method not found.', data: q.method } });
+    });
+  });
+  return new Promise(ok => srv.listen(port, '127.0.0.1', () => ok({ srv, appels })));
+}
+test('Zabbix : état des hôtes, problèmes en cours et ports, à partir de vraies réponses de l\'API', async () => {
+  const zabbix = require('../sources/zabbix');
+  const { srv, appels } = await fauxZabbix(18904);
+  try {
+    const src = zabbix({ type: 'zabbix', url: 'http://127.0.0.1:18904', apiToken: 'jeton-de-test' });
+    const devs = await src.relever();
+    assert.strictEqual(src.nom, 'zabbix'); assert.strictEqual(devs.length, 1);
+    const [d] = devs;
+    // Un problème en cours (gravité moyenne) : l'hôte répond, mais il est signalé « dégradé », avec le libellé du problème
+    assert.deepStrictEqual([d.ip, d.hostname, d.state, d.message], ['127.0.0.1', 'SW-REEL-01', 'warning', 'Essai NetCarto : interface ifb0 opérationnellement coupée']);
+    assert.deepStrictEqual(d.ports.map(p => [p.name, p.status]), [['eth0', 'up'], ['ifb0', 'down'], ['ifb1', 'down']]);
+    const eth = d.ports[0];
+    assert.ok(eth.inMbps > 0 && eth.outMbps >= 0, `débits de eth0 : ${eth.inMbps} / ${eth.outMbps} Mb/s`);
+    assert.strictEqual(eth.speedMbps, null, 'un débit nominal de 0 n\'est pas une information');
+    // Les appels : tous en JSON-RPC, et la recherche des éléments vise les interfaces
+    assert.deepStrictEqual(appels.map(a => a.methode), ['host.get', 'item.get', 'problem.get']);
+    assert.ok(appels.every(a => /json/.test(a.type)));
+    // Limiter à des groupes d'hôtes : leurs identifiants sont cherchés d'abord
+    appels.length = 0;
+    await zabbix({ type: 'zabbix', url: 'http://127.0.0.1:18904/', apiToken: 'jeton-de-test', groupes: ['Essai NetCarto'] }).relever();
+    assert.deepStrictEqual([appels[0].methode, appels[1].methode, appels[1].params.groupids], ['hostgroup.get', 'host.get', ['22']]);
+    await assert.rejects(zabbix({ type: 'zabbix', url: 'http://127.0.0.1:18904', apiToken: 'jeton-de-test', groupes: ['Inconnu'] }).relever(), /groupe.*Inconnu/i);
+    // Jeton refusé : message clair, sans le jeton
+    await assert.rejects(zabbix({ type: 'zabbix', url: 'http://127.0.0.1:18904', apiToken: 'mauvais-jeton' }).relever(), e => /Zabbix.*Not authorized/.test(e.message) && !/mauvais-jeton/.test(e.message));
+    assert.throws(() => zabbix({ type: 'zabbix', url: 'zabbix.exemple.interne', apiToken: 'x' }), /http/);
+  } finally { srv.close(); }
+});
+test('Zabbix : hôte injoignable, hôte sans problème, hôte en maintenance', async () => {
+  const zabbix = require('../sources/zabbix');
+  const cas = async (port, modifs) => { const { srv } = await fauxZabbix(port, modifs); try { return (await zabbix({ type: 'zabbix', url: `http://127.0.0.1:${port}`, apiToken: 'jeton-de-test' }).relever())[0]; } finally { srv.close(); } };
+  // L'interface SNMP de l'hôte ne répond plus à Zabbix : injoignable, avec l'erreur que donne Zabbix
+  const hs = await cas(18905, { hote: h => Object.assign(h.interfaces[0], { available: '2', error: 'Timeout while connecting to "127.0.0.1:1161".' }) });
+  assert.deepStrictEqual([hs.state, hs.message], ['down', 'Timeout while connecting to "127.0.0.1:1161".']);
+  const ok = await cas(18906, { sansProbleme: true });
+  assert.deepStrictEqual([ok.state, ok.message], ['up', '']);
+  const maint = await cas(18907, { sansProbleme: true, hote: h => { h.maintenance_status = '1'; } });
+  assert.deepStrictEqual([maint.state, maint.message], ['up', 'En maintenance dans Zabbix']);
+  // Aucune interface n'a encore été interrogée : on ne sait pas
+  const inconnu = await cas(18908, { sansProbleme: true, hote: h => { h.interfaces[0].available = '0'; } });
+  assert.strictEqual(inconnu.state, 'unknown');
+});
+test('Fusion : « inactif » et « désactivé » ne se contredisent pas, la valeur la plus précise est gardée', () => {
+  // Zabbix ne connaît que l'état opérationnel (port inactif) ; le SNMP sait que le port est désactivé par l'administrateur
+  const z = [{ ip: '10.0.0.1', state: 'up', ports: [{ name: 'ge-0/0/1', status: 'down' }, { name: 'ge-0/0/2', status: 'down' }] }];
+  const s = [{ ip: '10.0.0.1', state: 'up', ports: [{ name: 'ge-0/0/1', status: 'disabled' }, { name: 'ge-0/0/2', status: 'up' }] }];
+  const [d] = fusionner([z, s], ['zabbix', 'snmp']);
+  assert.deepStrictEqual(d.ports.map(p => p.status), ['disabled', 'down']);
+  assert.deepStrictEqual(d.ecarts, ['ge-0/0/2 : zabbix dit « down », snmp dit « up »']);
+  const [e] = fusionner([s, z], ['snmp', 'zabbix']);
+  assert.deepStrictEqual([e.ports[0].status, e.ecarts.length], ['disabled', 1]);
+  // De même pour l'équipement : « joignable » (il répond au SNMP) et « dégradé » (Zabbix lui connaît un problème) vont ensemble.
+  // Le problème est gardé avec son message, dans un ordre comme dans l'autre. Seul « injoignable » contredit les deux.
+  const up = [{ ip: '10.0.0.5', state: 'up' }], pb = [{ ip: '10.0.0.5', state: 'warning', message: 'Ventilateur en défaut' }], hs = [{ ip: '10.0.0.5', state: 'down', message: 'Aucune réponse' }];
+  for (const ordre of [[up, pb], [pb, up]]) { const [x] = fusionner(ordre, ['a', 'b']); assert.deepStrictEqual([x.state, x.message, x.ecarts], ['warning', 'Ventilateur en défaut', []]); }
+  const [y] = fusionner([pb, hs], ['zabbix', 'snmp']);
+  assert.deepStrictEqual([y.state, y.ecarts], ['warning', ['état : zabbix dit « warning », snmp dit « down »']]);
+});
+test('Noms d\'interface : le relais et l\'interface de NetCarto les ramènent à la même forme', () => {
+  const { nomInterface } = require('../lib/contrat');
+  for (const [nom, attendu] of require('./noms-interfaces.json').cas) assert.strictEqual(nomInterface(nom), attendu, nom);
 });
 test('Relais : API en lecture seule, jeton et CORS', async () => {
   const r = demarrer({ port: 18787, webRoot: require('path').join(__dirname, '..', '..'), token: 'secret-test', corsOrigins: ['http://netcarto.test'], sources: [{ type: 'simulation', devices: [{ ip: '10.10.99.18', hostname: 'SW-A1-ACC-01', ports: ['Gi1/0/1', 'Gi1/0/2'] }] }] }, () => {});

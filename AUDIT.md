@@ -184,6 +184,6 @@ Ces points ont été relevés pendant l'audit et ne sont pas faits. Ils demanden
 
 ## 8. Où trouver les preuves
 
-- Scénarios automatiques : `tests/netcarto.test.js` (82 scénarios, dont les blocs « Interventions d'urgence » et « Audit par profils ») et `serveur/tests/` (78 scénarios).
+- Scénarios automatiques : `tests/netcarto.test.js` (83 scénarios, dont les blocs « Interventions d'urgence » et « Audit par profils ») et `serveur/tests/` (79 scénarios).
 - Essais d'installation réels : `installation/tests/` (image Docker, Debian 12 avec systemd).
 - Décisions et limites connues : `SUIVI.md`, sections 3.14 à 3.26.

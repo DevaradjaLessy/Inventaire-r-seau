@@ -93,6 +93,8 @@ function computeAlerts() {
     // Interventions dont la date prévue est passée
     const jour = today();
     for (const i of d.interventions) if (i.status !== 'done' && i.date && i.date < jour) out.push({ level: 'warn', kind: 'intervention', icon: 'history', text: `Intervention en retard : ${i.title}`, sub: `Prévue le ${i.date.split('-').reverse().join('/')}${i.assignee ? ` · ${i.assignee}` : ''}`, act: 'interv-voir', ref: i.id });
+    // Supervision : problème déclaré sur un équipement qui répond (un problème Zabbix en cours, un capteur PRTG en alerte)
+    for (const [id, m] of Live.dev) { const x = byId(id); if (x && m.state === 'warning' && x.status !== 'fault') out.push({ level: 'serious', kind: 'live', icon: deviceIcon(x), text: `Problème signalé par la supervision : ${x.hostname}`, sub: m.message || locLabel(x.id), ref: x.id }); }
     // Supervision : une source en panne n'apporte plus rien ; la supervision entière arrêtée, c'est l'état saisi qui s'affiche
     for (const s of Live.sources) if (s.ok === false) out.push({ level: 'serious', kind: 'source', icon: 'gauge', text: `Source de supervision en erreur : ${s.nom}`, sub: s.erreur || 'Aucune réponse', act: 'sources', ref: '' });
     if (Live.state === 'error') out.push({ level: 'serious', kind: 'source', icon: 'gauge', text: 'Supervision en erreur : les états affichés sont ceux saisis à la main', sub: Live.error, act: 'sources', ref: '' });

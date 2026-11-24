@@ -73,6 +73,10 @@ adresse = "https://netcarto.exemple.interne:8443"
 
 `adresse` est l'adresse par laquelle vos collègues ouvrent NetCarto : elle sert à écrire les liens des courriels. La liaison utilise STARTTLS sur le port 587 par défaut (`securite = "tls"` pour le port 465).
 
+Le certificat du serveur d'envoi est toujours vérifié. S'il vient de l'autorité interne de votre entreprise, indiquez le certificat de cette autorité : `autorite = "ac-interne.pem"` (fichier PEM, chemin relatif au fichier de réglages). Avec `securite = "aucune"`, NetCarto refuse de démarrer si un compte est réglé : son mot de passe circulerait en clair.
+
+L'envoi a été essayé contre un vrai Postfix, en STARTTLS et en TLS (`installation/tests/smtp-reel.test.js`).
+
 Le bouton à votre nom (en haut à droite) ouvre : *Changer mon mot de passe*, *Page d'administration*, *Se déconnecter*.
 
 - **Mots de passe** : 12 caractères au moins, jamais enregistrés en clair (empreinte scrypt salée).
@@ -128,7 +132,7 @@ node --disable-warning=ExperimentalWarning netcarto.js --config netcarto.toml
 | HTTPS | `https.actif`, `https.noms`, `https.certificat`, `https.cle` | | `--http` |
 | Sécurité | `securite.echecsMax`, `securite.verrouillageMinutes`, `securite.sessionHeures`, `securite.inactiviteMinutes`, `securite.tentativesParAdresse`, `securite.fenetreMinutes`, `securite.coutMotDePasse` | | |
 | Proxy inverse | `serveur.proxyDeConfiance` | | |
-| Courriel (facultatif) | `courriel.hote`, `courriel.port`, `courriel.securite`, `courriel.utilisateur`, `courriel.motDePasse`, `courriel.expediteur`, `courriel.adresse` | | |
+| Courriel (facultatif) | `courriel.hote`, `courriel.port`, `courriel.securite`, `courriel.utilisateur`, `courriel.motDePasse`, `courriel.expediteur`, `courriel.adresse`, `courriel.autorite` | | |
 | Sauvegardes | `sauvegardes.actif`, `sauvegardes.heure`, `sauvegardes.conserver`, `sauvegardes.dossier` | | |
 | Supervision | `supervision.intervalle`, `[[supervision.sources]]` | | |
 

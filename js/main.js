@@ -51,7 +51,7 @@ import './ui/synthese.js';
 import './ui/dossier.js';
 import './ui/planning.js';
 import { ouvrirSession } from './ui/compte.js';
-import { Live } from './services/mesures.js';
+import { Live, normIf } from './services/mesures.js';
 import { addRoom, deleteStructure, deleteVlan } from './services/structure.js';
 
 // Mode serveur si la page est servie par le serveur NetCarto (il y inscrit l'adresse de son API) ; sinon démonstration locale
@@ -72,4 +72,4 @@ showTab(UI.tab);
 if (api) { const securite = () => chargerSecurite().catch(() => { /* serveur injoignable : l'étiquette d'état le dit déjà */ }); securite(); setInterval(securite, 300000); }
 Live.load();
 Live.start();   // relevés de supervision, si une source est configurée
-window.NetCarto = { impactOf, planAdressage, ageDuParc, liaisons, Sync, addRoom, deleteStructure, deleteVlan, Live, Store, UI, Views, Views3D, Carto, trace, topology, connect, disconnect, installFromStock, removeDevice, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic
+window.NetCarto = { impactOf, planAdressage, ageDuParc, liaisons, normIf, Sync, addRoom, deleteStructure, deleteVlan, Live, Store, UI, Views, Views3D, Carto, trace, topology, connect, disconnect, installFromStock, removeDevice, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic

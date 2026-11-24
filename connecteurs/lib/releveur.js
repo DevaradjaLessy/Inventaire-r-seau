@@ -3,7 +3,7 @@
 'use strict';
 const { fusionner } = require('./contrat');
 
-const TYPES = { simulation: '../sources/simulation', prtg: '../sources/prtg', snmp: '../sources/snmp', json: '../sources/json' };
+const TYPES = { simulation: '../sources/simulation', prtg: '../sources/prtg', snmp: '../sources/snmp', zabbix: '../sources/zabbix', json: '../sources/json' };
 const DELAI_MS = 60000;   // au-delà, une source qui n'a pas répondu est comptée en erreur pour ce relevé
 
 /* configs : liste de sources ({ type, … }), dans l'ordre de priorité (la première fait foi en cas de désaccord) ;

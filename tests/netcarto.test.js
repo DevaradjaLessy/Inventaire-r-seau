@@ -1099,6 +1099,10 @@ test('Supervision : deux sources voient le même switch et une troisième est en
   { type: 'simulation', nom: 'prtg', devices: [{ ip: 'sw-a1-acc-01.exemple.interne', hostname: 'SW-A1-ACC-01', ports: [{ name: 'GigabitEthernet1/0/1', status: 'up', totalMbps: 12 }, { name: 'GigabitEthernet1/0/2', status: 'down' }] }, { ip: '192.0.2.77', hostname: 'INCONNU-PRTG' }] },
   { type: 'simulation', nom: 'snmp', devices: [{ ip: '10.10.99.18', hostname: '', ports: [{ name: 'Gi1/0/1', status: 'up', speedMbps: 1000, macs: ['02:00:00:00:00:99'], macCount: 1 }, { name: 'Gi1/0/2', status: 'up' }, { name: 'Gi1/0/3', status: 'error', errors: 250 }, { name: 'Vlan99', status: 'up' }, { name: 'Gi9/9/9', status: 'up' }] }] },
   { type: 'json', nom: 'zabbix', url: 'http://127.0.0.1:1/etat', timeoutMs: 800 }] });
+test('Noms d\'interface : l\'interface et le relais les ramènent à la même forme', async page => {
+  const cas = require('../connecteurs/tests/noms-interfaces.json').cas;
+  assert.deepStrictEqual(await page.evaluate(l => l.map(([nom]) => NetCarto.normIf(nom)), cas), cas.map(c => c[1]));
+});
 test('Juniper : les modèles EX du catalogue portent les noms d\'interface Junos, et un relevé s\'y rattache', async page => {
   const r = await page.evaluate(() => {
     const S = NetCarto.Store, cat = S.db.catalog.filter(c => c.brand === 'Juniper'), ex = cat.find(c => c.id === 'cat-ex2300-48p');
@@ -1113,6 +1117,12 @@ test('Juniper : les modèles EX du catalogue portent les noms d\'interface Junos
   assert.deepStrictEqual(r.modeles, ['EX2300-24P', 'EX2300-48P', 'EX3400-24P']);
   assert.deepStrictEqual([r.n, r.premier, r.dernierCuivre, r.montee], [52, 'ge-0/0/0', 'ge-0/0/47', 'xe-0/1/0']);
   assert.strictEqual(r.mesures, 2); assert.deepStrictEqual([r.diag.reconnus, r.diag.inconnus], [2, ['me0']], 'une unité logique n\'est pas comptée comme un port inconnu');
+  // Un problème déclaré par la supervision (Zabbix, PRTG) sur un équipement qui répond : il arrive dans les alertes, avec son libellé
+  await page.evaluate(() => { NetCarto.Live.apply({ version: 1, ts: Date.now(), devices: [{ ip: '10.10.99.201', state: 'warning', message: 'Ventilateur 2 en défaut', ports: [] }] }); NetCarto.Live.state = 'ok'; NetCarto.Live.emit(); });
+  await page.click('[data-tab=dash]');
+  const al = page.locator('.alist .al', { hasText: 'Problème signalé par la supervision : SW-JUN-01' });
+  assert.match(await al.innerText(), /Ventilateur 2 en défaut/);
+  await al.click(); await page.waitForSelector('#tab-carto.on #detail:has-text("SW-JUN-01")');
 });
 test('Serveur injoignable : la modification est annulée à l\'écran et l\'utilisateur est prévenu', async (page, ctx) => {
   const dev = await page.evaluate(() => { const x = NetCarto.Store.db.devices.find(d => d.hostname === 'SW-A1-ACC-01'); NetCarto.select(x.id); return x; });

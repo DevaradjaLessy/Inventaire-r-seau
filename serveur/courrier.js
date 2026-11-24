@@ -2,21 +2,34 @@
    Sécurité de la liaison : « starttls » (par défaut, port 587), « tls » (port 465) ou « aucune » (essais, réseau de confiance).
    Sans hôte réglé, l'envoi est inactif et NetCarto fonctionne sans courriel. */
 'use strict';
-const net = require('net'), tls = require('tls'), os = require('os');
+const net = require('net'), tls = require('tls'), os = require('os'), fs = require('fs');
 
 const b64 = s => Buffer.from(String(s), 'utf8').toString('base64');
-const enTete = s => (/^[\x20-\x7e]*$/.test(s) ? s : `=?UTF-8?B?${b64(s)}?=`);
+/* Valeur d'un en-tête. Sans accent, elle part telle quelle. Sinon elle est encodée (RFC 2047) en mots de 75 caractères au plus,
+   un par ligne (assez courts pour que la ligne « Subject: … » reste sous 78 caractères), coupés entre deux caractères et jamais au milieu d'un seul. Un retour à la ligne venu de la valeur est retiré. */
+function enTete(valeur) {
+  const s = String(valeur).replace(/[\r\n]+/g, ' ');
+  if (/^[\x20-\x7e]*$/.test(s)) return s;
+  const mots = []; let morceau = '';
+  for (const c of s) { if (Buffer.byteLength(morceau + c, 'utf8') > 39) { mots.push(morceau); morceau = ''; } morceau += c; }
+  if (morceau) mots.push(morceau);
+  return mots.map(m => `=?UTF-8?B?${b64(m)}?=`).join('\r\n ');
+}
 const adresseDe = s => (/<([^>]+)>/.exec(s) || [null, s])[1].trim();
 
 function creerCourrier(cfg = {}, journal = () => {}) {
   const actif = !!cfg.hote;
+  /* Liaison chiffrée : le certificat du serveur d'envoi est toujours vérifié, contre les autorités du système ou contre
+     l'autorité interne indiquée (courriel.autorite). Il n'existe pas de réglage pour s'en passer. */
+  const chiffrer = socket => tls.connect({ socket, servername: cfg.hote, minVersion: 'TLSv1.2', ...(cfg.autorite ? { ca: fs.readFileSync(cfg.autorite) } : {}) });
+  const certificat = e => (/certificate|self.signed|CERT_|altnames/i.test(`${e.code} ${e.message}`) ? new Error(`certificat du serveur d'envoi refusé (${e.message}) : indiquez son autorité dans courriel.autorite`) : e);
   /* Envoie un message texte. Rejette si le serveur d'envoi refuse ou ne répond pas. */
   function envoyer({ a, sujet, texte }) {
     if (!actif) return Promise.reject(new Error('Aucun serveur d\'envoi n\'est réglé.'));
     return new Promise((ok, ko) => {
       let sock = net.connect({ host: cfg.hote, port: cfg.port }), tampon = '', attente = null, fini = false;
-      if (cfg.securite === 'tls') sock = tls.connect({ socket: sock, servername: cfg.hote });
-      const finir = e => { if (fini) return; fini = true; clearTimeout(minuterie); sock.destroy(); e ? ko(e) : ok(); };
+      if (cfg.securite === 'tls') sock = chiffrer(sock);
+      const finir = e => { if (fini) return; fini = true; clearTimeout(minuterie); sock.destroy(); e ? ko(certificat(e)) : ok(); };
       const minuterie = setTimeout(() => finir(new Error('le serveur d\'envoi ne répond pas')), 15000);
       const brancher = s => { s.setEncoding('utf8'); s.on('data', d => { tampon += d; lire(); }); s.on('error', finir); s.on('close', () => finir(new Error('liaison coupée par le serveur d\'envoi'))); };
       /* Une réponse SMTP peut tenir sur plusieurs lignes : « 250-… » puis « 250 … » */
@@ -39,7 +52,7 @@ function creerCourrier(cfg = {}, journal = () => {}) {
           if (!/STARTTLS/i.test(capacites)) throw new Error('le serveur d\'envoi ne propose pas STARTTLS (réglage courriel.securite)');
           await dire('STARTTLS', [220]);
           sock.removeAllListeners('data'); sock.removeAllListeners('close'); sock.removeAllListeners('error');
-          sock = tls.connect({ socket: sock, servername: cfg.hote }); tampon = '';
+          sock = chiffrer(sock); tampon = '';
           await new Promise((oui, non) => { sock.once('secureConnect', oui); sock.once('error', non); });
           brancher(sock);
           capacites = await dire(`EHLO ${moi}`, [250]);
@@ -58,4 +71,4 @@ function creerCourrier(cfg = {}, journal = () => {}) {
   }
   return { actif, adresse: cfg.adresse || '', envoyer };
 }
-module.exports = { creerCourrier };
+module.exports = { creerCourrier, enTete };

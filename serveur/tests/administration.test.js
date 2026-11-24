@@ -84,7 +84,7 @@ test('Mot de passe perdu, sans serveur d\'envoi : l\'administrateur remet un lie
 
 test('Mot de passe perdu, avec serveur d\'envoi : le lien part par courriel, sans rien révéler sur les comptes', async t => {
   const smtp = await fauxSmtp(t);
-  const s = await serveurDeTest(t, { config: { courriel: { hote: '127.0.0.1', port: smtp.port, securite: 'aucune', utilisateur: 'netcarto', motDePasse: 'secret-fictif', expediteur: 'NetCarto <netcarto@exemple.test>', adresse: 'https://netcarto.exemple.test:8443' } } });
+  const s = await serveurDeTest(t, { config: { courriel: { hote: '127.0.0.1', port: smtp.port, securite: 'aucune', expediteur: 'NetCarto <netcarto@exemple.test>', adresse: 'https://netcarto.exemple.test:8443' } } });
   assert.strictEqual((await requete('GET', s.api + '/session')).json.recuperationParCourriel, true);
   const tech = (await requete('GET', s.api + '/utilisateurs', undefined, s.admin)).json.find(u => u.identifiant === 'tech');
   await requete('PUT', s.api + '/utilisateurs/' + tech.id, { courriel: 'tech@exemple.test' }, s.admin);
@@ -94,7 +94,7 @@ test('Mot de passe perdu, avec serveur d\'envoi : le lien part par courriel, san
   assert.deepStrictEqual(r.json, { ok: true });
   assert.ok(await attendre(() => smtp.recus.length === 1), 'un message attendu');
   const m = smtp.recus[0];
-  assert.match(m.a[0], /tech@exemple\.test/); assert.match(m.de, /netcarto@exemple\.test/); assert.match(m.auth, /netcarto\0secret-fictif$/);
+  assert.match(m.a[0], /tech@exemple\.test/); assert.match(m.de, /netcarto@exemple\.test/); assert.strictEqual(m.auth, '', 'sans chiffrement, aucun mot de passe ne part (l\'authentification est essayée contre un vrai serveur chiffré)');
   assert.match(m.texte, /^Subject: =\?UTF-8\?B\?/m); assert.match(m.texte, /^To: tech@exemple\.test/m);
   const corps = Buffer.from(m.texte.split('\r\n\r\n').slice(1).join('').replace(/\r\n/g, ''), 'base64').toString('utf8');
   const lien = /https:\/\/netcarto\.exemple\.test:8443\/\?reinitialisation=([A-Za-z0-9_-]{40,})/.exec(corps);

@@ -50,7 +50,7 @@ const SOURCES = {
   none: { label: 'Aucune (saisie manuelle uniquement)' },
   simulation: { label: 'Simulation (démonstration, sans équipement)', fetch: async () => simulate() },
   relais: {
-    label: 'Relais NetCarto (PRTG, SNMP…)', needsUrl: true,
+    label: 'Relais NetCarto (PRTG, SNMP, Zabbix…)', needsUrl: true,
     async fetch(cfg) {
       const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 10000);
       try {
@@ -114,7 +114,7 @@ const Live = {
       // sans adresse), ils arrivent séparés : ils sont réunis ici par la même règle — le premier fait foi, le suivant complète.
       const qui = (m.sources || []).join(' + ') || 'une source', etat = DEV_STATE[m.state] ? m.state : 'unknown', vu = this.dev.get(d.id);
       if (!vu) this.dev.set(d.id, { state: etat, message: m.message || '', ts, qui });
-      else if (etat !== 'unknown') { if (vu.state === 'unknown') Object.assign(vu, { state: etat, message: m.message || '', qui }); else if (vu.state !== etat) this.ecarts.push(`${d.hostname} — état : ${vu.qui} dit « ${vu.state} », ${qui} dit « ${etat} »`); }
+      else if (etat !== 'unknown') { if (vu.state === 'unknown') Object.assign(vu, { state: etat, message: m.message || '', qui }); else if (vu.state !== etat) { const repond = ['up', 'warning']; if (repond.includes(vu.state) && repond.includes(etat)) { if (etat === 'warning') Object.assign(vu, { state: etat, message: m.message || '', qui }); } else this.ecarts.push(`${d.hostname} — état : ${vu.qui} dit « ${vu.state} », ${qui} dit « ${etat} »`); } }
       const idx = new Map(portsOf(d.id).map(p => [normIf(p.name), p]));
       for (const mp of m.ports || []) {
         const p = idx.get(normIf(mp.name || ''));
@@ -123,6 +123,8 @@ const Live = {
         const mesure = { status: ['up', 'down', 'disabled', 'error'].includes(mp.status) ? mp.status : null, speedMbps: mp.speedMbps ?? null, inMbps: mp.inMbps ?? null, outMbps: mp.outMbps ?? null, totalMbps: mp.totalMbps ?? null, poeW: mp.poeW ?? null, vlan: mp.vlan ?? null, macs: mp.macs || [], errors: mp.errors ?? null, macCount: mp.macCount ?? null, ts, nom: String(mp.name), qui };
         const deja = this.port.get(p.id);
         if (!deja) { this.port.set(p.id, mesure); continue; }
+        const eteints = ['down', 'disabled'];
+        if (deja.status && mesure.status && eteints.includes(deja.status) && eteints.includes(mesure.status)) deja.status = mesure.status = 'disabled';
         if (deja.status && mesure.status && deja.status !== mesure.status) this.ecarts.push(`${d.hostname} — ${deja.nom} : ${deja.qui} dit « ${deja.status} », ${qui} dit « ${mesure.status} »`);
         for (const k of ['status', 'speedMbps', 'inMbps', 'outMbps', 'totalMbps', 'poeW', 'vlan', 'errors', 'macCount']) if (deja[k] === null || deja[k] === undefined) deja[k] = mesure[k];
         if (mesure.macs.length) deja.macs = [...new Set([...deja.macs, ...mesure.macs])];

@@ -745,6 +745,38 @@ Demande : pouvoir noter qu'une intervention est « à venir » (résoudre une al
 - **Choix :** la personne chargée est un texte libre, proposé parmi les noms déjà saisis et prérempli avec le compte courant. Ce n'est pas un lien vers un compte : on peut désigner une équipe ou un prestataire. Aucune notification n'est envoyée.
 - **Non fait :** rappel par courriel, calendrier, récurrence, pièce jointe, marqueur sur le plan.
 
+### 3.36 Essais contre de vrais logiciels (24 novembre 2026)
+
+Jusque-là, la supervision, l'envoi de courriels et l'installation sur Ubuntu n'avaient tourné que contre des simulateurs écrits pour les tests. Tout ce qui peut s'installer dans une machine Linux a été installé et essayé pour de bon. Les logiciels tiers ont été installés par un sous-agent ; les essais et les corrections ont été faits dans la session principale.
+
+| Logiciel réel | Version | Ce qui a été essayé | Résultat |
+|---|---|---|---|
+| Agent SNMP net-snmp (`snmpd`) | 5.9 (Ubuntu 24.04) | Source `snmp` en v2c et en v3 chiffré : état, ports, débit, refus d'accès | Passe. Le débit calculé colle au compteur du système (8,74 contre 8,83 Mb/s) |
+| MikroTik RouterOS (CHR) | 7.24.6 | Source `snmp` contre un vrai système de routeur-switch, dont l'agent n'est pas net-snmp : ports physiques, port désactivé, débit négocié, adresses MAC | Passe après deux corrections |
+| Zabbix | 7.0.32 (PostgreSQL 16) | Nouvelle source `zabbix`, jeton en lecture seule ; chaîne Zabbix + SNMP sur le même équipement ; affichage dans le navigateur | Passe après deux corrections |
+| Postfix, avec Dovecot pour l'authentification | 3.8.6 / 2.3.21 | Envoi de courriels en STARTTLS et en TLS, compte, certificat d'une autorité privée, refus | Passe après trois corrections |
+| Ubuntu | 22.04 et 24.04, avec systemd | `installer.sh`, service, mise à jour, retour arrière, désinstallation | Passe, sans correction |
+
+**Ce que ces essais ont fait corriger :**
+- **SNMP v2c :** une communauté refusée ne reçoit aucune réponse et s'affichait comme une panne. Le message cite maintenant les deux causes.
+- **SNMP v3 :** le libellé d'une clé refusée change d'un agent à l'autre (net-snmp, RouterOS) ; les deux sont reconnus.
+- **Adresses MAC :** une adresse apprise dans plusieurs VLAN était comptée plusieurs fois sur le même port (constaté sur RouterOS).
+- **Fusion :** « joignable » (SNMP) et « dégradé » (Zabbix) étaient signalés comme un désaccord, de même que « inactif » et « désactivé ». Ce sont des informations qui se complètent : la plus précise est gardée.
+- **Alertes :** un problème déclaré par la supervision sur un équipement qui répond n'apparaissait nulle part. Il lève l'alerte « Problème signalé par la supervision ».
+- **Courriel, autorité privée :** le certificat du serveur d'envoi n'était vérifié que contre les autorités du système ; une entreprise avec sa propre autorité ne pouvait pas envoyer. Réglage `courriel.autorite` (fichier PEM). Il n'existe pas de réglage pour se passer de la vérification.
+- **Courriel, mot de passe en clair :** `securite = "aucune"` avec un compte envoyait le mot de passe sans chiffrement. La configuration est maintenant refusée au démarrage.
+- **Courriel, sujet long :** un sujet accentué était encodé en une seule ligne trop longue pour la norme ; il est replié en morceaux courts.
+
+**Mesure de charge.** Avec 10 000 équipements et 28 000 ports, une modification prend 0,23 s et l'affichage de l'inventaire 0,18 s (temps de calcul et de rendu dans la page, Chromium). Un scénario « Grande base » existait déjà pour 3 000 équipements.
+
+**Comment rejouer ces essais.** Les fichiers `installation/tests/snmp-reel.test.js`, `zabbix-reel.test.js` et `smtp-reel.test.js` sont ignorés tant qu'aucun serveur d'essai n'est indiqué ; chacun dit en tête les variables à donner. L'essai contre `snmpd` se lance seul dès que le paquet est installé. `NETCARTO_TEST_IMAGE` choisit le système de l'essai d'installation.
+
+**Ce qui n'a pas pu être essayé ici, et pourquoi :**
+- **PRTG :** logiciel Windows ; cette machine est sous Linux. La source `prtg` reste validée contre un simulateur.
+- **Un switch Juniper, Cisco ou Aruba :** pas d'image utilisable (compte constructeur exigé, ou dépôt d'images refusé par le réseau de la session). RouterOS est le seul vrai système réseau essayé.
+- **Un vrai téléphone :** aucun appareil.
+- **Un trafic réel sur les ports du switch virtuel :** ses ports ne sont reliés à rien, les compteurs restent bas.
+
 ### 3.11 Pistes pour la suite
 - **Premier lancement :** la page charge encore le jeu de démonstration par défaut. Pour une mise en service réelle, proposer le choix (démonstration ou base vide) dès la première ouverture.
 - Activer GitHub Pages (réglages du dépôt), après fusion de la branche de travail dans la branche par défaut.
@@ -801,9 +833,9 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 |---|---|---|
 | **Ranger les branches du dépôt.** La branche `main` existe (créée le 2026-11-19, identique aux deux autres). Reste, dans GitHub : la choisir comme branche par défaut (*Settings → General → Default branch*) et, si GitHub Pages est activé, comme source (*Settings → Pages*) ; puis supprimer `claude/serene-johnson-wll23d` et `claude/upbeat-ptolemy-lq3vu6` (page *Branches* du dépôt). | Utilisateur (réglages GitHub, hors de portée de Claude) | 🔄 `main` créée ; réglages à faire |
 | Essayer NetCarto sur un vrai téléphone (Android, et Safari sur iPhone) | Utilisateur | ⏳ À faire |
-| Essayer `installer.sh` sur Ubuntu, et l'installation en ligne sur une vraie machine | Utilisateur | ⏳ À faire |
-| Essayer les connecteurs avec un vrai PRTG ou de vrais switchs (SNMP) | Utilisateur | ⏳ À faire |
-| Essayer l'envoi de courriels avec votre vrai serveur de messagerie (réglage `[courriel]`) | Utilisateur | ⏳ À faire |
+| Essayer `installer.sh` sur Ubuntu, et l'installation en ligne sur une vraie machine | Utilisateur | ✅ Ubuntu 22.04 et 24.04 essayés le 2026-11-24 (voir 3.36). Reste l'installation en ligne sur une vraie machine |
+| Essayer les connecteurs avec un vrai PRTG ou de vrais switchs (SNMP) | Utilisateur | 🔄 SNMP essayé contre net-snmp et RouterOS, Zabbix contre un vrai serveur (voir 3.36). Restent PRTG et vos propres switchs |
+| Essayer l'envoi de courriels avec votre vrai serveur de messagerie (réglage `[courriel]`) | Utilisateur | 🔄 Essayé contre un vrai Postfix en STARTTLS et en TLS (voir 3.36). Reste votre propre serveur |
 | Avant le déploiement en entreprise : appliquer les cinq mesures de `SECURITE.md`, section 5 (certificat, sauvegardes hors machine, deux administrateurs, filtrage réseau, surveillance du journal) | Utilisateur | ⏳ À faire |
 
 **Réglage de l'effort :**
@@ -861,6 +893,10 @@ Légende : ⏳ À faire · 🔄 En cours · ✅ Fait
 | 2026-11-23 | « Firmware par modèle : une source d'actualité qui prévient quand une mise à jour est disponible ? » | ✅ Lot 27 (voir 3.34) : la version du modèle sert de référence, les équipements en retard sont comptés. Pas de flux automatique : il demande une sortie vers Internet depuis le serveur, à décider. |
 | 2026-11-23 | « Cherche sur claudeskills.fr des skills utiles au projet, de la gestion de projet à la technique, et applique-les » | 🕓 Annuaire lu (environnement `inventaire-r-seau` créé pour autoriser le site). Les skills sont des dépôts GitHub de tiers : aucun installé sans relecture de leur contenu ni accord. Sélection proposée à l'utilisateur. |
 | 2026-11-23 | « Je ne veux pas que tu impactes le réseau de mon entreprise, continue dans ton cloud » | ✅ Décision notée : le travail se fait dans la session cloud, rien ne passe par le réseau de l'entreprise ; pas de flux de firmware automatique (voir 3.34) ; aucun skill tiers installé. |
+| 2026-11-24 | « Il y a du PHP là-dedans ? » | ✅ Répondu : aucun. Serveur Node.js, base SQLite intégrée, deux bibliothèques. |
+| 2026-11-24 | « La structure est bien faite ? Pas de faiblesse ? » | ✅ Répondu : neuf faiblesses listées, dont l'absence d'essai réel. |
+| 2026-11-24 | « Dans ton environnement, corrige ce que tu peux : installe un PRTG, un Zabbix, et teste. Les installations par un sous-agent Opus en effort moyen, les essais et correctifs par l'agent principal » | ✅ Voir 3.36 : SNMP réel (net-snmp, RouterOS), Zabbix 7.0, Postfix, Ubuntu 22.04 et 24.04 ; huit corrections ; source `zabbix` ajoutée. PRTG impossible (Windows). |
+| 2026-11-24 | « Range le dépôt GitHub : un dossier de suivi dans `suivie_projet_general/Netcarto` avec tout le contexte, le dépôt NetCarto ne garde que la solution, une seule branche si possible » | ⏳ À faire après les essais réels. |
 | 2026-11-18 | Au déploiement réel, la solution ne contiendra pas tous ces équipements de démonstration ? | ✅ Répondu : non, ce sont des données de démonstration. À prévoir avant la mise en service : un démarrage sur base vide et le remplacement du catalogue (voir 3.11) |
 
 ---

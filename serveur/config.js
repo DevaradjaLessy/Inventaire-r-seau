@@ -11,7 +11,7 @@ const DEFAUTS = {
   https: { actif: true, certificat: '', cle: '', noms: [] },   // sans fichiers fournis, un certificat auto-signé est créé dans le dossier de données
   securite: { echecsMax: 5, verrouillageMinutes: 15, sessionHeures: 12, inactiviteMinutes: 120, tentativesParAdresse: 20, fenetreMinutes: 10, coutMotDePasse: 17 },
   donnees: { dossier: 'donnees-locales' },
-  courriel: { hote: '', port: 587, securite: 'starttls', utilisateur: '', motDePasse: '', expediteur: '', adresse: '' },   // sans hôte : aucun courriel n'est envoyé
+  courriel: { hote: '', port: 587, securite: 'starttls', utilisateur: '', motDePasse: '', expediteur: '', adresse: '', autorite: '' },   // sans hôte : aucun courriel n'est envoyé
   sauvegardes: { actif: true, heure: '02:30', conserver: 14, dossier: '' },   // dossier vide : « sauvegardes » dans le dossier de données
   web: { dossier: '..' },
   supervision: { intervalle: 30, sources: [] },
@@ -34,6 +34,11 @@ function controlerCourriel(c) {
   if (!Number.isInteger(c.port) || c.port < 1 || c.port > 65535) throw new Error('Réglage « courriel.port » invalide.');
   if (!['starttls', 'tls', 'aucune'].includes(c.securite)) throw new Error('Réglage « courriel.securite » invalide : "starttls", "tls" ou "aucune" attendu.');
   if (!/^[^\s@<>]+@[^\s@<>]+$|<[^\s@<>]+@[^\s@<>]+>$/.test(c.expediteur || '')) throw new Error('Réglage « courriel.expediteur » obligatoire : adresse d\'expédition, par exemple "NetCarto <netcarto@exemple.interne>".');
+  // Un compte sur une liaison sans chiffrement enverrait son mot de passe en clair sur le réseau
+  if (c.securite === 'aucune' && c.utilisateur) throw new Error('Réglage « courriel.securite » : avec "aucune", le mot de passe du compte d\'envoi circulerait en clair. Choisissez "starttls" ou "tls", ou retirez « utilisateur » si votre relais interne n\'en demande pas.');
+  // Autorité de certification interne : fichier PEM du certificat qui a signé celui du serveur d'envoi
+  if (typeof c.autorite !== 'string') throw new Error('Réglage « courriel.autorite » invalide : chemin d\'un fichier attendu.');
+  if (c.autorite && !fs.existsSync(c.autorite)) throw new Error(`Réglage « courriel.autorite » : fichier introuvable (${c.autorite}).`);
   if (!/^https?:\/\/[^\s/]+/.test(c.adresse || '')) throw new Error('Réglage « courriel.adresse » obligatoire : adresse par laquelle vos collègues ouvrent NetCarto, par exemple "https://netcarto.exemple.interne:8443". Elle sert à écrire les liens des courriels.');
 }
 /* options : { env, args } (par défaut : ceux du processus) */
@@ -51,6 +56,7 @@ function chargerConfig({ env = process.env, args = process.argv.slice(2) } = {})
   cfg.web.dossier = path.resolve(base, cfg.web.dossier);
   if (cfg.sauvegardes.dossier) cfg.sauvegardes.dossier = path.resolve(base, cfg.sauvegardes.dossier);
   for (const k of ['certificat', 'cle']) if (cfg.https[k]) cfg.https[k] = path.resolve(base, cfg.https[k]);
+  if (cfg.courriel.autorite) cfg.courriel.autorite = path.resolve(base, cfg.courriel.autorite);
   // Variables d'environnement et arguments : chemins relatifs au dossier courant
   const hote = arg(args, 'hote') || env.NETCARTO_HOTE, port = arg(args, 'port') || env.NETCARTO_PORT, donnees = arg(args, 'donnees') || env.NETCARTO_DONNEES;
   if (hote) cfg.serveur.hote = hote;

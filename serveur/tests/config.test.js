@@ -19,6 +19,15 @@ test('fichier TOML, chemins relatifs au fichier, puis variables d\'environnement
   const c2 = chargerConfig({ env: { NETCARTO_CONFIG: f, NETCARTO_PORT: '9100', NETCARTO_DONNEES: path.join(dossier, 'autre') }, args: ['--port', '9200'] });
   assert.deepStrictEqual([c2.serveur.port, c2.donnees.dossier], [9200, path.join(dossier, 'autre')]);
 });
+test('courriel : un sujet accentué est encodé en morceaux qui tiennent sur une ligne, sans couper un caractère', () => {
+  const { enTete } = require('../courrier');
+  assert.strictEqual(enTete('NetCarto : lien de connexion'), 'NetCarto : lien de connexion', 'un sujet sans accent part tel quel');
+  const sujet = 'Réinitialisation du mot de passe demandée pour l\'équipe réseau du bâtiment « Administration » — NetCarto', code = enTete(sujet);
+  const lignes = code.split('\r\n ');
+  assert.ok(lignes.length > 1 && lignes.every(l => l.length <= 75 && /^=\?UTF-8\?B\?[A-Za-z0-9+/=]+\?=$/.test(l)), code);
+  assert.strictEqual(lignes.map(l => Buffer.from(l.slice(10, -2), 'base64').toString('utf8')).join(''), sujet, 'chaque morceau se décode seul, et le tout redonne le sujet');
+  assert.ok(!/[\r\n]/.test(enTete('Sujet\r\nBcc: intrus@exemple.test')), 'aucun retour à la ligne venu du sujet');
+});
 test('erreurs de configuration expliquées', t => {
   const dossier = dossierTemporaire(t), f = path.join(dossier, 'netcarto.toml');
   assert.throws(() => chargerConfig({ env: {}, args: ['--config', path.join(dossier, 'absent.toml')] }), /introuvable/);
@@ -26,4 +35,14 @@ test('erreurs de configuration expliquées', t => {
   assert.throws(() => chargerConfig({ env: {}, args: ['--config', f] }), /port/);
   fs.writeFileSync(f, '[serveur\nport = 1');
   assert.throws(() => chargerConfig({ env: {}, args: ['--config', f] }), /illisible|TOML/i);
+  // Courriel : jamais de mot de passe sur une liaison en clair ; l'autorité de confiance, si elle est donnée, doit exister
+  const courriel = lignes => `[courriel]\nhote = "smtp.exemple.interne"\nexpediteur = "netcarto@exemple.interne"\nadresse = "https://netcarto.exemple.interne:8443"\n${lignes}\n`;
+  fs.writeFileSync(f, courriel('securite = "aucune"\nutilisateur = "netcarto"\nmotDePasse = "env:SMTP_MDP"'));
+  assert.throws(() => chargerConfig({ env: { SMTP_MDP: 'x' }, args: ['--config', f] }), /securite.*"aucune".*mot de passe.*clair/s);
+  fs.writeFileSync(f, courriel('securite = "aucune"'));
+  assert.strictEqual(chargerConfig({ env: {}, args: ['--config', f] }).courriel.securite, 'aucune', 'sans compte, une liaison en clair reste permise (relais interne)');
+  fs.writeFileSync(f, courriel('autorite = "ac-interne.pem"'));
+  assert.throws(() => chargerConfig({ env: {}, args: ['--config', f] }), /courriel\.autorite.*introuvable/);
+  fs.writeFileSync(path.join(dossier, 'ac-interne.pem'), 'x');
+  assert.strictEqual(chargerConfig({ env: {}, args: ['--config', f] }).courriel.autorite, path.join(dossier, 'ac-interne.pem'), 'chemin relatif au fichier de réglages');
 });

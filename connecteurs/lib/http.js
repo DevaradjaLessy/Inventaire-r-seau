@@ -3,10 +3,13 @@
 const http = require('http'), https = require('https');
 
 /* options : { insecureTls (certificat auto-signé accepté), timeoutMs, headers } */
-function getJson(url, options = {}) {
+const getJson = (url, options = {}) => requete('GET', url, null, options);
+/* Envoie un objet en JSON (POST) et renvoie la réponse JSON */
+const postJson = (url, corps, options = {}) => requete('POST', url, JSON.stringify(corps), options);
+function requete(methode, url, corps, options) {
   return new Promise((resolve, reject) => {
     const u = new URL(url), lib = u.protocol === 'https:' ? https : http;
-    const req = lib.get(u, { headers: { Accept: 'application/json', ...(options.headers || {}) }, rejectUnauthorized: !options.insecureTls, timeout: options.timeoutMs || 15000 }, res => {
+    const req = lib.request(u, { method: methode, headers: { Accept: 'application/json', ...(corps === null ? {} : { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(corps) }), ...(options.headers || {}) }, rejectUnauthorized: !options.insecureTls, timeout: options.timeoutMs || 15000 }, res => {
       let body = '';
       res.setEncoding('utf8');
       res.on('data', c => { body += c; });
@@ -18,6 +21,7 @@ function getJson(url, options = {}) {
     });
     req.on('timeout', () => req.destroy(new Error(`${u.host} ne répond pas (délai dépassé).`)));
     req.on('error', e => reject(new Error(e.code === 'ECONNREFUSED' ? `${u.host} refuse la connexion.` : e.message)));
+    req.end(corps === null ? undefined : corps);
   });
 }
-module.exports = { getJson };
+module.exports = { getJson, postJson };

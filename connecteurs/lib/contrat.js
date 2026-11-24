@@ -42,7 +42,8 @@ const nomCourt = h => String(h || '').trim().toLowerCase().split('.')[0];
      Deux adresses différentes font toujours deux équipements.
    - La première source qui renseigne une valeur fait foi ; les suivantes complètent ce qui manque, sans rien remplacer.
      « unknown » et une valeur absente ne comptent pas comme une réponse.
-   - Un désaccord entre deux sources (état de l'équipement, état d'un port) est noté dans « ecarts », pour être vu. */
+   - Un désaccord entre deux sources (état de l'équipement, état d'un port) est noté dans « ecarts », pour être vu.
+     Ne sont pas des désaccords : « joignable » et « dégradé » (le problème est gardé), « inactif » et « désactivé » (le plus précis est gardé). */
 function fusionner(listes, noms = []) {
   const sortie = [], parIp = new Map(), parNom = new Map();
   listes.forEach((liste, rang) => {
@@ -66,7 +67,12 @@ function fusionner(listes, noms = []) {
         if (!deja.hostname) deja.hostname = d.hostname;
         if (d.state !== 'unknown') {
           if (!deja._etat) { deja._etat = { source, state: d.state }; deja.state = d.state; deja.message = d.message; }
-          else if (deja._etat.state !== d.state) deja.ecarts.push(`état : ${deja._etat.source} dit « ${deja._etat.state} », ${source} dit « ${d.state} »`);
+          else if (deja._etat.state !== d.state) {
+            // « Joignable » et « dégradé » vont ensemble : l'équipement répond, et une source lui connaît un problème. Le problème est gardé.
+            const repond = ['up', 'warning'];
+            if (repond.includes(deja._etat.state) && repond.includes(d.state)) { if (d.state === 'warning') { deja._etat = { source, state: 'warning' }; deja.state = 'warning'; deja.message = d.message; } }
+            else deja.ecarts.push(`état : ${deja._etat.source} dit « ${deja._etat.state} », ${source} dit « ${d.state} »`);
+          }
         }
         if (!deja.message && deja._etat?.source === source) deja.message = d.message;
       }
@@ -81,7 +87,12 @@ function fusionner(listes, noms = []) {
           if (k === 'macs') { if (p.macs.length) q.macs = [...new Set([...q.macs, ...p.macs])]; continue; }
           if (p[k] === null || p[k] === '') continue;
           if (q[k] === null || q[k] === '' || q[k] === undefined) { q[k] = p[k]; if (k === 'status') q._etat = source; }
-          else if (k === 'status' && q[k] !== p[k]) deja.ecarts.push(`${q.name} : ${q._etat} dit « ${q[k]} », ${source} dit « ${p[k]} »`);
+          else if (k === 'status' && q[k] !== p[k]) {
+            // « Inactif » et « désactivé » disent tous deux que le port ne passe rien : la valeur la plus précise est gardée, sans écart
+            const eteints = ['down', 'disabled'];
+            if (eteints.includes(q[k]) && eteints.includes(p[k])) { q[k] = 'disabled'; q._etat = q[k] === p[k] ? source : q._etat; }
+            else deja.ecarts.push(`${q.name} : ${q._etat} dit « ${q[k]} », ${source} dit « ${p[k]} »`);
+          }
         }
       }
     }

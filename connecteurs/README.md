@@ -14,7 +14,8 @@ Petit service à installer **sur votre réseau interne**. Il interroge vos outil
 |---|---|---|
 | `prtg` | État de chaque équipement ; état et trafic total des ports qui ont un capteur de trafic | Clé d'API PRTG d'un compte en lecture seule |
 | `snmp` | Par port physique : état, débit négocié, trafic entrant et sortant, erreurs de trame, adresses MAC apprises (MIB standard, toutes marques dont Juniper, Cisco, Aruba) | Communauté v2c ou utilisateur v3, en lecture seule |
-| `json` | Ce que publie votre outil, au format du contrat : sert à raccorder Zabbix, Centreon, LibreNMS, Nagios ou un script maison | Une adresse HTTP qui renvoie l'état au format décrit plus bas |
+| `zabbix` | État de chaque hôte surveillé, problème en cours le plus grave, état et trafic des ports (éléments `net.if.*` des modèles SNMP de Zabbix) | Zabbix 6.4 ou plus récent ; jeton d'API d'un utilisateur en lecture seule |
+| `json` | Ce que publie votre outil, au format du contrat : sert à raccorder Centreon, LibreNMS, Nagios ou un script maison | Une adresse HTTP qui renvoie l'état au format décrit plus bas |
 | `simulation` | Équipements fictifs décrits dans la configuration | Aucun : sert à tester la chaîne |
 
 ### Ce que chaque source remonte réellement
@@ -105,6 +106,8 @@ SNMP v3 : `"version": "3"`, `user`, `authProtocol` (`sha`), `authKey`, `privProt
 
 Le trafic est calculé entre deux relevés : il apparaît donc à partir du deuxième.
 
+Quand un équipement ne répond pas, le message dit quoi vérifier. En v2c, un agent ne répond rien à une mauvaise communauté : un refus ressemble à une panne, et le message cite les deux causes. En v3, un mot de passe refusé et un utilisateur inconnu sont distingués.
+
 Options : `seuilErreurs` (10 par défaut : nombre d'erreurs de trame entre deux relevés au-delà duquel le port passe en erreur), `macs` (`false` pour ne pas lire la table de commutation).
 
 Seules les interfaces Ethernet physiques sont gardées. Les unités logiques (`ge-0/0/0.0`), les bouclages, les agrégats et les interfaces internes sont écartés.
@@ -128,7 +131,20 @@ Limites connues :
 - **Pile de switchs (Virtual Chassis).** Les ports du deuxième membre s'appellent `ge-1/0/0`, `ge-1/0/1`… sur la même adresse. Dans NetCarto, chaque switch physique est un équipement dont les ports commencent par `ge-0/0/`. Les ports des autres membres apparaissent donc en « ports non reconnus » tant que le modèle n'a pas été copié avec le bon préfixe (onglet Matériel, « Nouveau modèle »).
 - **Délai.** L'état est relevé toutes les 30 secondes (réglable, 5 au minimum). Ce n'est pas instantané : les notifications SNMP (traps `linkDown`) ne sont pas écoutées.
 - **Autres voies de Junos**, non utilisées : NETCONF, l'API REST de Junos, la télémétrie en flux (gNMI) et l'API de Juniper Mist. Elles donneraient le VLAN et la puissance PoE par port, au prix d'une source propre à la marque.
-- **Non essayé sur un vrai switch.** La source est validée contre un agent SNMP simulé qui imite la table d'interfaces de Junos.
+- **Non essayé sur un vrai switch.** La source est validée de deux façons : contre un agent simulé qui imite la table d'interfaces de Junos, et contre un véritable agent net-snmp sous Linux (`installation/tests/snmp-reel.test.js`), en v2c et en v3 chiffré. Ce second essai prouve le protocole, l'authentification et le calcul des débits. Un troisième a été fait contre un vrai système de routeur-switch, MikroTik RouterOS 7, dont l'agent SNMP n'est pas net-snmp : ports physiques seulement, port désactivé reconnu, débit négocié, adresses MAC. Aucun n'a été fait sur un switch Juniper.
+
+### Source Zabbix
+
+```json
+{ "type": "zabbix", "url": "https://zabbix.exemple.interne", "apiToken": "env:ZABBIX_TOKEN", "groupes": ["Réseau"] }
+```
+
+- `groupes` (facultatif) : noms des groupes d'hôtes à relever. Sans cette clé, tous les hôtes que le jeton peut lire.
+- **État de l'hôte :** injoignable si aucune de ses interfaces ne répond à Zabbix ; dégradé s'il a un problème en cours, avec le libellé du plus grave ; joignable sinon. Un hôte dégradé lève dans NetCarto l'alerte « Problème signalé par la supervision ».
+- **Ports :** état et trafic, lus dans les éléments `net.if.*` que créent les modèles SNMP fournis avec Zabbix. Le nom du port vient de l'étiquette `interface` de l'élément.
+- **Ce que Zabbix ne dit pas :** la différence entre un port désactivé et un port inactif (ces modèles ne lisent que l'état opérationnel), ni les adresses MAC. Placez une source `snmp` à côté : les deux se complètent, sans doublon.
+- **Compte à créer dans Zabbix :** un utilisateur de rôle « User role », membre d'un groupe qui a la lecture sur les groupes d'hôtes voulus, puis un jeton d'API pour lui. Ce jeton peut lire la communauté SNMP des hôtes : gardez-le comme un secret (`env:`), et ne lui donnez que les groupes utiles.
+- **Essayée pour de bon** contre un Zabbix 7.0.32 qui surveille un agent SNMP réel : `installation/tests/zabbix-reel.test.js`, à lancer avec l'adresse et le jeton d'un Zabbix d'essai.
 
 ### Source JSON : raccorder un autre outil de supervision
 
@@ -155,7 +171,8 @@ Les sources sont interrogées en parallèle, puis fusionnées. Les règles sont 
 3. **L'ordre de la configuration donne la priorité.** La première source qui renseigne une valeur fait foi ; les suivantes complètent ce qui manque. Une source qui ne sait pas (`unknown`, valeur absente) ne masque jamais une source qui sait.
 4. **Un désaccord est gardé, pas caché.** Si PRTG dit un port inactif et le SNMP le dit actif, la valeur de la première source s'affiche, et l'écart figure dans la fenêtre *Sources de données*.
 5. **Une source en panne n'arrête pas les autres.** Elle est comptée en erreur après 60 secondes sans réponse, ses équipements ne sont plus fournis, et NetCarto lève une alerte « Source de supervision en erreur ».
-6. **Un relevé trop ancien n'est pas affiché.** Si le relais ne relève plus rien, NetCarto revient à l'état saisi et le dit, au lieu de montrer un état mesuré périmé.
+6. **Ce qui se complète n'est pas un désaccord.** « Joignable » (le SNMP répond) et « dégradé » (Zabbix connaît un problème) vont ensemble : le problème est gardé. « Inactif » et « désactivé » aussi : le plus précis est gardé.
+7. **Un relevé trop ancien n'est pas affiché.** Si le relais ne relève plus rien, NetCarto revient à l'état saisi et le dit, au lieu de montrer un état mesuré périmé.
 
 ## Correspondance avec NetCarto
 

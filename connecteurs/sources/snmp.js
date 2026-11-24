@@ -32,15 +32,19 @@ const MACS_MAX = 8;                           // au-delà, le port mène à un a
 /* Adresses MAC par interface. fdb : Map(indice → port du pont), l'indice se terminant par les six octets de l'adresse ;
    base : Map(port du pont → index d'interface). Renvoie Map(index d'interface → adresses), avec .total (nombre réel par interface). */
 function macsParPort(fdb, base) {
-  const out = new Map(); out.total = new Map();
+  const out = new Map(), toutes = new Map(); out.total = new Map();
   for (const [indice, portPont] of fdb) {
     const ifIndex = base.get(String(portPont));
     if (ifIndex === undefined || ifIndex === null) continue;
     const octets = String(indice).split('.').slice(-6);
     if (octets.length !== 6) continue;
-    const cle = String(ifIndex), liste = out.get(cle) || out.set(cle, []).get(cle);
-    out.total.set(cle, (out.total.get(cle) || 0) + 1);
-    if (liste.length < MACS_MAX) liste.push(octets.map(o => (+o).toString(16).padStart(2, '0')).join(':'));
+    // Une adresse apprise dans plusieurs VLAN revient plusieurs fois dans la table : elle n'est comptée qu'une fois par port
+    const cle = String(ifIndex), mac = octets.map(o => (+o).toString(16).padStart(2, '0')).join(':'), vues = toutes.get(cle) || toutes.set(cle, new Set()).get(cle);
+    if (vues.has(mac)) continue;
+    vues.add(mac);
+    const liste = out.get(cle) || out.set(cle, []).get(cle);
+    out.total.set(cle, vues.size);
+    if (liste.length < MACS_MAX) liste.push(mac);
   }
   return out;
 }
@@ -68,6 +72,18 @@ module.exports = function creer(cfg) {
     s.subtree(oid, 40, vbs => { for (const vb of vbs) if (!snmp.isVarbindError(vb)) out.set(vb.oid.slice(oid.length + 1), vb.value); }, err => (err ? reject(err) : resolve(out)));
   });
   const lire = (s, oid) => new Promise((resolve, reject) => s.get([oid], (err, vbs) => (err ? reject(err) : resolve(snmp.isVarbindError(vbs[0]) ? null : vbs[0].value))));
+  /* Pourquoi l'équipement ne répond pas, avec ce qu'il faut vérifier. En v2c, un agent ne répond rien à une mauvaise communauté :
+     un refus ressemble donc à une panne, et le message le dit. */
+  const v3 = String(cfg.version) === '3';
+  function raison(e) {
+    const m = String(e.message || e);
+    if (/timed out|timeout/i.test(m)) return `Aucune réponse SNMP : équipement éteint ou filtré, ou ${v3 ? 'utilisateur refusé' : 'communauté refusée'}`;
+    // Le libellé du refus change d'un agent à l'autre (net-snmp : « Wrong Digest » ; RouterOS : « Authentication digest … does not match »)
+    if (/wrong digest|digest .*does not match|authentication fail/i.test(m)) return 'SNMP v3 : mot de passe d\'authentification refusé';
+    if (/unknown user/i.test(m)) return 'SNMP v3 : utilisateur inconnu de l\'équipement';
+    if (/decrypt|unsupported security|not in time window/i.test(m)) return `SNMP v3 : échange refusé (${m.slice(0, 80)}) — vérifiez le chiffrement et l'horloge`;
+    return `SNMP : ${m}`.slice(0, 160);
+  }
   async function un(d) {
     const s = session(d);
     try {
@@ -100,7 +116,7 @@ module.exports = function creer(cfg) {
       precedent.set(cle, courant);
       return { ip: d.ip, hostname: d.hostname || String(sysName || ''), state: 'up', message: '', ports };
     } catch (e) {
-      return { ip: d.ip, hostname: d.hostname || '', state: 'down', message: /timed out|timeout/i.test(e.message) ? 'Aucune réponse SNMP' : `SNMP : ${e.message}`.slice(0, 160), ports: [] };
+      return { ip: d.ip, hostname: d.hostname || '', state: 'down', message: raison(e), ports: [] };
     } finally { try { s.close(); } catch { /* session déjà fermée */ } }
   }
   return { nom: cfg.nom || 'snmp', relever: () => Promise.all((cfg.devices || []).map(un)) };
