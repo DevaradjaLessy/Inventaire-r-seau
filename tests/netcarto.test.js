@@ -40,7 +40,7 @@ test('Jeu de démonstration cohérent', async page => {
   });
   assert.deepStrictEqual([r.doublons, r.orphelins, r.surcharge, r.chevauchements], [0, 0, 0, 0]);
   assert.strictEqual(r.reels, 0, 'les données doivent rester fictives (IP privées, MAC 02:…, séries DMO-)');
-  assert.deepStrictEqual(r.n, [2, 5, 6, 102, 121, 37]);
+  assert.deepStrictEqual(r.n, [2, 5, 6, 102, 121, 38]);
 });
 test('Onglets, sauvegarde locale, annulation, réinitialisation', async page => {
   await page.click('[data-tab=dash]'); assert.strictEqual(await page.$eval('.tab.on', e => e.id), 'tab-dash');
@@ -161,7 +161,7 @@ test('Tableau de bord et alertes cliquables', async page => {
 });
 test('Base vide : site, bâtiment, étage, pièces (formulaire et tracé), baie, VLAN', async page => {
   await page.click('[data-act=reset]'); await page.check('input[value=vide]'); await page.click('[data-act=modal-ok]');
-  assert.deepStrictEqual(await page.evaluate(() => { const d = NetCarto.Store.db; return [d.sites.length, d.devices.length, d.catalog.length, d.meta.demo, d.stock.every(s => s.available === 0)]; }), [0, 0, 37, false, true]);
+  assert.deepStrictEqual(await page.evaluate(() => { const d = NetCarto.Store.db; return [d.sites.length, d.devices.length, d.catalog.length, d.meta.demo, d.stock.every(s => s.available === 0)]; }), [0, 0, 38, false, true]);
   assert.ok(await page.isVisible('.empty-state')); assert.ok(await page.isHidden('.demo-tag'));
   // Les quatre onglets s'affichent sans erreur sur une base vide
   for (const t of ['inv', 'mat', 'dash', 'carto']) await page.click(`[data-tab=${t}]`);
@@ -437,13 +437,12 @@ test('Import CSV de prises murales, séparateur virgule, et modèle de fichier t
 });
 test('Doublons refusés dès la saisie : adresse IP, nom d\'hôte, adresse MAC, nom de baie', async page => {
   const [a, b] = await page.evaluate(() => { const d = NetCarto.Store.db.devices.filter(x => x.ip && x.mac); NetCarto.select(d[0].id); return [d[0], d[1]]; });
-  const essai = async (champ, valeur, motif) => { await page.click('#detail [data-act=dev-edit]'); await page.fill(`.modal [name=${champ}]`, valeur); await page.click('[data-act=modal-ok]'); await page.waitForSelector('.toast.err'); assert.match(await page.locator('.toast.err').last().innerText(), motif); await page.click('[data-act=modal-close]'); await page.evaluate(() => document.querySelectorAll('.toast').forEach(t => t.remove())); };
+  const essai = async (champ, valeur, motif) => { await page.click('#detail [data-act=dev-edit]'); await page.fill(`.modal [name=${champ}]`, valeur); await page.click('[data-act=modal-ok]'); assert.match(await (await page.waitForSelector('.toast.err')).innerText(), motif); await page.click('[data-act=modal-close]'); await page.evaluate(() => document.querySelectorAll('.toast').forEach(t => t.remove())); };
   await essai('ip', b.ip, /Adresse IP déjà utilisée.*/); await essai('hostname', b.hostname.toLowerCase(), /Nom d'hôte déjà utilisé/); await essai('mac', b.mac.toUpperCase(), /Adresse MAC déjà utilisée/);
   assert.deepStrictEqual(await page.evaluate(i => { const x = NetCarto.Store.idx.id.get(i); return [x.ip, x.hostname, x.mac]; }, a.id), [a.ip, a.hostname, a.mac]);
   assert.match(await page.evaluate(() => { try { NetCarto.installFromStock('cat-c9200l-24p-4g', { rackId: NetCarto.Store.db.racks.find(r => r.name === 'BAIE-A2-01').id, u: 20, name: 'sw-a1-acc-01' }); return ''; } catch (e) { return e.message; } }), /Nom d'hôte déjà utilisé/);
   const racks = await page.evaluate(() => { const r = NetCarto.Store.db.racks; NetCarto.select(r[0].id); return r.map(x => x.name); });
-  await page.click('#detail [data-act=rack-edit]'); await page.fill('.modal [name=name]', racks[1]); await page.click('[data-act=modal-ok]'); await page.waitForSelector('.toast.err');
-  assert.match(await page.locator('.toast.err').last().innerText(), /Nom de baie déjà utilisé/);
+  await page.click('#detail [data-act=rack-edit]'); await page.fill('.modal [name=name]', racks[1]); await page.click('[data-act=modal-ok]'); assert.match(await (await page.waitForSelector('.toast.err')).innerText(), /Nom de baie déjà utilisé/);
 });
 test('Déplacer un équipement câblé : le brassage est signalé, et peut être débranché d\'un coup', async page => {
   const etat = () => page.evaluate(() => { const d = NetCarto.Store.db, sw = d.devices.find(x => x.hostname === 'SW-A1-ACC-02'), ids = new Set(d.ports.filter(p => p.deviceId === sw.id).map(p => p.id)); return { rack: NetCarto.Store.idx.id.get(sw.rackId).name, cables: d.cables.filter(c => ids.has(c.a) || ids.has(c.b)).length }; });
@@ -1057,7 +1056,7 @@ test('Copies de secours locales : une copie à chaque ouverture, restauration an
 test('Stockage du navigateur bloqué : l\'application fonctionne et prévient qu\'elle ne garde rien', async page => {
   assert.ok(await page.evaluate(() => NetCarto.Store.db.devices.length > 50));
   await page.evaluate(() => NetCarto.Store.commit('edit', 'Essai', db => { db.devices[0].hostname = 'SANS-STOCKAGE'; }));
-  await page.waitForSelector('.toast.warn'); assert.match(await page.locator('.toast.warn').first().innerText(), /Sauvegarde locale impossible/);
+  assert.match(await (await page.waitForSelector('.toast.warn')).innerText(), /Sauvegarde locale impossible/);
 }, { sansStockage: true });
 
 /* ---------- Montée en charge et annulation légère ---------- */
@@ -1213,7 +1212,7 @@ test('Serveur : un changement fait par un autre poste apparaît sans recharger l
 test('Serveur : base vide, puis création d\'un site, enregistrés sur le serveur', async page => {
   await page.click('[data-act=reset]'); await page.check('input[value=vide]'); await page.click('[data-act=modal-ok]'); await synchro(page);
   let b = (await api(page, '/base')).json;
-  assert.deepStrictEqual([b.sites.length, b.devices.length, b.catalog.length, b.meta.demo], [0, 0, 37, false]);
+  assert.deepStrictEqual([b.sites.length, b.devices.length, b.catalog.length, b.meta.demo], [0, 0, 38, false]);
   await page.click('.empty-state [data-kind=site]'); await page.waitForSelector('.modal'); await page.fill('.modal [name=name]', 'Siège'); await page.click('[data-act=modal-ok]'); await synchro(page);
   b = (await api(page, '/base')).json;
   assert.deepStrictEqual(b.sites.map(s => s.name), ['Siège']);
@@ -1271,7 +1270,20 @@ test('Juniper : les modèles EX du catalogue portent les noms d\'interface Junos
     NetCarto.Live.apply({ version: 1, ts: Date.now(), devices: [{ ip: '10.10.99.201', hostname: 'ex2300-test.exemple.interne', state: 'up', ports: [{ name: 'GE-0/0/5', status: 'up' }, { name: 'xe-0/1/0', status: 'down' }, { name: 'ge-0/0/0.0', status: 'up' }, { name: 'me0', status: 'up' }] }] });
     return { modeles: cat.map(c => c.model).sort(), n: ports.length, premier: ports[0], dernierCuivre: ports[47], montee: ports[48], mesures: NetCarto.Live.port.size, diag: NetCarto.Live.diag.get(dev.id), id: !!id };
   });
-  assert.deepStrictEqual(r.modeles, ['EX2300-24P', 'EX2300-48P', 'EX3400-24P']);
+  assert.deepStrictEqual(r.modeles, ['EX2300-24P', 'EX2300-48P', 'EX3400-24P', 'EX4000-48P']);
+  // EX4000-48P : 48 ports cuivre PoE+ et 4 ports SFP+ sur le même module (xe-0/1/0 à xe-0/1/3) ; un relevé complet s'y rattache port pour port
+  const ex4000 = await page.evaluate(() => {
+    const S = NetCarto.Store, c = S.db.catalog.find(x => x.model === 'EX4000-48P'), baie = S.db.racks.find(x => x.name === 'BAIE-A2-01');
+    NetCarto.installFromStock(c.id, { rackId: baie.id, u: 22, name: 'SW-JUN-02' });
+    S.commit('edit', 'Adresse', db => { db.devices.find(d => d.hostname === 'SW-JUN-02').ip = '10.10.99.202'; });
+    const dev = S.db.devices.find(d => d.hostname === 'SW-JUN-02'), ports = S.db.ports.filter(p => p.deviceId === dev.id);
+    const releve = [...Array.from({ length: 48 }, (_, i) => ({ name: `ge-0/0/${i}`, status: i % 2 ? 'up' : 'down' })), ...[0, 1, 2, 3].map(i => ({ name: `xe-0/1/${i}`, status: 'up', speedMbps: 10000 })), { name: 'ge-0/0/3.0', status: 'up' }, { name: 'vcp-255/1/0', status: 'up' }];
+    NetCarto.Live.apply({ version: 1, ts: Date.now(), devices: [{ ip: '10.10.99.202', hostname: 'ex4000-test', state: 'up', ports: releve }] });
+    return { noms: ports.map(p => p.name), poe: ports.filter(p => p.poe.capable).length, montees: ports.filter(p => p.role === 'uplink').map(p => p.name), diag: NetCarto.Live.diag.get(dev.id) };
+  });
+  assert.deepStrictEqual([ex4000.noms.length, ex4000.noms[0], ex4000.noms[47], ex4000.poe], [52, 'ge-0/0/0', 'ge-0/0/47', 48]);
+  assert.deepStrictEqual(ex4000.montees, ['xe-0/1/0', 'xe-0/1/1', 'xe-0/1/2', 'xe-0/1/3']);
+  assert.deepStrictEqual([ex4000.diag.reconnus, ex4000.diag.inconnus], [52, ['vcp-255/1/0']], 'les 52 ports sont reconnus ; un port de pile vu comme tel est signalé, pas perdu');
   assert.deepStrictEqual([r.n, r.premier, r.dernierCuivre, r.montee], [52, 'ge-0/0/0', 'ge-0/0/47', 'xe-0/1/0']);
   assert.strictEqual(r.mesures, 2); assert.deepStrictEqual([r.diag.reconnus, r.diag.inconnus], [2, ['me0']], 'une unité logique n\'est pas comptée comme un port inconnu');
   // Un problème déclaré par la supervision (Zabbix, PRTG) sur un équipement qui répond : il arrive dans les alertes, avec son libellé
@@ -1320,8 +1332,7 @@ test('Comptes : un compte en lecture seule consulte tout mais ne modifie rien', 
   assert.match(await page.locator('#user-chip').innerText(), /lecteur/);
   const pid = await page.evaluate(() => { const d = NetCarto.Store.db, sw = d.devices.find(x => x.hostname === 'SW-A1-ACC-01'), p = d.ports.find(p => p.deviceId === sw.id && p.idx === 2); NetCarto.select(p.id); return p.id; });
   const avant = (await api(page, '/ports/' + pid)).json.vlan;
-  await page.selectOption('#detail select[data-f=vlan]', '200'); await page.waitForSelector('.toast.err');
-  assert.match(await page.locator('.toast.err').first().innerText(), /lecture seule/);
+  await page.selectOption('#detail select[data-f=vlan]', '200'); assert.match(await (await page.waitForSelector('.toast.err')).innerText(), /lecture seule/);
   assert.strictEqual(await page.evaluate(i => NetCarto.Store.idx.id.get(i).vlan, pid), avant);
   assert.strictEqual((await api(page, '/ports/' + pid)).json.vlan, avant);
   await page.click('#user-chip'); assert.strictEqual(await page.locator('[data-act=compte-utilisateurs]').count(), 0, 'la gestion des comptes est réservée aux administrateurs');
@@ -1363,7 +1374,7 @@ test('Administration : page /admin réservée aux administrateurs, tout y est re
 }, S);
 test('Administration : /admin est refusé à un technicien', async (page, { app }) => {
   await page.goto(`http://127.0.0.1:${app.port}/admin`); await page.waitForFunction(() => window.NetCarto?.Store.db);
-  await page.waitForSelector('.toast.err'); assert.match(await page.locator('.toast.err').first().innerText(), /réservée aux administrateurs/);
+  assert.match(await (await page.waitForSelector('.toast.err')).innerText(), /réservée aux administrateurs/);
   assert.strictEqual(await page.$eval('.tab.on', e => e.id), 'tab-carto'); assert.strictEqual(await page.locator('[data-tab=admin]').count(), 0);
   assert.strictEqual(await page.evaluate(() => location.pathname), '/');
 }, { serveur: true, compte: 'tech' });
@@ -1398,15 +1409,14 @@ test('Écran de connexion : « Mot de passe oublié » explique quoi faire quand
   await page.click('#auth [data-auth=retour]'); await page.waitForSelector('#auth form[data-mode=connexion]');
 }, { serveur: true, compte: null });
 test('Comptes : un technicien modifie, mais ne remplace pas la base', async page => {
-  await page.click('[data-act=reset]'); await page.check('input[value=vide]'); await page.click('[data-act=modal-ok]'); await page.waitForSelector('.toast.err');
-  assert.match(await page.locator('.toast.err').first().innerText(), /administrateurs/);
+  await page.click('[data-act=reset]'); await page.check('input[value=vide]'); await page.click('[data-act=modal-ok]'); assert.match(await (await page.waitForSelector('.toast.err')).innerText(), /administrateurs/);
   assert.strictEqual((await api(page, '/equipements')).json.length, 102);
 }, { serveur: true, compte: 'tech' });
 test('Comptes : l\'administrateur crée un utilisateur, le verrou et le rôle se gèrent depuis la fenêtre', async page => {
   await rubrique(page, 'comptes'); await page.waitForSelector('#users-list .u-row');
   assert.strictEqual(await page.locator('#users-list .u-row').count(), 3);
   await page.fill('#user-new [name=u-identifiant]', 'alice'); await page.fill('#user-new [name=u-nom]', 'Alice Martin'); await page.selectOption('#user-new [name=u-role]', 'technicien'); await page.fill('#user-new [name=u-mdp]', 'court');
-  await page.click('[data-act=user-add]'); await page.waitForSelector('.toast.err'); assert.match(await page.locator('.toast.err').first().innerText(), /12 caractères/);
+  await page.click('[data-act=user-add]'); assert.match(await (await page.waitForSelector('.toast.err')).innerText(), /12 caractères/);
   await page.fill('#user-new [name=u-mdp]', MDP); await page.click('[data-act=user-add]');
   await page.waitForFunction(() => document.querySelectorAll('#users-list .u-row').length === 4);
   const alice = (await api(page, '/utilisateurs')).json.find(u => u.identifiant === 'alice');

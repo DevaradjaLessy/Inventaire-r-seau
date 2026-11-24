@@ -117,6 +117,10 @@ Seules les interfaces Ethernet physiques sont gardées. Les unités logiques (`g
 
 La source `snmp` suffit : Junos expose les MIB standard qu'elle lit (IF-MIB, BRIDGE-MIB, Q-BRIDGE-MIB). Les modèles EX2300-48P, EX2300-24P et EX3400-24P du catalogue portent les noms d'interface de Junos (`ge-0/0/0` à `ge-0/0/47`, `xe-0/1/0` à `xe-0/1/3`), et le rapprochement se fait sans réglage.
 
+Le modèle EX4000-48P est aussi au catalogue : 48 ports `ge-0/0/0` à `ge-0/0/47`, et quatre ports SFP+ `xe-0/1/0` à `xe-0/1/3` (deux de pile, deux de montée).
+
+**Switch géré par Juniper Mist.** SNMP ne se règle pas en ligne de commande sur le switch : Mist tient la configuration et peut écraser un réglage fait à la main. Il s'active dans Mist, dans le modèle de switch de l'organisation (*Organization → Switch Templates*, rubrique SNMP), en version 2 ou 3, avec un accès en lecture seule limité à l'adresse du serveur NetCarto. Le réglage descend ensuite sur tous les switchs des sites rattachés au modèle. Le serveur NetCarto interroge toujours le switch lui-même, sur le réseau interne : il ne passe pas par le nuage de Mist.
+
 Exemple de compte SNMP v3 en lecture seule sur le switch (à adapter et à vérifier sur votre version de Junos) :
 
 ```

@@ -24,13 +24,13 @@ test('une base neuve reçoit le schéma et le modèle de départ, sans aucun sit
   const depot = ouvrirBase({ fichier, depart: await depart() });
   const b = depot.lireBase();
   assert.deepStrictEqual([b.meta.app, b.meta.demo, b.sites.length, b.devices.length], ['NetCarto', false, 0, 0]);
-  assert.strictEqual(b.catalog.length, 37); assert.strictEqual(b.vlans.length, 8);
-  assert.ok(b.stock.length === 37 && b.stock.every(s => s.available === 0));
+  assert.strictEqual(b.catalog.length, 38); assert.strictEqual(b.vlans.length, 8);
+  assert.ok(b.stock.length === 38 && b.stock.every(s => s.available === 0));
   assert.strictEqual(depot.versionSchema(), 4);
   depot.fermer();
   // Réouverture : rien n'est recréé ni perdu, les migrations ne sont pas rejouées
   const d2 = ouvrirBase({ fichier, depart: await depart() });
-  assert.strictEqual(d2.lireBase().catalog.length, 37); assert.strictEqual(d2.versionSchema(), 4);
+  assert.strictEqual(d2.lireBase().catalog.length, 38); assert.strictEqual(d2.versionSchema(), 4);
   d2.fermer();
 });
 
