@@ -578,9 +578,12 @@ test('Interventions : ce qu\'un technicien planifie est vu par les autres, et tr
   await page.fill('.modal [name=title]', 'Mise à niveau du firmware'); await page.fill('.modal [name=date]', '2020-06-01'); await page.click('[data-act=modal-ok]'); await synchro(page);
   const srv = (await api(page, '/interventions')).json.find(x => x.title === 'Mise à niveau du firmware');
   assert.deepStrictEqual([srv.status, srv.createdBy, srv.assignee, srv.date], ['planned', 'tech', 'Compte tech', '2020-06-01']);
-  // Un compte en lecture seule la voit, sans pouvoir y toucher
+  // Un compte en lecture seule la voit, sans pouvoir y toucher.
+  // La première fenêtre quitte la vue 3D : deux scènes 3D à la fois saturent un poste sans carte graphique.
+  await page.click('[data-tab=inv]');
   const r = await fetch(`http://127.0.0.1:${app.port}/api/v1/session`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identifiant: 'lecteur', motDePasse: MDP }) });
   const ctx = await page.context().browser().newContext({ viewport: { width: 1600, height: 900 } });
+  try {
   await ctx.addCookies([{ name: 'netcarto_session', value: r.headers.getSetCookie()[0].split(';')[0].split('=')[1], url: `http://127.0.0.1:${app.port}/` }]);
   const p2 = await ctx.newPage(); await p2.goto(`http://127.0.0.1:${app.port}/`); await p2.waitForFunction(() => window.NetCarto?.Store.db);
   await p2.click('[data-tab=dash]');
@@ -588,9 +591,9 @@ test('Interventions : ce qu\'un technicien planifie est vu par les autres, et tr
   assert.match((await ligne.innerText()).replace(/\s+/g, ' '), /SW-A1-ACC-01.*01\/06\/2020.*Compte tech/);
   // L'alerte de retard reste visible en lecture seule, et mène à l'équipement
   const al = p2.locator('.alist .al', { hasText: 'Intervention en retard : Mise à niveau du firmware' }); assert.ok(await al.isVisible());
-  await al.click(); await p2.waitForSelector('#tab-carto.on #detail:has-text("SW-A1-ACC-01")'); await p2.click('[data-tab=dash]');
+  await al.click(); await p2.waitForSelector('#tab-carto.on #detail:has-text("SW-A1-ACC-01")', { timeout: 60000 }); await p2.click('[data-tab=dash]');
   assert.strictEqual(await p2.locator('#interv-card [data-act]:visible').evaluateAll(l => l.filter(b => /^interv-(new|edit|etat|del)$/.test(b.dataset.act)).length), 0);
-  await ctx.close();
+  } finally { await ctx.close(); }   // toujours fermée : une fenêtre oubliée ralentirait tous les scénarios suivants
 }, { serveur: true, compte: 'tech' });
 
 /* ---------- Dossier pour un prestataire ---------- */
@@ -1295,11 +1298,12 @@ test('Alertes : l\'administrateur voit celles de la sécurité du serveur dans l
   const ctx = await page.context().browser().newContext({ viewport: { width: 1600, height: 900 } });
   const r = await fetch(`http://127.0.0.1:${app.port}/api/v1/session`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identifiant: 'tech', motDePasse: MDP }) });
   await ctx.addCookies([{ name: 'netcarto_session', value: r.headers.getSetCookie()[0].split(';')[0].split('=')[1], url: `http://127.0.0.1:${app.port}/` }]);
-  const p2 = await ctx.newPage(); await p2.goto(`http://127.0.0.1:${app.port}/`); await p2.waitForFunction(() => window.NetCarto?.Store.db);
-  await p2.click('[data-tab=dash]'); await p2.waitForSelector('.alist .al'); await p2.waitForTimeout(400);
-  assert.strictEqual(await p2.locator('.alist .al', { hasText: 'HTTPS' }).count(), 0);
-  assert.strictEqual((await p2.locator('#tabs [data-tab=dash] .badge').innerText()).trim(), '9');
-  await ctx.close();
+  try {
+    const p2 = await ctx.newPage(); await p2.goto(`http://127.0.0.1:${app.port}/`); await p2.waitForFunction(() => window.NetCarto?.Store.db);
+    await p2.click('[data-tab=dash]'); await p2.waitForSelector('.alist .al'); await p2.waitForTimeout(400);
+    assert.strictEqual(await p2.locator('.alist .al', { hasText: 'HTTPS' }).count(), 0);
+    assert.strictEqual((await p2.locator('#tabs [data-tab=dash] .badge').innerText()).trim(), '9');
+  } finally { await ctx.close(); }
 }, S);
 test('Sauvegardes : l\'administrateur sauvegarde, puis restaure l\'inventaire après une erreur', async page => {
   const ouvrir = async () => { await rubrique(page, 'sauvegardes'); await page.waitForSelector('#sv-reglages b'); };

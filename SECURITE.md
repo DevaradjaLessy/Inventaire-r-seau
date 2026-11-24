@@ -22,7 +22,7 @@ Ce document n'est pas une certification. Il ne remplace ni un test d'intrusion m
 | En-têtes HTTP, cookies, TLS | Requêtes directes, lecture des réponses |
 | Fichiers, droits, journalisation | Lecture du disque après un démarrage réel |
 | Dépendances | `npm audit` sur le serveur et les connecteurs : aucune vulnérabilité connue |
-| Installation | Image Docker et Debian 12 avec systemd, déjà éprouvées (voir `SUIVI.md`, 3.20 et 3.21) |
+| Installation | Image Docker, Debian 12 et Ubuntu avec systemd, essayées pour de bon (`installation/tests/`) |
 
 **Hors périmètre :** test d'intrusion externe, revue du système hôte, du réseau et du pare-feu, analyse du code de Node.js et de SQLite, connecteurs PRTG et SNMP sur du matériel réel.
 
