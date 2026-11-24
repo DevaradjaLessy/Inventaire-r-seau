@@ -1,0 +1,25 @@
+{
+  "host": "127.0.0.1",
+  "port": 8787,
+  "intervalSeconds": 30,
+  "webRoot": "..",
+  "token": "",
+  "corsOrigins": [],
+  "sources": [
+    {
+      "type": "prtg",
+      "url": "https://prtg.exemple.interne",
+      "apiToken": "env:PRTG_TOKEN",
+      "insecureTls": false
+    },
+    {
+      "type": "snmp",
+      "version": "2c",
+      "community": "env:SNMP_COMMUNITY",
+      "devices": [
+        { "ip": "192.0.2.10", "hostname": "SW-EXEMPLE-01" },
+        { "ip": "192.0.2.11", "hostname": "SW-EXEMPLE-02" }
+      ]
+    }
+  ]
+}

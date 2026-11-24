@@ -1,0 +1,65 @@
+# NetCarto — exemple de fichier de réglages.
+# Copiez-le (par exemple en netcarto.toml), adaptez-le, puis lancez :
+#   node netcarto.js --config netcarto.toml
+# Ne mettez aucun mot de passe ici : une valeur "env:NOM" est lue dans la variable d'environnement NOM.
+
+[serveur]
+hote = "127.0.0.1"      # 127.0.0.1 = ce poste seulement. Mettez l'adresse du serveur pour l'ouvrir à vos collègues.
+port = 8443
+# proxyDeConfiance = true   # seulement si NetCarto est derrière VOTRE proxy inverse : l'adresse du poste est alors lue dans X-Forwarded-For
+
+[https]
+actif = true            # HTTPS par défaut. Sans fichiers ci-dessous, un certificat auto-signé est créé dans le dossier de données.
+# noms = ["netcarto.exemple.interne", "192.0.2.10"]   # noms et adresses à inscrire dans le certificat auto-signé
+# certificat = "certificats/netcarto.crt"
+# cle = "certificats/netcarto.key"
+
+[securite]
+echecsMax = 5           # échecs de connexion avant verrouillage du compte
+verrouillageMinutes = 15
+sessionHeures = 12      # durée maximale d'une session
+inactiviteMinutes = 120 # une session inactive est fermée
+tentativesParAdresse = 20  # échecs d'authentification tolérés par adresse…
+fenetreMinutes = 10        # …sur cette durée ; au-delà, l'adresse attend la fin de la fenêtre
+coutMotDePasse = 17        # coût des empreintes (scrypt, N = 2^17) ; ne le baissez pas
+
+[donnees]
+dossier = "donnees-locales"   # dossier de la base ; un chemin relatif part du dossier de ce fichier
+
+[courriel]
+# Facultatif. Sans « hote », NetCarto n'envoie aucun courriel : un mot de passe perdu se traite alors
+# par un lien que l'administrateur remet depuis la page d'administration.
+# hote = "smtp.exemple.interne"
+# port = 587
+# securite = "starttls"           # "starttls" (port 587), "tls" (port 465) ou "aucune"
+# utilisateur = "netcarto"
+# motDePasse = "env:SMTP_MDP"     # jamais en clair ici : lu dans la variable d'environnement SMTP_MDP
+# expediteur = "NetCarto <netcarto@exemple.interne>"
+# adresse = "https://netcarto.exemple.interne:8443"   # adresse par laquelle vos collègues ouvrent NetCarto (sert aux liens)
+
+[sauvegardes]
+actif = true            # une sauvegarde automatique par jour
+heure = "02:30"         # heure locale du serveur
+conserver = 14          # nombre de sauvegardes automatiques gardées
+# dossier = "/chemin/vers/un/autre/disque"   # par défaut : « sauvegardes » dans le dossier de données
+
+[web]
+dossier = ".."          # dossier qui contient index.html, css/ et js/
+
+[limites]
+corpsMaxMo = 25         # taille maximale d'une requête (import d'une base, plan en image)
+
+[supervision]
+intervalle = 30         # secondes entre deux relevés
+
+# Sources de supervision (facultatif). Voir connecteurs/README.md pour le détail.
+# [[supervision.sources]]
+# type = "prtg"
+# url = "https://prtg.exemple.interne"
+# apiToken = "env:PRTG_TOKEN"
+#
+# [[supervision.sources]]
+# type = "snmp"
+# version = "2c"
+# community = "env:SNMP_COMMUNITY"
+# devices = [{ ip = "192.0.2.10", hostname = "SW-EXEMPLE-01" }]

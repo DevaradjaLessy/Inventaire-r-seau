@@ -1,0 +1,11 @@
+{
+  "_": "Noms d'interface et leur forme comparable. Ce fichier est lu par les tests du relais (nomInterface) et par ceux de l'interface (normIf) : les deux fonctions doivent donner exactement ces résultats.",
+  "cas": [
+    ["GigabitEthernet1/0/1", "gi1/0/1"], ["Gi1/0/1", "gi1/0/1"], ["gi1/0/1", "gi1/0/1"],
+    ["TenGigabitEthernet1/1/4", "te1/1/4"], ["Te1/1/4", "te1/1/4"],
+    ["TwentyFiveGigE1/0/1", "twe1/0/1"], ["FortyGigabitEthernet1/1/1", "fo1/1/1"], ["HundredGigE1/0/49", "hu1/0/49"], ["FastEthernet0/1", "fa0/1"],
+    ["ge-0/0/0", "ge-0/0/0"], ["GE-0/0/47", "ge-0/0/47"], ["xe-0/1/0", "xe-0/1/0"], ["et-0/1/0", "et-0/1/0"],
+    ["1/1/1", "1/1/1"], ["Port 1", "port1"], ["SFP+ 2", "sfp+2"], ["ether12", "ether12"], ["sfp-sfpplus1", "sfp-sfpplus1"],
+    ["wan1", "wan1"], ["eth0", "eth0"], [" Gi1/0/2 ", "gi1/0/2"], ["Gigabit Ethernet 1/0/3", "gi1/0/3"]
+  ]
+}

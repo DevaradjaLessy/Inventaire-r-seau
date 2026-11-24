@@ -1,0 +1,15 @@
+{
+  "name": "netcarto-relais",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Relais interne de supervision pour NetCarto : interroge PRTG et les switchs (SNMP), puis expose un état normalisé en lecture seule.",
+  "main": "serveur.js",
+  "scripts": {
+    "start": "node serveur.js",
+    "test": "node tests/test.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "net-snmp": "^3.11.2"
+  }
+}

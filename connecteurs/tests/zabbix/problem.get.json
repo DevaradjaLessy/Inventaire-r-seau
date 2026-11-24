@@ -1,0 +1,86 @@
+{
+  "jsonrpc": "2.0",
+  "result": [
+    {
+      "eventid": "30",
+      "source": "0",
+      "object": "0",
+      "objectid": "25250",
+      "clock": "1795497794",
+      "ns": "292826632",
+      "r_eventid": "0",
+      "r_clock": "0",
+      "r_ns": "0",
+      "correlationid": "0",
+      "userid": "0",
+      "name": "Essai NetCarto : interface ifb0 opérationnellement coupée",
+      "acknowledged": "0",
+      "severity": "3",
+      "cause_eventid": "0",
+      "suppressed": "0",
+      "opdata": "",
+      "tags": [
+        {
+          "tag": "component",
+          "value": "network"
+        },
+        {
+          "tag": "description",
+          "value": ""
+        },
+        {
+          "tag": "interface",
+          "value": "ifb0"
+        },
+        {
+          "tag": "class",
+          "value": "network"
+        },
+        {
+          "tag": "target",
+          "value": "generic"
+        }
+      ],
+      "urls": []
+    },
+    {
+      "eventid": "18",
+      "source": "0",
+      "object": "0",
+      "objectid": "25231",
+      "clock": "1795497591",
+      "ns": "292979948",
+      "r_eventid": "33",
+      "r_clock": "1795497801",
+      "r_ns": "295041424",
+      "correlationid": "0",
+      "userid": "0",
+      "name": "Network Generic Device: SW-REEL-01 has been restarted (uptime < 10m)",
+      "acknowledged": "0",
+      "severity": "2",
+      "cause_eventid": "0",
+      "suppressed": "0",
+      "opdata": "",
+      "tags": [
+        {
+          "tag": "scope",
+          "value": "notice"
+        },
+        {
+          "tag": "component",
+          "value": "system"
+        },
+        {
+          "tag": "class",
+          "value": "network"
+        },
+        {
+          "tag": "target",
+          "value": "generic"
+        }
+      ],
+      "urls": []
+    }
+  ],
+  "id": 1
+}

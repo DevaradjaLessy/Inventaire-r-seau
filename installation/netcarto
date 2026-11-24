@@ -1,0 +1,21 @@
+#!/bin/sh
+# Commande « netcarto » des installations Docker et Linux : lance le serveur ou une commande d'exploitation
+# (compte, sauvegarde, sauvegardes, restaurer, sante) avec les réglages de /etc/netcarto.
+# Lancée par root, elle passe d'abord sous le compte du service : aucun fichier de données n'est jamais créé en root.
+set -eu
+NETCARTO_DOSSIER="${NETCARTO_DOSSIER:-/opt/netcarto}"
+NETCARTO_COMPTE="${NETCARTO_COMPTE:-netcarto}"
+export NETCARTO_CONFIG="${NETCARTO_CONFIG:-/etc/netcarto/netcarto.toml}"
+
+# Node.js propre à l'installation Linux s'il existe, sinon celui du système (image Docker)
+NOEUD=node
+if [ -x "$NETCARTO_DOSSIER/noeud/bin/node" ]; then NOEUD="$NETCARTO_DOSSIER/noeud/bin/node"; fi
+
+if [ "$(id -u)" = "0" ]; then
+  if command -v setpriv >/dev/null 2>&1; then
+    exec setpriv --reuid "$NETCARTO_COMPTE" --regid "$NETCARTO_COMPTE" --init-groups \
+      "$NOEUD" --disable-warning=ExperimentalWarning "$NETCARTO_DOSSIER/serveur/netcarto.js" "$@"
+  fi
+  exec runuser -u "$NETCARTO_COMPTE" -- "$NOEUD" --disable-warning=ExperimentalWarning "$NETCARTO_DOSSIER/serveur/netcarto.js" "$@"
+fi
+exec "$NOEUD" --disable-warning=ExperimentalWarning "$NETCARTO_DOSSIER/serveur/netcarto.js" "$@"

@@ -1,0 +1,14 @@
+# Rien de local ni de secret n'entre dans le dépôt : il est public
+node_modules/
+donnees-locales/
+netcarto.toml
+!installation/netcarto.toml
+connecteurs/config.json
+.env
+.env.*
+*.sqlite
+*.sqlite-*
+*.key
+*.pem
+*.p12
+*.pfx

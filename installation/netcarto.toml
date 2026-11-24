@@ -1,0 +1,66 @@
+# NetCarto — réglages d'une installation (Docker ou Linux).
+# Ce fichier est posé dans /etc/netcarto/netcarto.toml à la première installation, puis n'est plus jamais écrasé.
+# Après une modification, redémarrez NetCarto.
+# Ne mettez aucun mot de passe ici : une valeur "env:NOM" est lue dans la variable d'environnement NOM.
+
+[serveur]
+hote = "0.0.0.0"        # toutes les interfaces : NetCarto est joignable depuis le réseau
+port = 8443
+# proxyDeConfiance = true   # seulement si NetCarto est derrière VOTRE proxy inverse : l'adresse du poste est alors lue dans X-Forwarded-For
+
+[https]
+actif = true            # sans fichiers ci-dessous, un certificat auto-signé est créé dans /var/lib/netcarto/certificats
+# noms = ["netcarto.exemple.interne", "192.0.2.10"]   # noms et adresses par lesquels vos collègues ouvrent NetCarto
+# certificat = "/etc/netcarto/netcarto.crt"           # votre propre certificat (autorité interne, par exemple)
+# cle = "/etc/netcarto/netcarto.key"
+
+[securite]
+echecsMax = 5           # échecs de connexion avant verrouillage du compte
+verrouillageMinutes = 15
+sessionHeures = 12      # durée maximale d'une session
+inactiviteMinutes = 120 # une session inactive est fermée
+tentativesParAdresse = 20  # échecs d'authentification tolérés par adresse…
+fenetreMinutes = 10        # …sur cette durée ; au-delà, l'adresse attend la fin de la fenêtre
+coutMotDePasse = 17        # coût des empreintes (scrypt, N = 2^17) ; ne le baissez pas
+
+[donnees]
+dossier = "/var/lib/netcarto"
+
+[courriel]
+# Facultatif. Sans « hote », NetCarto n'envoie aucun courriel : un mot de passe perdu se traite alors
+# par un lien que l'administrateur remet depuis la page d'administration.
+# hote = "smtp.exemple.interne"
+# port = 587
+# securite = "starttls"           # "starttls" (port 587), "tls" (port 465) ou "aucune"
+# utilisateur = "netcarto"
+# motDePasse = "env:SMTP_MDP"     # jamais en clair ici : lu dans la variable d'environnement SMTP_MDP
+# autorite = "ac-interne.pem"     # si le certificat du serveur d'envoi vient de votre autorité interne : son certificat (PEM)
+# expediteur = "NetCarto <netcarto@exemple.interne>"
+# adresse = "https://netcarto.exemple.interne:8443"   # adresse par laquelle vos collègues ouvrent NetCarto (sert aux liens)
+
+[sauvegardes]
+actif = true            # une sauvegarde automatique par jour
+heure = "02:30"         # heure locale du serveur
+conserver = 14          # nombre de sauvegardes automatiques gardées
+# dossier = "/chemin/vers/un/autre/disque"   # par défaut : /var/lib/netcarto/sauvegardes
+
+[web]
+dossier = "/opt/netcarto"
+
+[limites]
+corpsMaxMo = 25         # taille maximale d'une requête (import d'une base, plan en image)
+
+[supervision]
+intervalle = 30         # secondes entre deux relevés
+
+# Sources de supervision (facultatif). Voir connecteurs/README.md.
+# [[supervision.sources]]
+# type = "prtg"
+# url = "https://prtg.exemple.interne"
+# apiToken = "env:PRTG_TOKEN"
+#
+# [[supervision.sources]]
+# type = "snmp"
+# version = "2c"
+# community = "env:SNMP_COMMUNITY"
+# devices = [{ ip = "192.0.2.10", hostname = "SW-EXEMPLE-01" }]
