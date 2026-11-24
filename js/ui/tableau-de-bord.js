@@ -13,6 +13,7 @@ import { Sync } from '../sync.js';
 import { Actions, estAdmin, levelColor, renderActive, renderShell, showTab, UI, Views, vlanChip } from './socle.js';
 import { Inv } from './inventaire.js';
 import { interventionsCard } from './planning.js';
+import { supervisionCard } from './supervision.js';
 
 /* Statistiques globales (hors équipements hors service) */
 function computeStats() {
@@ -169,6 +170,7 @@ Views.dash = {
       ${kpi('bolt', 'PoE consommé', `${s.poeUsed}<small> W</small>`, `sur ${s.poeBudget} W de budget`, pct(s.poeUsed, s.poeBudget))}
       ${kpi('outlet', 'Prises brassées', `${pct(s.patched, s.outlets)}<small> %</small>`, `${s.patched} sur ${s.outlets} · ${s.outletsUp} actives`, pct(s.patched, s.outlets))}
       ${kpi('alert', 'Alertes', alerts.length, crit ? `dont ${crit} critique${crit > 1 ? 's' : ''}` : 'aucune critique', null, alerts.length ? (crit ? COL.crit : COL.serious) : null)}
+      ${supervisionCard()}
       <div class="dcard c5">${title('alert', 'Alertes', `<span class="row" style="gap:6px">${pill('crit')}${pill('serious')}${pill('warn')}</span>`)}
         <div class="scroll alist">${alerts.map(a => `<div class="al" style="--c:${levelColor(a.level)}" data-act="${a.act || 'go'}" data-id="${a.ref}"><span class="ai">${ico(a.icon)}</span><div><b>${esc(a.text)}</b><small>${esc(a.sub)}</small></div><span class="lv">${LEVEL_LABEL[a.level]}</span></div>`).join('') || '<div class="empty">Aucune alerte</div>'}</div></div>
       <div class="dcard c4">${title('box', 'Parc par type', `<span class="muted">${s.devices} équipements</span>`)}${hbars(catRows, Math.max(...catRows.map(r => r.v), 1), r => r.v)}</div>

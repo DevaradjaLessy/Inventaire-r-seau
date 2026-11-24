@@ -137,7 +137,25 @@ const Live = {
     this.matched = this.dev.size; this.ts = ts; this.source = snap.source || this.cfg.type;
   },
 };
+/* Résumé du dernier relevé, pour le tableau de bord : ce que la supervision voit, et ce que l'inventaire contient sans qu'elle le suive.
+   Un équipement « à suivre » est un équipement actif de l'inventaire qui a une adresse IP. */
+function resumeSupervision() {
+  const aSuivre = Store.db.devices.filter(d => d.ip && d.status !== 'retired' && catOf(d)?.category !== 'passive');
+  const etats = { up: 0, warning: 0, down: 0, unknown: 0 }, pannes = [];
+  for (const [id, m] of Live.dev) { etats[m.state] = (etats[m.state] || 0) + 1; if (m.state === 'down' || m.state === 'warning') pannes.push({ id, state: m.state, message: m.message }); }
+  const ports = { up: 0, down: 0, disabled: 0, error: 0 }, charges = [];
+  let trafic = 0, poe = 0;
+  for (const [id, m] of Live.port) {
+    if (m.status) ports[m.status]++;
+    const debit = m.totalMbps ?? ((m.inMbps || 0) + (m.outMbps || 0));
+    trafic += debit; poe += m.poeW || 0;
+    if (debit > 0) charges.push({ id, debit, part: m.speedMbps ? Math.min(100, debit * 100 / m.speedMbps) : null });
+  }
+  return { etats, pannes: pannes.sort((a, b) => (a.state === 'down' ? 0 : 1) - (b.state === 'down' ? 0 : 1)), ports, trafic, poe: +poe.toFixed(1),
+    charges: charges.sort((a, b) => b.debit - a.debit).slice(0, 5), aSuivre: aSuivre.length, suivis: aSuivre.filter(d => Live.dev.has(d.id)).length,
+    nonSuivis: aSuivre.filter(d => !Live.dev.has(d.id)), inconnus: Live.unmatched.length };
+}
 const measuredPort = id => Live.port.get(id) || null;
 const measuredDev = id => Live.dev.get(id) || null;
 
-export { DEV_STATE, Live, measuredDev, measuredPort, normIf, SOURCES };
+export { DEV_STATE, Live, measuredDev, measuredPort, normIf, resumeSupervision, SOURCES };

@@ -127,6 +127,32 @@ test('Matériel : installation, retrait hors service, glisser-déposer, nouveau 
   await page.fill('.modal [name=brand]', 'Netgear'); await page.fill('.modal [name=model]', 'M4300-28G'); await page.click('[data-act=model-grp-add]'); await page.click('[data-act=modal-ok]');
   assert.deepStrictEqual(await page.evaluate(() => { const c = NetCarto.Store.db.catalog.at(-1); return [c.id, c.mount, c.ports.length]; }), ['cat-netgear-m4300-28g', 'rack', 2]);
 });
+test('Tableau de bord : résumé de la supervision — équipements, ports, trafic, couverture de l\'inventaire, ports les plus chargés', async page => {
+  await page.click('[data-tab=dash]');
+  // Sans source : la carte le dit et propose d'en activer une
+  assert.match(await page.locator('#sup-card').innerText(), /Aucune source de supervision active/);
+  assert.strictEqual(await page.locator('#sup-card [data-act=sources]').count(), 1);
+  // Un relevé connu : un switch joignable (trois ports : actif et chargé, inactif, en erreur), une borne en panne, un équipement inconnu de l'inventaire
+  const ids = await page.evaluate(() => {
+    const d = NetCarto.Store.db, sw = d.devices.find(x => x.hostname === 'SW-A1-ACC-01'), ap = d.devices.find(x => x.hostname === 'AP-A1-01'), p1 = d.ports.find(x => x.deviceId === sw.id && x.name === 'Gi1/0/1');
+    Object.assign(NetCarto.Live.cfg, { type: 'relais' });
+    NetCarto.Live.apply({ version: 1, ts: Date.now(), source: 'prtg + snmp', sources: [{ nom: 'prtg', ok: true, erreur: '', equipements: 2, ts: Date.now() }, { nom: 'snmp', ok: true, erreur: '', equipements: 1, ts: Date.now() }],
+      devices: [{ ip: sw.ip, hostname: sw.hostname, state: 'up', sources: ['prtg', 'snmp'], ports: [{ name: 'Gi1/0/1', status: 'up', speedMbps: 1000, inMbps: 100, outMbps: 50, poeW: 6.5 }, { name: 'Gi1/0/2', status: 'down' }, { name: 'Gi1/0/3', status: 'error', errors: 5 }] },
+        { ip: ap.ip, hostname: ap.hostname, state: 'down', message: 'Aucune réponse', sources: ['prtg'], ports: [] }, { ip: '198.51.100.7', hostname: 'INCONNU-01', state: 'up', ports: [] }] });
+    NetCarto.Live.state = 'ok'; NetCarto.Live.emit();
+    return { p1: p1.id, suivis: d.devices.filter(x => x.ip && x.status !== 'retired' && NetCarto.Store.idx.cat.get(x.catalogId)?.category !== 'passive').length };
+  });
+  await page.waitForSelector('#sup-card .sup-g');
+  const carte = (await page.locator('#sup-card').innerText()).replace(/\s+/g, ' ');
+  for (const attendu of [/prtg \+ snmp/, /joignable 1/, /en panne 1/, /AP-A1-01/, new RegExp(`2 sur ${ids.suivis} équipements de l'inventaire`), /1 équipement supervisé absent de l'inventaire/, /actif 1/, /inactif 1/, /en erreur 1/, /150\.0 Mb\/s/, /6\.5 W/, /SW-A1-ACC-01 · Gi1\/0\/1/])
+    assert.match(carte, attendu);
+  // Un clic sur le port le plus chargé mène à sa fiche
+  await page.click('#sup-card .sup-top [data-act=go]');
+  assert.strictEqual(await page.evaluate(() => NetCarto.Carto.sel), ids.p1);
+  // La supervision arrêtée, la carte revient à l'invitation
+  await page.evaluate(() => { NetCarto.Live.cfg.type = 'none'; NetCarto.Live.vider(); NetCarto.Live.state = 'off'; NetCarto.Live.emit(); });
+  await page.click('[data-tab=dash]'); assert.match(await page.locator('#sup-card').innerText(), /Aucune source de supervision active/);
+});
 test('Tableau de bord et alertes cliquables', async page => {
   await page.click('[data-tab=dash]');
   assert.strictEqual(await page.$$eval('.kpi', a => a.length), 6); assert.strictEqual(await page.$$eval('.al', a => a.length), 10); assert.strictEqual(await page.$$eval('.rg', a => a.length), 6);
@@ -1477,8 +1503,9 @@ test('Sécurité : dans la page d\'administration non plus, aucun texte venu d\'
 test('Comptes : session expirée en cours de travail → on se reconnecte sans perdre la page', async page => {
   const dev = await page.evaluate(() => { const x = NetCarto.Store.db.devices.find(d => d.hostname === 'SW-A1-ACC-01'); NetCarto.select(x.id); return x; });
   await api(page, '/session', 'DELETE');
-  await page.click('#detail [data-act=dev-edit]'); await page.fill('.modal [name=notes]', 'après expiration'); await page.click('[data-act=modal-ok]');
-  await page.waitForSelector('#auth form[data-mode=connexion]');
+  // La surveillance de fond peut constater l'expiration avant la fin de la saisie : l'écran de connexion arrive alors de lui-même, et c'est aussi le bon résultat
+  const saisie = (async () => { await page.click('#detail [data-act=dev-edit]', { timeout: 5000 }); await page.fill('.modal [name=notes]', 'après expiration', { timeout: 5000 }); await page.click('[data-act=modal-ok]', { timeout: 5000 }); })().catch(() => {});
+  await page.waitForSelector('#auth form[data-mode=connexion]'); await saisie;
   assert.match(await page.locator('#auth').innerText(), /session a expiré/i);
   await page.fill('#auth [name=identifiant]', 'admin'); await page.fill('#auth [name=motDePasse]', MDP); await page.click('#auth button[type=submit]');
   await page.waitForFunction(() => !document.querySelector('#auth'));
