@@ -152,6 +152,58 @@ test('Releveur : une source interrogée en http:// avec un secret est signalée,
   assert.strictEqual(lignes.filter(l => /non chiffrée/.test(l)).length, 2, 'une ligne au journal par source concernée, une seule fois');
   assert.ok(!lignes.join('\n').includes('jeton-fictif') && !JSON.stringify(r.etat()).includes('jeton-fictif'), 'le secret ne sort ni au journal ni dans l\'état');
 });
+test('SNMP : le switch dit qui est branché sur chaque port (LLDP) — nom annoncé, port distant, description, famille', async () => {
+  const snmp = require('net-snmp'), T = snmp.ObjectType, RO = snmp.MaxAccess['read-only'], NA = snmp.MaxAccess['not-accessible'];
+  const agent = snmp.createAgent({ port: 18964, disableAuthorization: true, address: '127.0.0.1' }, () => {});
+  try {
+    const mib = agent.getMib();
+    mib.registerProvider({ name: 'sysName', type: snmp.MibProviderType.Scalar, oid: '1.3.6.1.2.1.1.5', scalarType: T.OctetString, maxAccess: RO });
+    mib.setScalarValue('sysName', 'EX4000-TEST');
+    mib.registerProvider({ name: 'ifEntry', type: snmp.MibProviderType.Table, oid: '1.3.6.1.2.1.2.2.1', maxAccess: NA, tableIndex: [{ columnName: 'ifIndex' }],
+      tableColumns: [{ number: 1, name: 'ifIndex', type: T.Integer, maxAccess: RO }, { number: 3, name: 'ifType', type: T.Integer, maxAccess: RO }, { number: 7, name: 'ifAdminStatus', type: T.Integer, maxAccess: RO }, { number: 8, name: 'ifOperStatus', type: T.Integer, maxAccess: RO }] });
+    mib.registerProvider({ name: 'ifXEntry', type: snmp.MibProviderType.Table, oid: '1.3.6.1.2.1.31.1.1.1', maxAccess: NA, tableIndex: [{ columnName: 'ifXIndex' }],
+      tableColumns: [{ number: 99, name: 'ifXIndex', type: T.Integer, maxAccess: RO }, { number: 1, name: 'ifName', type: T.OctetString, maxAccess: RO }, { number: 6, name: 'ifHCInOctets', type: T.Counter64, maxAccess: RO }, { number: 10, name: 'ifHCOutOctets', type: T.Counter64, maxAccess: RO }, { number: 15, name: 'ifHighSpeed', type: T.Gauge, maxAccess: RO }] });
+    // Table des ports locaux de LLDP : son numéro de port n'est pas l'index d'interface ; le nom du port est dans la description ou dans l'identifiant
+    mib.registerProvider({ name: 'lldpLocPortEntry', type: snmp.MibProviderType.Table, oid: '1.0.8802.1.1.2.1.3.7.1', maxAccess: NA, tableIndex: [{ columnName: 'lldpLocPortNum' }],
+      tableColumns: [{ number: 1, name: 'lldpLocPortNum', type: T.Integer, maxAccess: RO }, { number: 3, name: 'lldpLocPortId', type: T.OctetString, maxAccess: RO }, { number: 4, name: 'lldpLocPortDesc', type: T.OctetString, maxAccess: RO }] });
+    // Table des voisins : indexée par (horodatage, port local, rang)
+    mib.registerProvider({ name: 'lldpRemEntry', type: snmp.MibProviderType.Table, oid: '1.0.8802.1.1.2.1.4.1.1', maxAccess: NA, tableIndex: [{ columnName: 'lldpRemTimeMark' }, { columnName: 'lldpRemLocalPortNum' }, { columnName: 'lldpRemIndex' }],
+      tableColumns: [{ number: 1, name: 'lldpRemTimeMark', type: T.Integer, maxAccess: RO }, { number: 2, name: 'lldpRemLocalPortNum', type: T.Integer, maxAccess: RO }, { number: 3, name: 'lldpRemIndex', type: T.Integer, maxAccess: RO },
+        { number: 7, name: 'lldpRemPortId', type: T.OctetString, maxAccess: RO }, { number: 9, name: 'lldpRemSysName', type: T.OctetString, maxAccess: RO }, { number: 10, name: 'lldpRemSysDesc', type: T.OctetString, maxAccess: RO }, { number: 12, name: 'lldpRemSysCapEnabled', type: T.OctetString, maxAccess: RO }] });
+    const c64 = n => { const b = Buffer.alloc(8); b.writeBigUInt64BE(BigInt(n)); return b; };
+    for (const [i, name] of [[501, 'ge-0/0/0'], [503, 'ge-0/0/1'], [504, 'xe-0/1/2'], [505, 'ge-0/0/2'], [506, 'ge-0/0/3']]) { mib.addTableRow('ifEntry', [i, 6, 1, 1]); mib.addTableRow('ifXEntry', [i, name, c64(0), c64(0), 1000]); }
+    mib.addTableRow('lldpLocPortEntry', [21, '521', 'ge-0/0/0']);        // nom dans la description
+    mib.addTableRow('lldpLocPortEntry', [22, 'ge-0/0/1', '']);           // nom dans l'identifiant
+    mib.addTableRow('lldpLocPortEntry', [23, '504', 'Montée vers la distribution']);   // l'identifiant est l'index d'interface
+    // Capacités actives : un octet, bit de poids fort en premier (autre, répéteur, pont, borne Wi-Fi, routeur, téléphone, câble, poste)
+    mib.addTableRow('lldpRemEntry', [0, 21, 1, Buffer.from('port 1'), 'TEL-ACCUEIL-01', 'Téléphone IP de démonstration', Buffer.from([0x24])]);   // téléphone avec pont intégré
+    mib.addTableRow('lldpRemEntry', [0, 22, 1, Buffer.from('eth0'), 'AP-HALL-02', 'Borne Wi-Fi de démonstration', Buffer.from([0x30])]);
+    mib.addTableRow('lldpRemEntry', [0, 23, 1, Buffer.from('xe-0/1/0'), 'SW-DIST-01', 'Switch de distribution', Buffer.from([0x28])]);            // pont et routeur : un switch
+    mib.addTableRow('lldpRemEntry', [0, 505, 1, Buffer.from([0x02, 0x00, 0x00, 0x00, 0x0a, 0xff]), 'IMP-RH-01', '', Buffer.from([0x01])]);            // aucun port local décrit : le numéro est l'index d'interface
+    const src = require('../sources/snmp')({ type: 'snmp', version: '2c', community: 'public', port: 18964, timeoutMs: 1500, devices: [{ ip: '127.0.0.1' }] });
+    const [d] = await src.relever();
+    assert.strictEqual(d.state, 'up', d.message);
+    const v = Object.fromEntries(d.ports.map(p => [p.name, p.voisin]));
+    assert.deepStrictEqual(v['ge-0/0/0'], { nom: 'TEL-ACCUEIL-01', port: 'port 1', description: 'Téléphone IP de démonstration', famille: 'phone' });
+    assert.deepStrictEqual(v['ge-0/0/1'], { nom: 'AP-HALL-02', port: 'eth0', description: 'Borne Wi-Fi de démonstration', famille: 'ap' });
+    assert.deepStrictEqual(v['xe-0/1/2'], { nom: 'SW-DIST-01', port: 'xe-0/1/0', description: 'Switch de distribution', famille: 'switch' });
+    assert.deepStrictEqual(v['ge-0/0/2'], { nom: 'IMP-RH-01', port: '02:00:00:00:0a:ff', description: '', famille: 'poste' }, 'un identifiant de port binaire est rendu comme une adresse');
+    assert.strictEqual(v['ge-0/0/3'], null, 'un port sans voisin annoncé');
+    // Lecture coupée par le réglage : aucun voisin, le reste du relevé inchangé
+    const sans = require('../sources/snmp')({ type: 'snmp', version: '2c', community: 'public', port: 18964, timeoutMs: 1500, lldp: false, devices: [{ ip: '127.0.0.1' }] });
+    assert.ok((await sans.relever())[0].ports.every(p => p.voisin === null));
+  } finally { agent.close(); }
+});
+test('Contrat : le voisin annoncé d\'un port a une forme fermée ; à la fusion, la première source qui le connaît fait foi', () => {
+  const [d] = fusionner([
+    [{ ip: '10.0.0.1', ports: [{ name: 'Gi1/0/1', status: 'up' }, { name: 'Gi1/0/2', voisin: { nom: 'TEL-01', port: 'p1', description: 'x'.repeat(400), famille: 'phone', autre: 1 } }, { name: 'Gi1/0/3', voisin: 'un texte' }, { name: 'Gi1/0/4', voisin: { nom: 12, famille: '<img>' } }] }],
+    [{ ip: '10.0.0.1', ports: [{ name: 'GigabitEthernet1/0/1', voisin: { nom: 'AP-01', famille: 'ap' } }, { name: 'Gi1/0/2', voisin: { nom: 'AUTRE', famille: 'ap' } }] }],
+  ], ['prtg', 'snmp']);
+  const v = Object.fromEntries(d.ports.map(p => [p.name, p.voisin]));
+  assert.deepStrictEqual(v['Gi1/0/1'], { nom: 'AP-01', port: '', description: '', famille: 'ap' }, 'la seconde source complète ce que la première ignore');
+  assert.deepStrictEqual([v['Gi1/0/2'].nom, v['Gi1/0/2'].famille, v['Gi1/0/2'].description.length, Object.keys(v['Gi1/0/2']).sort().join()], ['TEL-01', 'phone', 160, 'description,famille,nom,port']);
+  assert.strictEqual(v['Gi1/0/3'], null); assert.strictEqual(v['Gi1/0/4'], null, 'ni nom ni description : pas de voisin');
+});
 test('SNMP : sur un switch Juniper, seuls les ports physiques sont remontés ; les erreurs de trame donnent l\'état « error »', async () => {
   const snmp = require('net-snmp'), T = snmp.ObjectType, RO = snmp.MaxAccess['read-only'];
   const agent = snmp.createAgent({ port: 18962, disableAuthorization: true, address: '127.0.0.1' }, () => {});

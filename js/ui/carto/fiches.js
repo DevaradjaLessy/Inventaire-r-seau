@@ -5,6 +5,7 @@ import { ico } from '../../icones.js';
 import { ipValide, normMac, verifierUnicite } from '../../services/doublons.js';
 import { Store } from '../../store.js';
 import { DEV_STATE, measuredDev, measuredPort } from '../../services/mesures.js';
+import { nomFamille, vuSurLePort } from '../../services/detection.js';
 import { byId, cablesOf, catOf, labelOf, locLabel, poeColor, poeUsage, portsOf, rackUsage, vlanOf } from '../../services/requetes.js';
 import { connectedLabel, effStatus, farEnd, isNetDev, isPassiveNode, otherEnd, outletInfo, scopeOf, STATE_COL, STATE_LABEL } from '../../services/cablage.js';
 import { Actions, Changes, Modal, run, stDev, stPort, toast, undoAction, vlanChip } from '../socle.js';
@@ -13,12 +14,10 @@ import { resumeImpact } from '../interventions.js';
 import { traceSection } from './tracage.js';
 import { interventionsSec } from '../planning.js';
 import { structButtons } from './structure.js';
-import { Cache } from '../../store.js';
 import { liaisonsDe } from '../../services/liaisons.js';
 import { batLabel } from '../../services/requetes.js';
 
 /* Équipements de l'inventaire par adresse MAC, pour rattacher une adresse vue par un switch */
-const parMac = () => Cache.get('parMac', () => new Map(Store.db.devices.filter(d => d.mac && d.status !== 'retired').map(d => [normMac(d.mac) || d.mac, d])));
 
 /* ---------- Fiche de détails ---------- */
 const kv = rows => `<dl class="kv">${rows.filter(r => r && r[1] !== '' && r[1] != null).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
@@ -39,6 +38,23 @@ const opt = (v, l, cur) => `<option value="${esc(v)}" ${String(v) === String(cur
 const fmtRate = v => v >= 1000 ? `${(v / 1000).toFixed(2)} Gb/s` : v >= 1 ? `${v.toFixed(1)} Mb/s` : `${Math.round(v * 1000)} kb/s`;
 const fmtClock = ts => new Date(ts).toLocaleTimeString('fr-FR');
 const mono = s => s ? `<span class="mono">${esc(s)}</span>` : '—';
+/* Ce que le switch voit au bout d'un port (supervision) : l'appareil qui s'y annonce, sa famille, les adresses apprises,
+   et le rapprochement avec l'inventaire. Affiché sur la fiche du port et sur celle de la prise qu'il dessert. */
+function vuParLeSwitch(portId) {
+  const v = vuSurLePort(portId); if (!v) return '';
+  const lien = d => `<a data-act="sel" data-id="${d.id}" style="cursor:pointer">${esc(d.hostname)}</a>`, lignes = [];
+  if (v.voisin) {
+    const f = nomFamille(v.voisin.famille);
+    lignes.push(['Appareil annoncé', `${v.voisin.equipement ? lien(v.voisin.equipement) : `<b>${esc(v.voisin.nom || '—')}</b>`}${f ? `<br><small class="dim">${esc(f)}${v.voisin.origine === 'nom' ? ', d\'après son nom' : ''}</small>` : ''}`]);
+    if (v.voisin.port) lignes.push(['Son port', esc(v.voisin.port)]);
+    if (v.voisin.description) lignes.push(['Description', esc(v.voisin.description)]);
+  } else if (!v.plusieurs && v.adresses.length) lignes.push(['Appareil annoncé', '<span class="dim">L\'appareil ne s\'annonce pas au switch</span>']);
+  if (v.plusieurs) lignes.push(['Adresses vues', `${v.mesure.macCount} adresses : ce port mène à un autre switch`]);
+  else if (v.adresses.length) lignes.push(['Adresses vues', v.adresses.slice(0, 8).map(a => `${mono(a.mac)}${a.equipement ? ` → ${lien(a.equipement)}` : ''}`).join('<br>')]);
+  if (!lignes.length) return '';
+  if (!v.equipement && !v.plusieurs) lignes.push(['Inventaire', `<span class="st"><span style="color:${COL.warn};display:flex">${ico('alert')}</span>Appareil absent de l'inventaire</span>`]);
+  return sec(`${ico('gauge')}Vu par le switch`, `<div class="vu-switch">${kv(lignes)}</div>`);
+}
 
 /* Grille des ports d'un équipement, disposée comme sur la façade */
 function portGrid(dev) {
@@ -132,13 +148,12 @@ const Detail = {
     const liveSec = m ? sec(`${ico('gauge')}Mesure en direct`, kv([['État mesuré', stPort(m.status || p.status)], gap ? ['Écart', `<span class="st"><span style="color:${COL.warn};display:flex">${ico('alert')}</span>Saisi : ${PORT_STATUS[p.status].label}</span>`] : null,
       m.inMbps != null ? ['Trafic entrant', fmtRate(m.inMbps)] : null, m.outMbps != null ? ['Trafic sortant', fmtRate(m.outMbps)] : null, m.totalMbps != null ? ['Trafic total', fmtRate(m.totalMbps)] : null, m.speedMbps ? ['Débit négocié', fmtSpeed(m.speedMbps)] : null, m.poeW ? ['PoE mesuré', `${m.poeW} W`] : null,
       m.errors ? ['Erreurs de trame', `<span class="st"><span style="color:${COL.warn};display:flex">${ico('alert')}</span>${m.errors}</span> <small class="dim">depuis le relevé précédent</small>`] : null,
-      // Une adresse vue par le switch est rattachée à l'équipement de l'inventaire qui la porte : le lien entre le port et ce qui y est branché
-      m.macCount > m.macs.length ? ['MAC vues', `${m.macCount} adresses : ce port mène à un autre switch`] : m.macs.length ? ['MAC vues', m.macs.slice(0, 8).map(a => { const x = parMac().get(normMac(a) || a); return `${mono(a)}${x ? ` → <a data-act="sel" data-id="${x.id}" style="cursor:pointer">${esc(x.hostname)}</a>` : ' <small class="dim">inconnue de l\'inventaire</small>'}`; }).join('<br>')] : null, ['Relevé', fmtClock(m.ts)]])) : '';
+      ['Relevé', fmtClock(m.ts)]])) : '';
     const cabList = cabs.map(c => { const o = otherEnd(c, p.id), side = passive ? (isPassiveNode(o) ? 'Arrière' : 'Avant') : ''; return `<div class="li" data-act="sel" data-id="${o}">${ico('cable')}<span>${side ? side + ' : ' : ''}${esc(labelOf(o))}</span><small>${esc(c.type.toUpperCase())} · ${c.length} m</small></div>`; }).join('') || '<span class="dim">Aucun câble sur ce port</span>';
     return dHead(passive ? 'passive' : 'switch', `${p.name}`, `Port de <a data-act="sel" data-id="${dev.id}" style="cursor:pointer">${esc(dev.hostname)}</a> · ${esc(locLabel(dev.id, { short: true }))}`) +
       sec('', `<div class="btns"><button class="btn sm pri" data-act="trace" data-id="${p.id}" ${cabs.length ? '' : 'disabled'}>${ico('trace')}Tracer</button><button class="btn sm" data-act="connect" data-id="${p.id}">${ico('link')}Connecter à…</button>${passive ? '' : p.status === 'disabled' ? `<button class="btn sm" data-act="port-retablir" data-id="${p.id}">${ico('bolt')}Réactiver</button>` : `<button class="btn sm danger" data-act="port-couper" data-id="${p.id}" data-tip="Désactiver le port|Avec un motif, noté dans l'historique">${ico('x')}Désactiver</button>`}<button class="btn sm danger" data-act="disconnect" data-id="${p.id}" ${cabs.length ? '' : 'disabled'}>${ico('unlink')}Débrancher</button></div>`) +
       sec('Port', kv([['Identifiant', mono(p.id)], ['Type', `${PORT_KIND[p.kind]} · ${PORT_ROLE[p.role]}`], passive ? null : ['PoE', p.poe.capable ? (p.poe.watts ? `<span class="st"><i style="background:${poeColor(p.poe.watts)}"></i>${p.poe.watts} W</span>` : 'Oui (aucune charge)') : 'Non']])) +
-      liveSec + sec('Configuration', form) + sec('Câblage', cabList);
+      liveSec + (passive ? '' : vuParLeSwitch(p.id)) + sec('Configuration', form) + sec('Câblage', cabList);
   },
   outlet(o) {
     const inf = outletInfo(o.id), cabs = cablesOf(o.id);
@@ -152,7 +167,8 @@ const Detail = {
         ['Switch', inf.net ? `<a data-act="sel" data-id="${inf.net.id}" style="cursor:pointer">${esc(labelOf(inf.net.id))}</a>` : '—'],
         inf.net ? ['VLAN', vlanChip(inf.net.vlan)] : null, inf.net ? ['Débit', fmtSpeed(inf.net.speed)] : null,
         inf.net && inf.net.poe.watts ? ['PoE', `${inf.net.poe.watts} W`] : null,
-        ['Terminal', inf.term ? `<a data-act="sel" data-id="${inf.term.deviceId}" style="cursor:pointer">${esc(byId(inf.term.deviceId).hostname)}</a>` : esc(inf.net?.connected) || '—']]));
+        ['Terminal', inf.term ? `<a data-act="sel" data-id="${inf.term.deviceId}" style="cursor:pointer">${esc(byId(inf.term.deviceId).hostname)}</a>` : esc(inf.net?.connected) || '—']])) +
+      (inf.net ? vuParLeSwitch(inf.net.id) : '');
   },
 };
 

@@ -2,6 +2,8 @@
 import { Store } from './store.js';
 import { Sync } from './sync.js';
 import { topology } from './services/topologie.js';
+import { outletInfo } from './services/cablage.js';
+import { familleDapresNom } from './services/detection.js';
 import { trace } from './services/tracage.js';
 import { connect, disconnect } from './services/connexion.js';
 import { installFromStock, removeDevice } from './services/installation.js';
@@ -72,4 +74,4 @@ showTab(UI.tab);
 if (api) { const securite = () => chargerSecurite().catch(() => { /* serveur injoignable : l'étiquette d'état le dit déjà */ }); securite(); setInterval(securite, 300000); }
 Live.load();
 Live.start();   // relevés de supervision, si une source est configurée
-window.NetCarto = { toast, impactOf, planAdressage, ageDuParc, liaisons, normIf, Sync, addRoom, deleteStructure, deleteVlan, Live, Store, UI, Views, Views3D, Carto, trace, topology, connect, disconnect, installFromStock, removeDevice, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic
+window.NetCarto = { toast, outletInfo, familleDapresNom, impactOf, planAdressage, ageDuParc, liaisons, normIf, Sync, addRoom, deleteStructure, deleteVlan, Live, Store, UI, Views, Views3D, Carto, trace, topology, connect, disconnect, installFromStock, removeDevice, select: (id, o) => select(id, o) };   // accès depuis la console du navigateur, pour le diagnostic

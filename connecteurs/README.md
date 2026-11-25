@@ -111,6 +111,17 @@ Quand un équipement ne répond pas, le message dit quoi vérifier. En v2c, un a
 
 Options : `seuilErreurs` (10 par défaut : nombre d'erreurs de trame entre deux relevés au-delà duquel le port passe en erreur), `macs` (`false` pour ne pas lire la table de commutation).
 
+**L'appareil branché sur chaque port.** Deux indices viennent du switch, et NetCarto les affiche sur la fiche du port et sur celle de la prise murale qu'il dessert :
+
+| Indice | D'où il vient | Ce qu'il donne |
+|---|---|---|
+| Adresses MAC apprises sur le port | Table de commutation (BRIDGE-MIB, Q-BRIDGE-MIB) | L'adresse de l'appareil ; son nom s'il est dans l'inventaire avec cette adresse |
+| Voisin annoncé | LLDP (LLDP-MIB, norme IEEE 802.1AB) | Le nom que l'appareil se donne, son port, sa description, et sa famille (téléphone, borne Wi-Fi, switch, routeur, poste) |
+
+Les téléphones IP, les bornes Wi-Fi, les switchs et certaines imprimantes s'annoncent en LLDP ; les postes de travail, en général, non. Quand un appareil ne dit pas sa famille, NetCarto la déduit de son nom, selon la nomenclature réglée dans `js/config.js` (`NOMENCLATURE` : `TEL-` pour un téléphone, `IMP-` pour une imprimante, `PC-` pour un poste… à adapter à votre convention). Un appareil vu par le switch et inconnu de l'inventaire est signalé comme tel. Rien n'est écrit dans la base : c'est une lecture.
+
+LLDP doit être actif sur le switch (il l'est par défaut sur la plupart des switchs d'entreprise). Option `lldp: false` pour ne pas lire les voisins. Le nom d'un poste qui ne s'annonce pas ne peut pas venir du switch : il faudrait croiser son adresse avec le DHCP ou le DNS, ce que NetCarto ne fait pas.
+
 Seules les interfaces Ethernet physiques sont gardées. Les unités logiques (`ge-0/0/0.0`), les bouclages, les agrégats et les interfaces internes sont écartés.
 
 #### Switchs Juniper (Junos)

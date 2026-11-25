@@ -10,7 +10,10 @@
    le relevé précédent (l'état devient « error » au-delà du seuil), et adresses MAC apprises (table de commutation).
    Seules les interfaces Ethernet sont gardées (ifType) : les unités logiques, bouclages, agrégats et interfaces
    internes qu'exposent Junos et d'autres systèmes ne polluent pas le relevé.
-   Options : seuilErreurs (10 par défaut, erreurs entre deux relevés), macs (true par défaut ; false pour ne pas lire la table).
+   Elle remonte aussi le voisin de chaque port, quand l'appareil branché s'annonce en LLDP (téléphones, bornes, switchs, certaines
+   imprimantes ; rarement les postes) : son nom, son port, sa description et sa famille, déduite de ses capacités.
+   Options : seuilErreurs (10 par défaut, erreurs entre deux relevés), macs (true par défaut ; false pour ne pas lire la table),
+   lldp (true par défaut ; false pour ne pas lire les voisins).
    Ce que la source ne remonte pas : la puissance PoE par port et le VLAN, qui ne sont pas dans une MIB commune à toutes les marques.
 
    À VÉRIFIER SUR VOS ÉQUIPEMENTS : validé contre un agent SNMP simulé, pas sur du matériel réel. */
@@ -25,9 +28,26 @@ const OID = {
   dot1qTpFdbPort: '1.3.6.1.2.1.17.7.1.2.2.1.2', dot1dTpFdbPort: '1.3.6.1.2.1.17.4.3.1.2', dot1dBasePortIfIndex: '1.3.6.1.2.1.17.1.4.1.2',
   ifName: '1.3.6.1.2.1.31.1.1.1.1', ifHighSpeed: '1.3.6.1.2.1.31.1.1.1.15',
   ifHCInOctets: '1.3.6.1.2.1.31.1.1.1.6', ifHCOutOctets: '1.3.6.1.2.1.31.1.1.1.10',
+  // LLDP (LLDP-MIB, norme IEEE 802.1AB) : ce que l'appareil branché annonce de lui-même. Voisins indexés par (horodatage, port local, rang).
+  lldpLocPortId: '1.0.8802.1.1.2.1.3.7.1.3', lldpLocPortDesc: '1.0.8802.1.1.2.1.3.7.1.4',
+  lldpRemPortId: '1.0.8802.1.1.2.1.4.1.1.7', lldpRemSysName: '1.0.8802.1.1.2.1.4.1.1.9', lldpRemSysDesc: '1.0.8802.1.1.2.1.4.1.1.10', lldpRemSysCapEnabled: '1.0.8802.1.1.2.1.4.1.1.12',
 };
 const big = v => (Buffer.isBuffer(v) ? BigInt('0x' + (v.toString('hex') || '0')) : BigInt(v || 0));
 const ETHERNET = new Set([6, 62, 69, 117]);   // ifType : ethernetCsmacd, fastEther, fastEtherFX, gigabitEthernet
+/* Texte lisible d'une valeur SNMP : un identifiant binaire de six octets est une adresse MAC */
+function lisible(v) {
+  if (v === null || v === undefined) return '';
+  if (!Buffer.isBuffer(v)) return String(v);
+  const texte = v.toString('utf8');
+  if (v.length === 6 && /[^\x20-\x7e]/.test(v.toString('latin1'))) return [...v].map(o => o.toString(16).padStart(2, '0')).join(':');
+  return /\ufffd/.test(texte) ? [...v].map(o => o.toString(16).padStart(2, '0')).join(':') : texte;
+}
+/* Famille d'un voisin d'après ses capacités actives (LldpSystemCapabilitiesMap : bit de poids fort en premier —
+   autre, répéteur, pont, borne Wi-Fi, routeur, téléphone, câble, poste). Un téléphone ou une borne ont souvent aussi le bit « pont ». */
+function familleLldp(v) {
+  const o = Buffer.isBuffer(v) && v.length ? v[0] : 0;
+  return o & 0x04 ? 'phone' : o & 0x10 ? 'ap' : o & 0x20 ? 'switch' : o & 0x08 ? 'router' : o & 0x01 ? 'poste' : '';
+}
 const MACS_MAX = 8;                           // au-delà, le port mène à un autre switch : on garde le nombre, pas la liste
 /* Adresses MAC par interface. fdb : Map(indice → port du pont), l'indice se terminant par les six octets de l'adresse ;
    base : Map(port du pont → index d'interface). Renvoie Map(index d'interface → adresses), avec .total (nombre réel par interface). */
@@ -95,6 +115,21 @@ module.exports = function creer(cfg) {
         const base = await facultative(s, OID.dot1dBasePortIfIndex);
         if (base.size) { let fdb = await facultative(s, OID.dot1qTpFdbPort); if (!fdb.size) fdb = await facultative(s, OID.dot1dTpFdbPort); macs = macsParPort(fdb, base); }
       }
+      // Voisins annoncés (LLDP). Le numéro de port local de LLDP n'est pas toujours l'index d'interface : le port est retrouvé
+      // par son nom (description ou identifiant du port local), puis par un identifiant qui serait l'index, puis par le numéro lui-même.
+      const voisins = new Map();
+      if (cfg.lldp !== false) {
+        const [rNom, rPort, rDesc, rCap] = await Promise.all([OID.lldpRemSysName, OID.lldpRemPortId, OID.lldpRemSysDesc, OID.lldpRemSysCapEnabled].map(o => facultative(s, o)));
+        if (rNom.size || rDesc.size) {
+          const [lId, lDesc] = await Promise.all([OID.lldpLocPortId, OID.lldpLocPortDesc].map(o => facultative(s, o)));
+          const parNom = new Map([...nom].map(([i, n]) => [String(n).toLowerCase(), i]));
+          const interfaceDe = num => { for (const v of [lDesc.get(num), lId.get(num)]) { const t = lisible(v).toLowerCase(); if (t && parNom.has(t)) return parNom.get(t); } const id = lisible(lId.get(num)); return nom.has(id) ? id : nom.has(num) ? num : null; };
+          for (const indice of new Set([...rNom.keys(), ...rDesc.keys()])) {
+            const i = interfaceDe(String(indice).split('.')[1]); if (i === null || voisins.has(i)) continue;
+            voisins.set(i, { nom: lisible(rNom.get(indice)), port: lisible(rPort.get(indice)), description: lisible(rDesc.get(indice)), famille: familleLldp(rCap.get(indice)) });
+          }
+        }
+      }
       const maintenant = Date.now(), cle = `${d.ip}:${d.port || cfg.port || 161}`, avant = precedent.get(cle), courant = { t: maintenant, c: new Map() }, ports = [];
       for (const [i, n] of nom) {
         const name = String(n), a = +admin.get(i), o = +oper.get(i);
@@ -109,7 +144,7 @@ module.exports = function creer(cfg) {
         // Erreurs de trame apparues depuis le relevé précédent (compteur remis à zéro : on repart de zéro)
         const errors = p0 && cErr !== null && p0[2] !== null && p0[2] !== undefined ? (cErr >= p0[2] ? Number(cErr - p0[2]) : 0) : null;
         const status = a === 2 ? 'disabled' : o !== 1 ? 'down' : errors !== null && errors >= seuilErreurs ? 'error' : 'up';
-        ports.push({ name, status, speedMbps: +vitesse.get(i) || null, inMbps, outMbps, errors, macs: macs.get(i) || [], macCount: macs.total.get(i) ?? null });
+        ports.push({ name, status, speedMbps: +vitesse.get(i) || null, inMbps, outMbps, errors, macs: macs.get(i) || [], macCount: macs.total.get(i) ?? null, voisin: voisins.get(i) || null });
       }
       // Ordre stable et lisible, quel que soit l'ordre des index de l'équipement
       ports.sort((x, y) => x.name.localeCompare(y.name, 'fr', { numeric: true }));

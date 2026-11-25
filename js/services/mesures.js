@@ -4,7 +4,7 @@
 
    Une source renvoie un relevé au format commun (contrat version 1) :
    { version: 1, source, ts, devices: [{ ip, hostname, state, message,
-       ports: [{ name, status, speedMbps, inMbps, outMbps, totalMbps, poeW, vlan, macs, errors, macCount }] }],
+       ports: [{ name, status, speedMbps, inMbps, outMbps, totalMbps, poeW, vlan, macs, errors, macCount, voisin }] }],
      sources: [{ nom, ok, erreur, equipements, ts }] }   (sources : présent quand le relevé vient du relais ou du serveur)
    state  : up | warning | down | unknown
    status : up | down | disabled | error
@@ -27,9 +27,20 @@ function normIf(name) {
   return s;
 }
 /* Source « simulation » : fait vivre le jeu de démonstration sans aucun équipement réel */
+/* Voisin annoncé par un port (LLDP) : des textes bornés et une famille prise dans une liste fermée, ou null */
+const FAMILLES_ANNONCEES = ['phone', 'ap', 'switch', 'router', 'poste'];
+function voisinPropre(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const t = (x, max) => (typeof x === 'string' ? x.trim().slice(0, max) : '');
+  const out = { nom: t(v.nom, 80), port: t(v.port, 80), description: t(v.description, 160), famille: FAMILLES_ANNONCEES.includes(v.famille) ? v.famille : '' };
+  return out.nom || out.description ? out : null;
+}
 const sim = new Map();
 function simulate() {
   const devices = [];
+  // Comme sur un vrai réseau, les téléphones et les bornes s'annoncent au switch ; les postes et les caméras, non
+  const parMac = new Map(Store.db.devices.filter(x => x.mac && x.status !== 'retired').map(x => [x.mac, x]));
+  const annonce = mac => { const t = mac && parMac.get(mac), c = t && catOf(t); return c && (c.category === 'phone' || c.category === 'ap') ? { nom: t.hostname, port: c.category === 'phone' ? 'port 1' : 'eth0', description: `${c.brand} ${c.model}`, famille: c.category } : null; };
   for (const d of Store.db.devices) {
     const c = catOf(d);
     if (!c || d.status === 'retired' || c.category === 'passive' || !d.ip) continue;
@@ -40,7 +51,7 @@ function simulate() {
       sim.set(p.id, st);
       const up = st === 'up', load = Math.random() ** 3 * (p.role === 'uplink' ? 0.25 : 0.08);
       return { name: p.name, status: st, speedMbps: p.speed, inMbps: up ? +(p.speed * load).toFixed(2) : 0, outMbps: up ? +(p.speed * load * (0.2 + Math.random() * 0.6)).toFixed(2) : 0,
-        poeW: up && p.poe.watts ? +(p.poe.watts + (Math.random() - 0.5) * 0.8).toFixed(1) : 0, vlan: p.vlan, macs: up && p.mac ? [p.mac] : [] };
+        poeW: up && p.poe.watts ? +(p.poe.watts + (Math.random() - 0.5) * 0.8).toFixed(1) : 0, vlan: p.vlan, macs: up && p.mac ? [p.mac] : [], voisin: up ? annonce(p.mac) : null };
     });
     devices.push({ ip: d.ip, hostname: d.hostname, state: d.status === 'fault' ? 'down' : d.status === 'maintenance' ? 'warning' : 'up', message: d.status === 'fault' ? 'Aucune réponse' : '', ports });
   }
@@ -122,13 +133,13 @@ const Live = {
         if (!p) { if (mp.name && !/\.\d+$/.test(mp.name)) inconnus.push(String(mp.name)); continue; }
         // Une mesure est un nombre ou rien : une source mal réglée ou compromise ne fait entrer aucun texte par là
         const nb = v => typeof v === 'number' && Number.isFinite(v) ? v : null;
-        const mesure = { status: ['up', 'down', 'disabled', 'error'].includes(mp.status) ? mp.status : null, speedMbps: nb(mp.speedMbps), inMbps: nb(mp.inMbps), outMbps: nb(mp.outMbps), totalMbps: nb(mp.totalMbps), poeW: nb(mp.poeW), vlan: nb(mp.vlan), macs: Array.isArray(mp.macs) ? mp.macs.filter(a => typeof a === 'string') : [], errors: nb(mp.errors), macCount: nb(mp.macCount), ts, nom: String(mp.name), qui };
+        const mesure = { status: ['up', 'down', 'disabled', 'error'].includes(mp.status) ? mp.status : null, speedMbps: nb(mp.speedMbps), inMbps: nb(mp.inMbps), outMbps: nb(mp.outMbps), totalMbps: nb(mp.totalMbps), poeW: nb(mp.poeW), vlan: nb(mp.vlan), macs: Array.isArray(mp.macs) ? mp.macs.filter(a => typeof a === 'string') : [], errors: nb(mp.errors), macCount: nb(mp.macCount), voisin: voisinPropre(mp.voisin), ts, nom: String(mp.name), qui };
         const deja = this.port.get(p.id);
         if (!deja) { this.port.set(p.id, mesure); continue; }
         const eteints = ['down', 'disabled'];
         if (deja.status && mesure.status && eteints.includes(deja.status) && eteints.includes(mesure.status)) deja.status = mesure.status = 'disabled';
         if (deja.status && mesure.status && deja.status !== mesure.status) this.ecarts.push(`${d.hostname} — ${deja.nom} : ${deja.qui} dit « ${deja.status} », ${qui} dit « ${mesure.status} »`);
-        for (const k of ['status', 'speedMbps', 'inMbps', 'outMbps', 'totalMbps', 'poeW', 'vlan', 'errors', 'macCount']) if (deja[k] === null || deja[k] === undefined) deja[k] = mesure[k];
+        for (const k of ['status', 'speedMbps', 'inMbps', 'outMbps', 'totalMbps', 'poeW', 'vlan', 'errors', 'macCount', 'voisin']) if (deja[k] === null || deja[k] === undefined) deja[k] = mesure[k];
         if (mesure.macs.length) deja.macs = [...new Set([...deja.macs, ...mesure.macs])];
       }
       const avant = this.diag.get(d.id);

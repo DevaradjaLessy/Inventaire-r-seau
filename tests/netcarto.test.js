@@ -207,6 +207,41 @@ test('Topologie : les terminaux se masquent, se comptent, ou se dessinent un par
   await page.click('[data-act=topo-ends][data-v=aucun]');
   e = await etat(); assert.deepStrictEqual([e.choix, e.pastilles, e.comptes], ['aucun', 0, 0]);
 });
+test('Prise murale : la fiche dit ce que le switch voit au bout — appareil annoncé, famille, adresse MAC rattachée à l\'inventaire', async page => {
+  // Trois prises de l'étage, chacune reliée à un port de switch ; une borne de l'inventaire sert de référence pour l'adresse MAC
+  const ctx = await page.evaluate(() => {
+    const S = NetCarto.Store, d = S.db, sw = d.devices.find(x => x.hostname === 'SW-A1-ACC-01');
+    const prises = d.outlets.map(o => ({ o, net: NetCarto.outletInfo(o.id).net })).filter(x => x.net && x.net.deviceId === sw.id).slice(0, 4);
+    const borne = d.devices.find(x => x.hostname === 'AP-A1-01');
+    Object.assign(NetCarto.Live.cfg, { type: 'relais' });
+    NetCarto.Live.apply({ version: 1, ts: Date.now(), source: 'snmp', devices: [{ ip: sw.ip, hostname: sw.hostname, state: 'up', ports: [
+      { name: prises[0].net.name, status: 'up', macs: ['02:aa:00:00:00:01'], macCount: 1, voisin: { nom: 'TEL-ACCUEIL-07', port: 'port 1', description: 'Téléphone IP de démonstration', famille: 'phone' } },
+      { name: prises[1].net.name, status: 'up', macs: [borne.mac], macCount: 1, voisin: { nom: borne.hostname.toLowerCase() + '.exemple.interne', port: 'eth0', description: '', famille: 'ap' } },
+      { name: prises[2].net.name, status: 'up', macs: ['02:aa:00:00:00:03'], macCount: 1, voisin: { nom: 'IMP-COMPTA-02', port: '', description: '', famille: '' } },
+      { name: prises[3].net.name, status: 'up', macs: ['02:aa:00:00:00:04'], macCount: 1 }] }] });
+    NetCarto.Live.state = 'ok'; NetCarto.Live.emit();
+    return { prises: prises.map(x => x.o.id), ports: prises.map(x => x.net.id), borne: borne.id, nomBorne: borne.hostname };
+  });
+  const fiche = async id => { await page.evaluate(i => NetCarto.select(i, { keep: true }), id); return (await page.locator('#detail').innerText()).replace(/\s+/g, ' '); };
+  // 1. Un téléphone qui s'annonce, inconnu de l'inventaire : nom, famille dite par l'appareil, port, description, adresse
+  let t = await fiche(ctx.prises[0]);
+  for (const attendu of [/Vu par le switch/i, /TEL-ACCUEIL-07/, /Téléphone IP/, /port 1/, /Téléphone IP de démonstration/, /02:aa:00:00:00:01/, /absent de l'inventaire/]) assert.match(t, attendu);
+  // 2. Une borne connue : son annonce (nom complet, autre casse) et son adresse mènent à sa fiche
+  t = await fiche(ctx.prises[1]); assert.match(t, new RegExp(ctx.nomBorne)); assert.doesNotMatch(t, /absent de l'inventaire/);
+  await page.click('#detail .vu-switch [data-act=sel]'); assert.strictEqual(await page.evaluate(() => NetCarto.Carto.sel), ctx.borne);
+  // 3. Un appareil qui ne dit pas ce qu'il est : la famille vient de la nomenclature des noms (« IMP- » : imprimante)
+  t = await fiche(ctx.prises[2]); assert.match(t, /IMP-COMPTA-02/); assert.match(t, /Imprimante/); assert.match(t, /d'après son nom/);
+  // 4. Un appareil muet : seule l'adresse est connue
+  t = await fiche(ctx.prises[3]); assert.match(t, /02:aa:00:00:00:04/); assert.match(t, /ne s'annonce pas/);
+  // 5. La fiche du port du switch dit la même chose
+  t = await fiche(ctx.ports[0]); assert.match(t, /Appareil annoncé/); assert.match(t, /TEL-ACCUEIL-07/);
+  // 6. Sans supervision, la section n'apparaît pas
+  await page.evaluate(() => { NetCarto.Live.cfg.type = 'none'; NetCarto.Live.vider(); NetCarto.Live.state = 'off'; NetCarto.Live.emit(); });
+  assert.doesNotMatch(await fiche(ctx.prises[0]), /Vu par le switch/i);
+  // La nomenclature seule
+  assert.deepStrictEqual(await page.evaluate(() => ['TEL-A1-01', 'ap-hall-2', 'IMP-RH', 'SRV-PAIE', 'PC-0412', 'machin', 'APPLE-TV', 'SWEDEN', 'ap3'].map(NetCarto.familleDapresNom)), ['phone', 'ap', 'printer', 'server', 'poste', '', '', '', 'ap'],
+    'le préfixe doit être suivi d\'autre chose qu\'une lettre');
+});
 test('Tableau de bord : la tuile Alertes donne le total, la répartition par gravité en une barre, et le détail en toutes lettres', async page => {
   await page.click('[data-tab=dash]');
   // Référence : la liste des alertes, juste en dessous
@@ -961,7 +996,7 @@ test('Sécurité : rien de ce que renvoie une supervision (noms, messages, erreu
       sources: [{ nom: charge, ok: false, erreur: charge, equipements: 0, ts: Date.now() }, { nom: 'snmp' + charge, ok: true, erreur: '', avertissement: charge, equipements: 2, ts: Date.now() }],
       devices: [
         { ip: sw.ip, hostname: charge, state: 'warning', message: charge, sources: [charge], ecarts: [charge + ' dit « up », ' + charge + ' dit « down »'],
-          ports: [{ name: 'Gi1/0/1', status: 'error', errors: 12, macs: [charge, '02:00:00:00:00:01'], macCount: 2 }, { name: charge, status: 'up' }, { name: 'Port' + charge, status: 'down' },
+          ports: [{ name: 'Gi1/0/1', status: 'error', errors: 12, macs: [charge, '02:00:00:00:00:01'], macCount: 2, voisin: { nom: charge, port: charge, description: charge, famille: charge } }, { name: charge, status: 'up' }, { name: 'Port' + charge, status: 'down' },
             // Des mesures qui devraient être des nombres : un texte à leur place est écarté, pas affiché
             { name: 'Gi1/0/2', status: 'up', errors: charge, macCount: charge, poeW: charge, speedMbps: charge, inMbps: charge, outMbps: charge, totalMbps: charge, vlan: charge, macs: [{ piege: charge }, 7] }] },
         { ip: ap.ip, hostname: 'x', state: 'down', message: charge, ports: [] },

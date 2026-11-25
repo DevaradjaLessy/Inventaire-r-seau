@@ -3,8 +3,10 @@
 
    équipement : { ip, hostname, state, message, ports: [port] }
    state      : up | warning | down | unknown
-   port       : { name, status, speedMbps, inMbps, outMbps, totalMbps, poeW, vlan, macs, errors, macCount }
+   port       : { name, status, speedMbps, inMbps, outMbps, totalMbps, poeW, vlan, macs, errors, macCount, voisin }
                 errors : erreurs de trame depuis le relevé précédent ; macCount : nombre d'adresses apprises sur le port
+                voisin : l'appareil branché tel qu'il s'annonce au switch (LLDP), ou null :
+                         { nom, port, description, famille } ; famille : phone | ap | switch | router | poste | ''
    Après fusion, un équipement porte aussi : sources (noms des sources qui l'ont vu) et ecarts (désaccords entre sources).
    status     : up | down | disabled | error */
 'use strict';
@@ -13,13 +15,21 @@ const STATES = ['up', 'warning', 'down', 'unknown'];
 const STATUSES = ['up', 'down', 'disabled', 'error'];
 const GRAVITE = { unknown: 0, up: 1, warning: 2, down: 3 };
 const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+/* Voisin annoncé : forme fermée, textes bornés ; sans nom ni description, il n'y a pas de voisin */
+const FAMILLES = ['phone', 'ap', 'switch', 'router', 'poste'];
+function voisin(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const t = (x, max) => (typeof x === 'string' ? x.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max) : '');
+  const out = { nom: t(v.nom, 80), port: t(v.port, 80), description: t(v.description, 160), famille: FAMILLES.includes(v.famille) ? v.famille : '' };
+  return out.nom || out.description ? out : null;
+}
 
 function port(p) {
   return {
     name: String(p.name || '').slice(0, 120), status: STATUSES.includes(p.status) ? p.status : null,
     speedMbps: num(p.speedMbps), inMbps: num(p.inMbps), outMbps: num(p.outMbps), totalMbps: num(p.totalMbps),
     poeW: num(p.poeW), vlan: num(p.vlan), macs: Array.isArray(p.macs) ? p.macs.filter(m => typeof m === 'string').map(m => m.slice(0, 40)) : [],
-    errors: num(p.errors), macCount: num(p.macCount),
+    errors: num(p.errors), macCount: num(p.macCount), voisin: voisin(p.voisin),
   };
 }
 function equipement(d) {

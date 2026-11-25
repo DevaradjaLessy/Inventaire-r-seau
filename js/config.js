@@ -74,6 +74,15 @@ const CABLE_TYPES = {
 };
 /* États d'une intervention planifiée */
 const INTERV_STATUS = { planned: { label: 'À venir', color: COL.accent }, doing: { label: 'En cours', color: COL.warn }, done: { label: 'Terminée', color: COL.up } };
+/* Nomenclature des noms d'hôte : le début du nom dit la famille de l'appareil. Elle sert à reconnaître un appareil annoncé par un switch
+   quand il ne dit pas lui-même ce qu'il est. À adapter à la convention de nommage de l'entreprise : première règle qui convient.
+   Le préfixe doit être suivi d'autre chose qu'une lettre (« AP-12 », « ap3 »), pour qu'« APPLE-TV » ne passe pas pour une borne. */
+const prefixe = mots => new RegExp(`^(${mots})(?![a-zà-ÿ])`, 'i');
+const NOMENCLATURE = [['phone', prefixe('tel|telephone|tph|phone|ipphone')], ['ap', prefixe('ap|borne|wifi|wlan')], ['camera', prefixe('cam|camera|ipc')],
+  ['printer', prefixe('imp|prn|print|printer|mfp|copieur')], ['server', prefixe('srv|server|serveur|esx')], ['switch', prefixe('sw|switch')], ['router', prefixe('rtr|rt|router|routeur')],
+  ['firewall', prefixe('fw|pare-?feu')], ['ups', prefixe('ond|onduleur|ups')], ['poste', prefixe('pc|pt|ws|lt|lap|laptop|desk|desktop|poste')]];
+/* Nom de chaque famille reconnue ; celles qui ne sont pas (encore) des familles du catalogue ont le leur ici */
+const FAMILLES_VUES = { poste: 'Poste de travail', printer: 'Imprimante' };
 const HISTORY_TYPES = { add: 'Ajout', move: 'Déplacement', remove: 'Retrait', edit: 'Modification', stock: 'Stock', import: 'Import', catalog: 'Catalogue' };
 const LAYERS = { perimeter: 'Périmètre', core: 'Cœur', distribution: 'Distribution', access: 'Accès', endpoint: 'Terminaux' };
 const RACK_FULL_PCT = 90;   // seuil d'alerte « baie pleine »
@@ -83,4 +92,4 @@ const U_M = 0.04445;        // hauteur d'une unité de baie, en mètres
 /* Préfixe d'identifiant → type d'objet */
 const PREFIX_TYPE = { site: 'site', bld: 'building', flr: 'floor', room: 'room', rack: 'rack', dev: 'device', p: 'port', o: 'outlet', cab: 'cable', cat: 'catalog', h: 'history', int: 'intervention' };
 
-export { APP, CABLE_TYPES, CATEGORIES, COL, DEVICE_STATUS, HISTORY_TYPES, INTERV_STATUS, LAYERS, OUTLET_USAGE, POE_STEPS, POE_WARN_PCT, PORT_KIND, PORT_ROLE, PORT_STATUS, PREFIX_TYPE, RACK_FULL_PCT, RENOUVELLEMENT_ANS, ROOM_TYPES, U_M, VLAN_GREY, VLANS_DEF };
+export { APP, CABLE_TYPES, CATEGORIES, COL, DEVICE_STATUS, FAMILLES_VUES, HISTORY_TYPES, INTERV_STATUS, LAYERS, NOMENCLATURE, OUTLET_USAGE, POE_STEPS, POE_WARN_PCT, PORT_KIND, PORT_ROLE, PORT_STATUS, PREFIX_TYPE, RACK_FULL_PCT, RENOUVELLEMENT_ANS, ROOM_TYPES, U_M, VLAN_GREY, VLANS_DEF };
