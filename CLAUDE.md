@@ -8,6 +8,7 @@ Ce dépôt est **public** et ne contient que la solution. La branche de référe
 
 Le suivi n'est pas dans ce dépôt. Il est dans le dépôt **privé** `DevaradjaLessy/suivie_projet_general`, dossier `NetCarto` :
 
+- `00 - Mémoire/MEMOIRE.md` : la mémoire de travail (consignes permanentes de l'utilisateur, façons de faire, tâches planifiées) ;
 - `01 - Suivi/SUIVI.md` : la référence du projet (cahier des charges, décisions de conception, plan par lots, rappels, journal des demandes) ;
 - `01 - Suivi/Journal des mises à jour.md` : chaque mise à jour, tirée de l'historique de ce dépôt ;
 - `02 - Audits/` : l'audit d'usage ;
@@ -17,10 +18,11 @@ Les sections de `SUIVI.md` citées plus bas (3.1, 3.14, 3.28…) sont celles de 
 
 ## À faire au début de chaque session
 
-1. Rattache le dépôt de suivi à la session, puis lis `NetCarto/01 - Suivi/SUIVI.md` en entier.
+1. Rattache le dépôt de suivi à la session, puis lis `NetCarto/00 - Mémoire/MEMOIRE.md` et `NetCarto/01 - Suivi/SUIVI.md` en entier.
 2. Suis les « Instructions pour une nouvelle session Claude » (section 1 de `SUIVI.md`) : prends le prochain lot à faire, réalise-le, teste-le, puis mets `SUIVI.md` à jour.
 3. Si l'utilisateur fait une nouvelle demande, ajoute-la au journal des demandes de `SUIVI.md`.
 4. Quand une fonction change, mets à jour la partie concernée de la bible de connaissance.
+5. Une consigne durable de l'utilisateur, ou une information utile à une prochaine session, s'écrit dans `MEMOIRE.md` : le dépôt de suivi sert de mémoire.
 
 ## Règles permanentes
 
