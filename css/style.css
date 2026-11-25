@@ -280,6 +280,11 @@ main{flex:1;min-height:0;position:relative}
 
 /* --- Cartographie --- */
 .carto{display:grid;grid-template-columns:270px minmax(0,1fr) 360px;width:100%;height:100%}
+/* Écran large : arbre ou fiche repliés, le plan prend leur place */
+@media (min-width:901px){
+  .carto.sans-arbre{grid-template-columns:minmax(0,1fr) 360px} .carto.sans-fiche{grid-template-columns:270px minmax(0,1fr)} .carto.sans-arbre.sans-fiche{grid-template-columns:minmax(0,1fr)}
+  .carto.sans-arbre .c-tree,.carto.sans-fiche .c-detail{display:none}
+}
 .c-tree,.c-detail{background:var(--panel);display:flex;flex-direction:column;min-height:0}
 .c-tree{border-right:1px solid var(--line)} .c-detail{border-left:1px solid var(--line);overflow:auto;background:var(--bg);padding:10px 10px 16px;gap:10px}
 .c-tree-h{padding:8px;border-bottom:1px solid var(--line);display:flex;gap:6px} .c-tree-h input{flex:1;min-width:0}
@@ -635,6 +640,7 @@ svg.plan,svg.topo{touch-action:none}
    ============================================================ */
 @media (max-width:900px){
   .m-only{display:inline-flex!important}
+  .d-only{display:none!important}
   body{font-size:14px}
   /* En-tête sur deux lignes, onglets en bas de l'écran */
   #topbar{height:auto;flex-wrap:wrap;padding:8px 10px;gap:8px}

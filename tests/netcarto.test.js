@@ -153,6 +153,39 @@ test('Tableau de bord : résumé de la supervision — équipements, ports, traf
   await page.evaluate(() => { NetCarto.Live.cfg.type = 'none'; NetCarto.Live.vider(); NetCarto.Live.state = 'off'; NetCarto.Live.emit(); });
   await page.click('[data-tab=dash]'); assert.match(await page.locator('#sup-card').innerText(), /Aucune source de supervision active/);
 });
+test('Cartographie : l\'arbre et la fiche se replient pour laisser la place au plan ; le choix est gardé, un double-clic rouvre la fiche', async page => {
+  await page.setViewportSize({ width: 1100, height: 800 });   // une fenêtre en demi-écran : les trois colonnes sont encore là
+  await page.evaluate(() => NetCarto.select(NetCarto.Store.db.floors[1].id)); await page.waitForSelector('svg.plan');
+  const largeur = () => page.evaluate(() => Math.round(document.querySelector('.c-main').getBoundingClientRect().width));
+  const visible = sel => page.evaluate(s => { const e = document.querySelector(s); return !!e && e.getBoundingClientRect().width > 0; }, sel);
+  const depart = await largeur();
+  assert.ok(await visible('#detail') && await visible('.c-tree'));
+  // Replier la fiche : le plan gagne sa largeur ; le bouton dit son état
+  await page.click('[data-act=panneau][data-p=fiche]');
+  assert.strictEqual(await visible('#detail'), false); assert.ok(await largeur() >= depart + 340, 'le plan récupère la place de la fiche');
+  assert.strictEqual(await page.getAttribute('[data-act=panneau][data-p=fiche]', 'aria-expanded'), 'false');
+  // Choisir un objet ne la rouvre pas : on peut travailler sur le plan sans qu'elle revienne
+  const prise = await page.evaluate(() => { const d = NetCarto.Store.db, o = d.outlets.find(x => NetCarto.Store.idx.id.get(x.roomId).floorId === d.floors[1].id); NetCarto.select(o.id, { keep: true }); return o; });
+  assert.strictEqual(await visible('#detail'), false);
+  // Replier l'arbre aussi : le plan occupe toute la largeur
+  await page.click('[data-act=panneau][data-p=arbre]');
+  assert.strictEqual(await visible('.c-tree'), false); assert.ok(await largeur() >= depart + 600);
+  // Le choix est gardé au rechargement
+  await page.reload(); await page.waitForFunction(() => window.NetCarto?.Store.db); await page.setViewportSize({ width: 1100, height: 800 });
+  await page.evaluate(() => NetCarto.select(NetCarto.Store.db.floors[1].id)); await page.waitForSelector('svg.plan');
+  assert.deepStrictEqual([await visible('#detail'), await visible('.c-tree')], [false, false]);
+  // Un double-clic sur un objet du plan rouvre la fiche, sur cet objet (une prise que rien ne recouvre à l'écran)
+  const cible = await page.evaluate(() => { for (const e of document.querySelectorAll('svg.plan [data-id^="o-"]')) for (const f of e.querySelectorAll('rect, circle, path')) { const r = f.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2; if (r.width && document.elementFromPoint(x, y)?.closest('[data-id]') === e) return { x, y, repere: NetCarto.Store.idx.id.get(e.dataset.id).label }; } return null; });
+  assert.ok(cible, 'une prise visible sur le plan'); await page.mouse.dblclick(cible.x, cible.y);
+  assert.strictEqual(await visible('#detail'), true); assert.match(await page.locator('#detail').innerText(), new RegExp(cible.repere));
+  assert.strictEqual(await page.getAttribute('[data-act=panneau][data-p=fiche]', 'aria-expanded'), 'true');
+  // Le bouton rouvre l'arbre ; tout revient à la largeur de départ
+  await page.click('[data-act=panneau][data-p=arbre]');
+  assert.strictEqual(await visible('.c-tree'), true); assert.strictEqual(await largeur(), depart);
+  // Sur téléphone, ces boutons s'effacent : l'arbre et la fiche y sont déjà des volets
+  await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(150);
+  assert.strictEqual(await page.locator('[data-act=panneau]:visible').count(), 0);
+});
 test('Tableau de bord : la tuile Alertes donne le total, la répartition par gravité en une barre, et le détail en toutes lettres', async page => {
   await page.click('[data-tab=dash]');
   // Référence : la liste des alertes, juste en dessous
@@ -326,7 +359,7 @@ test('Baie 3D : la molette zoome vers l\'endroit visé, sans traverser la façad
   const cadre = await etat();
   assert.ok(Math.abs(cadre.hauteurBaie - depart.hauteurBaie) < depart.hauteurBaie * 0.08, 'le cadrage revient à la vue d\'ensemble');
 });
-test('Baie 3D : en arrivant sur une baie par un équipement, la vue se rapproche de lui ; dans la même baie, elle ne bouge plus toute seule', async page => {
+test('Baie 3D : en arrivant sur une baie par un équipement, la vue se rapproche de lui ; un clic dans la vue ne la déplace pas', async page => {
   const ids = await page.evaluate(() => { const d = NetCarto.Store.db, a = d.devices.find(x => x.hostname === 'SW-A1-ACC-01'), b = d.devices.find(x => x.hostname === 'SW-A1-ACC-02'), autre = d.devices.find(x => x.hostname === 'SW-A2-ACC-01'); NetCarto.select(a.id, { view: 'rack' }); return { a: a.id, b: b.id, autre: autre.id }; });
   await pret3D(page);
   const vue = () => page.evaluate(() => { const v = NetCarto.Views3D.main, c = v.camera.position, t = v.controls.target; return { cam: [c.x, c.y, c.z], cible: [t.x, t.y, t.z], dist: c.distanceTo(t), ensemble: (v.geo.H / 2) / Math.tan(v.camera.fov * Math.PI / 360), anim: !!v.anim }; });
@@ -334,9 +367,12 @@ test('Baie 3D : en arrivant sur une baie par un équipement, la vue se rapproche
   const pres = await vue(), yA = await page.evaluate(i => NetCarto.Views3D.main.devGroups.get(i).y, ids.a);
   assert.ok(pres.dist < pres.ensemble * 0.6, `la caméra s'est rapprochée (${pres.dist.toFixed(2)} m, vue d'ensemble à ${pres.ensemble.toFixed(2)} m)`);
   assert.ok(Math.abs(pres.cible[1] - yA) < 0.05, 'elle vise l\'équipement choisi');
-  // Un autre équipement de la même baie : la vue reste où l'utilisateur l'a mise
-  await page.evaluate(i => NetCarto.select(i), ids.b); await page.waitForTimeout(700);
-  assert.deepStrictEqual((await vue()).cam.map(n => +n.toFixed(3)), pres.cam.map(n => +n.toFixed(3)), 'choisir un voisin ne déplace pas la caméra');
+  // Un voisin choisi en cliquant dans la vue 3D ou sur l'élévation : la vue reste où l'utilisateur l'a mise
+  await page.evaluate(i => NetCarto.select(i, { keep: true }), ids.b); await page.waitForTimeout(900);
+  assert.deepStrictEqual((await vue()).cam.map(n => +n.toFixed(3)), pres.cam.map(n => +n.toFixed(3)), 'un clic dans la vue ne déplace pas la caméra');
+  // Le même voisin choisi dans l'arbre : c'est une navigation, la vue va jusqu'à lui
+  await page.evaluate(i => NetCarto.select(i), ids.b);
+  await page.waitForFunction(i => { const v = NetCarto.Views3D.main; return !v.anim && Math.abs(v.controls.target.y - v.devGroups.get(i).y) < 0.05; }, ids.b, { timeout: 8000 });
   // Une autre baie : la vue se rapproche du nouvel équipement
   await page.evaluate(i => NetCarto.select(i, { view: 'rack' }), ids.autre);
   await page.waitForFunction(i => { const v = NetCarto.Views3D.main, g = v.devGroups.get(i); return g && !v.anim && Math.abs(v.controls.target.y - g.y) < 0.05 && v.camera.position.distanceTo(v.controls.target) < 2; }, ids.autre, { timeout: 8000 });

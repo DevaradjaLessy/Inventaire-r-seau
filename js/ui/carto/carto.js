@@ -49,6 +49,24 @@ function select(id, o = {}) {
 const goto = (id, o) => select(id, o);
 
 Actions.sel = el => select(el.dataset.id);
+/* Écran large : l'arbre et la fiche se replient pour laisser toute la place au plan (utile quand la fenêtre occupe un demi-écran).
+   Le choix est gardé dans le navigateur. Repliée, la fiche ne revient pas quand on choisit un objet : le bouton ou un double-clic la rouvre. */
+const Panneaux = {
+  CLE: 'netcarto:panneaux', etat: { arbre: true, fiche: true },
+  charger() { try { const v = JSON.parse(localStorage.getItem(this.CLE) || '{}'); this.etat = { arbre: v.arbre !== false, fiche: v.fiche !== false }; } catch { /* réglage illisible : tout est ouvert */ } },
+  garder() { try { localStorage.setItem(this.CLE, JSON.stringify(this.etat)); } catch { /* stockage indisponible : le choix vaut pour cette visite */ } },
+};
+Panneaux.charger();
+function appliquerPanneaux() {
+  const c = $('.carto'); if (!c) return;
+  c.classList.toggle('sans-arbre', !Panneaux.etat.arbre); c.classList.toggle('sans-fiche', !Panneaux.etat.fiche);
+  for (const [p, nom] of [['arbre', 'l\'arbre'], ['fiche', 'la fiche']]) {
+    const b = $(`[data-act=panneau][data-p=${p}]`, c), ouvert = Panneaux.etat[p]; if (!b) continue;
+    b.classList.toggle('on', ouvert); b.setAttribute('aria-expanded', String(ouvert));
+    b.setAttribute('aria-label', `${ouvert ? 'Replier' : 'Afficher'} ${nom}`); b.dataset.tip = `${ouvert ? 'Replier' : 'Afficher'} ${nom}|${ouvert ? 'Laisse toute la place au plan' : p === 'fiche' ? 'Un double-clic sur un objet la rouvre aussi' : 'Sites, bâtiments, étages, pièces'}`;
+  }
+}
+Actions.panneau = el => { const p = el.dataset.p; Panneaux.etat[p] = !Panneaux.etat[p]; Panneaux.garder(); appliquerPanneaux(); };
 /* Téléphone : ouvre ou ferme le panneau de l'arbre ou de la fiche */
 Actions['m-panel'] = el => { const c = $('.carto'), p = el.dataset.p; c.classList.toggle('m-tree', p === 'tree' && !c.classList.contains('m-tree')); c.classList.toggle('m-detail', p === 'detail' && !c.classList.contains('m-detail')); };
 Actions.psel = el => select(el.dataset.id, { keep: true });
@@ -64,11 +82,20 @@ Views.carto = {
       host.innerHTML = `<div class="carto">
         <aside class="c-tree"><div class="c-tree-h"><input type="search" data-inp="tree-filter" placeholder="Filtrer l'arborescence…"><button class="btn icon" data-act="st-add" data-kind="site" data-tip="Nouveau site">${ico('plus')}</button><button class="btn icon m-only" data-act="m-panel" data-p="" aria-label="Fermer">${ico('x')}</button></div><div id="tree"></div></aside>
         <div class="c-main">
-          <div class="c-bar"><button class="btn m-only" data-act="m-panel" data-p="tree">${ico('list')}Arbre</button><div id="crumb"></div><div class="seg" id="c-views"></div><button class="btn m-only" data-act="m-panel" data-p="detail">${ico('info')}Fiche</button></div>
+          <div class="c-bar"><button class="btn icon d-only" data-act="panneau" data-p="arbre">${ico('list')}</button><button class="btn m-only" data-act="m-panel" data-p="tree">${ico('list')}Arbre</button><div id="crumb"></div><div class="seg" id="c-views"></div><button class="btn m-only" data-act="m-panel" data-p="detail">${ico('info')}Fiche</button><button class="btn icon d-only" data-act="panneau" data-p="fiche">${ico('info')}</button></div>
           <div id="c-view"><div class="cv" id="v-plan"></div><div class="cv" id="v-rack"></div><div class="cv" id="v-topo"></div></div>
         </div>
         <aside class="c-detail" id="detail"></aside></div>`;
       Carto.built = true;
+      appliquerPanneaux();
+      // Deux clics rapprochés sur le même objet (plan, baie, arbre) rouvrent la fiche si elle est repliée. Le navigateur n'envoie pas
+      // d'événement « double-clic » ici : le premier clic redessine le plan, et l'élément visé n'est plus le même au second.
+      let dernier = { id: '', t: 0 };
+      $('.carto').addEventListener('click', e => {
+        const id = e.target.closest?.('[data-id]')?.dataset.id, t = performance.now(); if (!id) return;
+        if (!Panneaux.etat.fiche && id === dernier.id && t - dernier.t < 450) { Panneaux.etat.fiche = true; Panneaux.garder(); appliquerPanneaux(); }
+        dernier = { id, t };
+      }, true);
       initPlanEvents($('#v-plan'));
       const d = Store.db;
       if (!Carto.sel || !byId(Carto.sel)) { Carto.sel = d.sites[0]?.id || null; }
