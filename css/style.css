@@ -427,6 +427,10 @@ svg.topo .tb{fill:var(--panel2);stroke:var(--line2);stroke-width:1.2}
 @media (hover:hover){svg.topo .tnode:hover .tb{stroke:var(--line4)}}
 svg.topo .tnode.hl .tb{stroke:var(--hl);stroke-width:2;fill:var(--hl-bg)}
 svg.topo .tnode.sel .tb{stroke:var(--txt);stroke-width:2}
+/* Terminaux dessinés : une pastille par terminal */
+svg.topo .tend{cursor:pointer} svg.topo .tend .te{fill:var(--panel2);stroke-width:1.4}
+svg.topo .tend.sel .te{stroke:var(--txt);stroke-width:2.4}
+@media (hover:hover){svg.topo .tend:hover .te{fill:var(--panel3)}}
 svg.topo .tlink.hl{stroke:var(--hl)!important;stroke-width:4;stroke-dasharray:9 6;animation:dash 1s linear infinite}
 
 /* --- Inventaire --- */

@@ -186,6 +186,27 @@ test('Cartographie : l\'arbre et la fiche se replient pour laisser la place au p
   await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(150);
   assert.strictEqual(await page.locator('[data-act=panneau]:visible').count(), 0);
 });
+test('Topologie : les terminaux se masquent, se comptent, ou se dessinent un par un sous leur switch d\'accès', async page => {
+  await page.click('[data-act=c-view][data-v=topo]'); await page.waitForSelector('svg.topo');
+  const etat = () => page.evaluate(() => ({ pastilles: document.querySelectorAll('svg.topo .tend').length, comptes: [...document.querySelectorAll('svg.topo text')].filter(t => /tél\.|bornes|cam\./.test(t.textContent)).length, choix: document.querySelector('[data-act=topo-ends].on')?.dataset.v }));
+  // Par défaut : les terminaux sont comptés sous chaque équipement, aucun n'est dessiné
+  let e = await etat(); assert.deepStrictEqual([e.choix, e.pastilles], ['comptes', 0]); assert.ok(e.comptes > 3);
+  // Dessinés : une pastille par terminal relié à un switch d'accès, et aucune ne recouvre un équipement du réseau
+  await page.click('[data-act=topo-ends][data-v=detail]');
+  const attendu = await page.evaluate(() => { const tp = NetCarto.topology(); return tp.nodes.filter(d => tp.layer.get(d.id) === 'access').reduce((n, d) => n + (tp.ends.get(d.id) || []).length, 0); });
+  e = await etat(); assert.strictEqual(e.choix, 'detail'); assert.ok(attendu > 20); assert.strictEqual(e.pastilles, attendu);
+  const chevauchements = await page.evaluate(() => { const boites = [...document.querySelectorAll('svg.topo .tnode')].map(n => n.getBoundingClientRect()); return [...document.querySelectorAll('svg.topo .tend')].filter(t => { const r = t.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2; return boites.some(b => x > b.left && x < b.right && y > b.top && y < b.bottom); }).length; });
+  assert.strictEqual(chevauchements, 0, 'une pastille ne recouvre jamais un équipement du réseau');
+  // Une pastille dit de quel terminal il s'agit, et un clic ouvre sa fiche
+  const id = await page.locator('svg.topo .tend').first().getAttribute('data-id');
+  const nom = await page.evaluate(i => NetCarto.Store.idx.id.get(i).hostname, id);
+  assert.match(await page.locator('svg.topo .tend').first().getAttribute('data-tip'), new RegExp('^' + nom));
+  await page.locator('svg.topo .tend').first().click(); assert.strictEqual(await page.evaluate(() => NetCarto.Carto.sel), id);
+  assert.match(await page.locator('#detail').innerText(), new RegExp(nom));
+  // Réseau seul : ni pastille ni compte, pour ne voir que les équipements du réseau
+  await page.click('[data-act=topo-ends][data-v=aucun]');
+  e = await etat(); assert.deepStrictEqual([e.choix, e.pastilles, e.comptes], ['aucun', 0, 0]);
+});
 test('Tableau de bord : la tuile Alertes donne le total, la répartition par gravité en une barre, et le détail en toutes lettres', async page => {
   await page.click('[data-tab=dash]');
   // Référence : la liste des alertes, juste en dessous

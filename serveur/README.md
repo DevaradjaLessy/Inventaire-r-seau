@@ -275,6 +275,50 @@ curl -k -b cookies.txt "https://127.0.0.1:8443/api/v1/equipements?hostname=SW-A0
 | `409` | conflit : l'élément a changé entre-temps |
 | `422` | contrainte ou règle non respectée ; le message dit laquelle |
 
+### Remplir NetCarto depuis un script ou un agent
+
+Un script, ou un agent comme Claude Code, peut remplir l'inventaire sans navigateur. Il passe par la même API que l'interface, avec les mêmes contrôles. Le test « client automatisé » de `tests/api.test.js` déroule ce chemin de bout en bout.
+
+**Préparer**
+
+1. Créer un compte réservé à l'agent, de rôle **technicien** : il peut modifier l'inventaire, mais ni gérer les comptes, ni remplacer la base. Tout ce qu'il fait est inscrit au journal d'audit sous son nom.
+2. Faire une sauvegarde avant un remplissage en masse (`netcarto sauvegarde`, ou la page d'administration).
+3. Donner le mot de passe à l'agent par une variable d'environnement, jamais dans un fichier du dépôt.
+
+**Se connecter.** `POST /session` rend un cookie de session, à renvoyer avec chaque requête :
+
+```bash
+curl -k -c cookies.txt -H "Content-Type: application/json" -d "{\"identifiant\":\"agent-saisie\",\"motDePasse\":\"$NETCARTO_AGENT_MDP\"}" https://netcarto.exemple.interne:8443/api/v1/session
+```
+
+**Lire avant d'écrire.** `GET /catalogue` donne les modèles et leur identifiant ; `GET /sites`, `/batiments`, `/etages`, `/pieces`, `/baies`, `/equipements`, `/prises` donnent l'existant.
+
+**Écrire par lots.** Un lot crée en une fois tout ce qui va ensemble ; s'il contient une erreur, rien n'est écrit. Exemple : un site, son bâtiment, un étage, une pièce, une baie, un switch et un port.
+
+```json
+{ "type": "add", "changements": [
+  { "collection": "sites", "op": "creer", "cle": "site-pilote", "apres": { "id": "site-pilote", "name": "Site pilote", "code": "PIL", "address": "" } },
+  { "collection": "buildings", "op": "creer", "cle": "bld-pilote", "apres": { "id": "bld-pilote", "siteId": "site-pilote", "code": "P", "name": "Bâtiment pilote" } },
+  { "collection": "floors", "op": "creer", "cle": "flr-pilote", "apres": { "id": "flr-pilote", "buildingId": "bld-pilote", "level": 0, "name": "RDC", "width": 30, "height": 20, "planImage": "" } },
+  { "collection": "rooms", "op": "creer", "cle": "room-pilote", "apres": { "id": "room-pilote", "floorId": "flr-pilote", "name": "Local technique", "type": "tech", "x": 2, "y": 2, "w": 6, "h": 5 } },
+  { "collection": "racks", "op": "creer", "cle": "rack-pilote", "apres": { "id": "rack-pilote", "roomId": "room-pilote", "catalogId": "<identifiant d'un modèle de baie>", "name": "BAIE-PIL-01", "heightU": 42, "x": 3, "y": 3, "serial": "", "installDate": "2026-11-25", "status": "active" } },
+  { "collection": "devices", "op": "creer", "cle": "dev-pilote-1", "apres": { "id": "dev-pilote-1", "catalogId": "cat-ex4000-48p", "hostname": "SW-PIL-01", "rackId": "rack-pilote", "u": 40, "roomId": null, "x": null, "y": null, "serial": "", "ip": "10.20.0.10", "mac": "", "firmware": "", "installDate": "2026-11-25", "status": "active", "notes": "" } },
+  { "collection": "ports", "op": "creer", "cle": "p-pilote-0", "apres": { "id": "p-pilote-0", "deviceId": "dev-pilote-1", "idx": 0, "name": "ge-0/0/0", "kind": "rj45", "role": "access", "speed": 1000, "status": "down", "vlan": 1, "poe": { "capable": true, "watts": 0 }, "mac": "", "connected": "", "description": "" } },
+  { "collection": "history", "op": "creer", "cle": "h-pilote-1", "apres": { "id": "h-pilote-1", "ts": 1795600000000, "type": "add", "text": "Site pilote créé par l'agent de saisie", "ref": "site-pilote" } }
+] }
+```
+
+À savoir :
+
+- **Identifiants.** C'est le client qui les choisit. Ils sont uniques et commencent par le préfixe de leur famille : `site-`, `bld-`, `flr-`, `room-`, `rack-`, `dev-`, `p-`, `o-` (prise), `cab-` (câble), `h-` (historique).
+- **Ports.** Un équipement se crée avec ses ports, un par port du modèle, numérotés par `idx` à partir de 0 et nommés comme sur le modèle (`ports` du catalogue).
+- **Historique.** L'entrée `history` du lot donne son libellé à l'opération : elle s'affiche dans « Dernières actions » et titre le lot au journal d'audit. Son `type` vaut `add`, `move`, `remove`, `edit`, `stock`, `import` ou `catalog`.
+- **Refus.** Une réponse `400` signale une forme inattendue, `422` une règle non respectée (adresse IP déjà prise, équipements qui se chevauchent dans une baie…). Le message dit laquelle, et le lot n'a rien écrit : corriger, puis renvoyer.
+- **Modifier.** Lire l'objet, puis envoyer `op: "modifier"` avec `avant` (l'objet lu) et `apres` (l'objet modifié). Si quelqu'un l'a changé entre-temps, la réponse est `409` : relire et recommencer.
+- **Parc existant dans un tableur.** L'import CSV de l'onglet Inventaire reste le plus simple pour une liste d'équipements ou de prises.
+
+Il n'existe pas encore de clé d'API : la connexion se fait par ce compte et sa session.
+
 ## Organisation du code
 
 ```text

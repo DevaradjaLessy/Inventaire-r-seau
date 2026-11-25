@@ -1,7 +1,7 @@
 /* Tests de l'API HTTP et du service des fichiers de l'interface. */
 'use strict';
 const test = require('node:test'), assert = require('node:assert'), path = require('path');
-const { dossierTemporaire, demo, requete, serveurDeTest } = require('./aide');
+const { MDP, cookieDe, dossierTemporaire, demo, requete, serveurDeTest } = require('./aide');
 
 /* Serveur de test, avec une fonction « appel » qui envoie les requêtes au nom de l'administrateur */
 async function serveur(t, extra = {}) {
@@ -93,4 +93,49 @@ test('les données persistent d\'un démarrage à l\'autre', async t => {
   const { api, appel } = await serveur(t, { dossier });
   assert.strictEqual((await appel('GET', api + '/equipements')).json.length, 102);
   assert.ok(require('fs').existsSync(path.join(dossier, 'netcarto.sqlite')));
+});
+
+/* Un script ou un agent (un autre Claude, par exemple) remplit l'inventaire sans navigateur : il se connecte avec un compte
+   de technicien qui lui est réservé, lit le catalogue, puis crée les lieux et le matériel par lots. C'est le chemin décrit
+   dans README.md, « Remplir NetCarto depuis un script ou un agent ». */
+test('client automatisé : connexion par un compte dédié, création d\'un site complet par lots, relecture, traces', async t => {
+  const s = await serveurDeTest(t);
+  await s.app.securite.creerUtilisateur({ identifiant: 'agent-saisie', nom: 'Agent de saisie', role: 'technicien', motDePasse: MDP });
+  // 1. Connexion : le cookie de session rendu sert aux requêtes suivantes. Aucun en-tête de navigateur n'est nécessaire.
+  const session = await requete('POST', s.api + '/session', { identifiant: 'agent-saisie', motDePasse: MDP });
+  assert.strictEqual(session.code, 200); const moi = cookieDe(session);
+  // 2. Lecture du catalogue pour choisir les modèles
+  const catalogue = (await requete('GET', s.api + '/catalogue', undefined, moi)).json;
+  const baie = catalogue.find(c => c.category === 'rack'), sw = catalogue.find(c => c.model === 'EX4000-48P');
+  assert.ok(baie && sw, 'le catalogue de départ contient une baie et le switch EX4000-48P');
+  // 3. Un site entier en un seul lot : tout passe, ou rien
+  const creer = (collection, apres) => ({ collection, op: 'creer', cle: apres.id, apres });
+  const port = i => ({ id: 'p-agent-' + i, deviceId: 'dev-agent-1', idx: i, name: 'ge-0/0/' + i, kind: 'rj45', role: 'access', speed: 1000, status: 'down', vlan: 1, poe: { capable: true, watts: 0 }, mac: '', connected: '', description: '' });
+  const lot = { type: 'add', changements: [
+    creer('sites', { id: 'site-agent', name: 'Site pilote', code: 'PIL', address: '1 rue de l\'Exemple, 00000 Villefictive' }),
+    creer('buildings', { id: 'bld-agent', siteId: 'site-agent', code: 'P', name: 'Bâtiment pilote' }),
+    creer('floors', { id: 'flr-agent', buildingId: 'bld-agent', level: 0, name: 'RDC', width: 30, height: 20, planImage: '' }),
+    creer('rooms', { id: 'room-agent', floorId: 'flr-agent', name: 'Local technique', type: 'tech', x: 2, y: 2, w: 6, h: 5 }),
+    creer('racks', { id: 'rack-agent', roomId: 'room-agent', catalogId: baie.id, name: 'BAIE-PIL-01', heightU: baie.heightU || 42, x: 3, y: 3, serial: '', installDate: '2026-11-25', status: 'active' }),
+    creer('devices', { id: 'dev-agent-1', catalogId: sw.id, hostname: 'SW-PIL-01', rackId: 'rack-agent', u: 40, roomId: null, x: null, y: null, serial: '', ip: '10.20.0.10', mac: '', firmware: '', installDate: '2026-11-25', status: 'active', notes: 'Créé par l\'API' }),
+    ...[0, 1, 2].map(i => creer('ports', port(i))),
+    // Une entrée d'historique donne son libellé à l'opération : elle s'affiche dans « Dernières actions » et titre le lot au journal d'audit
+    creer('history', { id: 'h-agent-1', ts: Date.now(), type: 'add', text: 'Site pilote créé par l\'agent de saisie', ref: 'site-agent' }),
+  ] };
+  const pose = await requete('POST', s.api + '/lots', lot, moi);
+  assert.strictEqual(pose.code, 200, pose.texte); assert.ok(pose.json.revision > 0);
+  // 4. Relecture par les routes de consultation, avec un filtre
+  const lu = (await requete('GET', s.api + '/equipements?hostname=SW-PIL-01', undefined, moi)).json;
+  assert.deepStrictEqual(lu.map(d => [d.id, d.rackId, d.ip]), [['dev-agent-1', 'rack-agent', '10.20.0.10']]);
+  assert.strictEqual((await requete('GET', s.api + '/ports?deviceId=dev-agent-1', undefined, moi)).json.length, 3);
+  // 5. Une erreur est expliquée, et le lot fautif n'écrit rien : même adresse IP qu'un équipement existant
+  const refus = await requete('POST', s.api + '/lots', { type: 'add', changements: [creer('sites', { id: 'site-agent-2', name: 'Autre site', code: 'X', address: '' }), creer('devices', { id: 'dev-agent-2', catalogId: sw.id, hostname: 'SW-PIL-02', rackId: 'rack-agent', u: 38, roomId: null, x: null, y: null, serial: '', ip: '10.20.0.10', mac: '', firmware: '', installDate: '2026-11-25', status: 'active', notes: '' })] }, moi);
+  assert.strictEqual(refus.code, 422); assert.match(refus.json.erreur, /adresse IP/i);
+  assert.strictEqual((await requete('GET', s.api + '/sites/site-agent-2', undefined, moi)).code, 404, 'le site du lot refusé n\'a pas été créé');
+  // 6. Tout est tracé au nom du compte de l'agent
+  const audit = (await requete('GET', s.api + '/audit?identifiant=agent-saisie&limite=50', undefined, s.admin)).json;
+  assert.ok(audit.some(a => a.action === 'operation' && /Site pilote créé/.test(a.libelle)), 'le lot a sa ligne au journal');
+  assert.ok(audit.some(a => a.collection === 'devices' && a.cle === 'dev-agent-1'));
+  // 7. Le compte de l'agent ne peut pas gérer les comptes ni remplacer la base
+  assert.strictEqual((await requete('GET', s.api + '/utilisateurs', undefined, moi)).code, 403);
 });
