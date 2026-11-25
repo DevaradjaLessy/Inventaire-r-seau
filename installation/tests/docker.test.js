@@ -9,6 +9,7 @@ const { execFileSync, spawnSync } = require('child_process');
 const RACINE = path.join(__dirname, '..', '..'), IMAGE = 'netcarto:essai', NOM = 'netcarto-essai-' + process.pid, MDP = 'Mot-de-passe-de-test-1';   // mot de passe fictif
 const docker = (args, opts = {}) => execFileSync('docker', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...opts });
 const disponible = spawnSync('docker', ['info'], { stdio: 'ignore', timeout: 15000 }).status === 0;
+const composeDispo = spawnSync('docker', ['compose', 'version'], { stdio: 'ignore', timeout: 15000 }).status === 0;   // lire un fichier Compose ne demande pas le moteur
 const attendre = async (cond, ms = 60000) => { const fin = Date.now() + ms; for (;;) { try { const r = await cond(); if (r) return r; } catch { /* pas encore prêt */ } if (Date.now() > fin) throw new Error('délai dépassé'); await new Promise(r => setTimeout(r, 1000)); } };
 const get = (port, chemin) => new Promise((ok, ko) => https.get({ host: '127.0.0.1', port, path: chemin, rejectUnauthorized: false }, res => { let b = ''; res.on('data', c => { b += c; }); res.on('end', () => ok({ code: res.statusCode, texte: b })); }).on('error', ko));
 
@@ -19,6 +20,28 @@ test('docker-compose.yml : fichier valide, dossiers convenus, conteneur durci', 
   assert.strictEqual(s.read_only, true); assert.deepStrictEqual(s.cap_drop, ['ALL']); assert.ok(s.security_opt.includes('no-new-privileges:true'));
   assert.strictEqual(s.restart, 'unless-stopped');
   assert.doesNotMatch(JSON.stringify(s.environment || {}), /token|secret|mot.?de.?passe|password/i, 'aucun secret dans le fichier');
+});
+
+/* Le fichier d'essai sert à lancer NetCarto sur un poste (Windows, macOS, Linux) : mêmes protections, mais des volumes de Docker
+   à la place des dossiers /var/lib et /etc, qui n'existent pas sur un poste Windows et ne sont pas partagés sous macOS. */
+test('docker-compose.essai.yml : pour essayer sur son poste — mêmes protections, volumes de Docker, aucun dossier de la machine', { skip: !composeDispo && 'Docker Compose indisponible' }, () => {
+  const lire = f => JSON.parse(docker(['compose', '-f', path.join(RACINE, f), 'config', '--format', 'json']));
+  const ref = lire('docker-compose.yml').services.netcarto, c = lire('docker-compose.essai.yml'), s = c.services.netcarto;
+  assert.deepStrictEqual(s.volumes.map(v => `${v.type}:${v.source}:${v.target}`).sort(), ['volume:netcarto-donnees:/var/lib/netcarto', 'volume:netcarto-reglages:/etc/netcarto']);
+  assert.deepStrictEqual(Object.keys(c.volumes).sort(), ['netcarto-donnees', 'netcarto-reglages']);
+  assert.notStrictEqual(c.name, lire('docker-compose.yml').name, 'un essai ne se mélange pas avec une installation');
+  assert.deepStrictEqual(s.command, ['--demo'], 'un essai démarre sur le jeu de démonstration fictif');
+  // Tout le reste vient du fichier de référence : rien n'est recopié, donc rien ne peut diverger
+  for (const k of ['read_only', 'cap_drop', 'cap_add', 'security_opt', 'tmpfs', 'restart', 'ports', 'build']) assert.deepStrictEqual(s[k], ref[k], `même réglage « ${k} » que docker-compose.yml`);
+});
+
+/* Récupéré sous Windows, le dépôt ne doit pas changer les fins de ligne des scripts : un script en CRLF ne démarre pas dans le conteneur */
+test('Fins de ligne : les scripts et les fichiers lus sous Linux restent en LF, même récupérés sous Windows', { skip: !fs.existsSync(path.join(RACINE, '.git')) && 'pas un dépôt git' }, () => {
+  const fichiers = ['installation/docker/entree.sh', 'installation/docker/Dockerfile', 'installation/netcarto', 'installation/netcarto.toml', 'installation/linux/installer.sh', 'installation/linux/commun.sh',
+    'installation/linux/netcarto.service', 'docker-compose.yml', 'docker-compose.essai.yml'];
+  for (const f of fichiers) assert.ok(fs.existsSync(path.join(RACINE, f)), `${f} existe`);
+  const sortie = execFileSync('git', ['check-attr', 'eol', '--', ...fichiers], { cwd: RACINE, encoding: 'utf8' });
+  for (const f of fichiers) assert.match(sortie, new RegExp(`^${f.replace(/[.]/g, '\\.')}: eol: lf$`, 'm'), `${f} : fin de ligne LF imposée`);
 });
 
 test('Image Docker : démarre sans réglage, tourne sous un compte sans privilège, garde ses données', { skip: !disponible && 'Docker indisponible', timeout: 600000 }, async t => {

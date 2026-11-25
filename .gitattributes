@@ -1,0 +1,8 @@
+# Fins de ligne. Les scripts et les fichiers lus dans le conteneur ou sur le serveur tournent sous Linux :
+# ils gardent des fins de ligne LF, même quand le dépôt est récupéré sous Windows. Un script en CRLF ne démarre pas.
+*.sh           text eol=lf
+*.service      text eol=lf
+*.toml         text eol=lf
+*.yml          text eol=lf
+Dockerfile     text eol=lf
+installation/netcarto text eol=lf

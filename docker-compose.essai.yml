@@ -1,0 +1,31 @@
+# Essayer NetCarto sur son poste (Windows, macOS ou Linux), sans rien installer d'autre que Docker :
+#
+#   docker compose -f docker-compose.essai.yml up -d
+#   docker compose -f docker-compose.essai.yml logs netcarto     (le journal donne le code d'initialisation)
+#
+# puis ouvrir https://127.0.0.1:8443.
+#
+# C'est le même conteneur que docker-compose.yml, avec les mêmes protections. Deux différences : la base et les
+# réglages vont dans des volumes de Docker, et non dans /var/lib/netcarto et /etc/netcarto, qui n'existent pas
+# sur un poste Windows et ne sont pas partagés sous macOS ; et la base démarre remplie du jeu de démonstration
+# fictif, pour avoir quelque chose à regarder.
+#
+# Arrêter :              docker compose -f docker-compose.essai.yml down
+# Arrêter et tout effacer : docker compose -f docker-compose.essai.yml down --volumes
+#
+# Pour un serveur, utiliser docker-compose.yml (voir installation/README.md).
+name: netcarto-essai
+
+services:
+  netcarto:
+    extends:
+      file: docker-compose.yml
+      service: netcarto
+    command: ["--demo"]       # premier démarrage sur le jeu de démonstration fictif, tant que la base ne contient aucun site
+    volumes:
+      - netcarto-donnees:/var/lib/netcarto
+      - netcarto-reglages:/etc/netcarto
+
+volumes:
+  netcarto-donnees:
+  netcarto-reglages:

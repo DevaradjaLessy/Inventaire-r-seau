@@ -1,6 +1,6 @@
 # Installer NetCarto
 
-Deux façons d'installer NetCarto sur un serveur Linux. Dans les deux cas :
+Deux façons d'installer NetCarto sur un serveur Linux, et une façon de l'essayer sur son poste. Pour un serveur, dans les deux cas :
 
 | Quoi | Où |
 |---|---|
@@ -9,6 +9,34 @@ Deux façons d'installer NetCarto sur un serveur Linux. Dans les deux cas :
 | Adresse | `https://<adresse-du-serveur>:8443` |
 
 Le fichier de réglages est créé à la première installation, puis n'est plus jamais écrasé.
+
+## Essayer sur son poste
+
+Pour voir le logiciel complet (comptes, administration, sauvegardes) sur un poste Windows, macOS ou Linux, sans installer de serveur. Il faut seulement Docker : Docker Desktop sous Windows et macOS.
+
+1. Récupérez le dépôt : sur sa page GitHub, bouton **Code**, puis **Download ZIP**, et décompressez l'archive.
+2. Ouvrez un terminal dans le dossier décompressé, celui qui contient `docker-compose.essai.yml`.
+3. Lancez NetCarto. La première fois, l'image est construite : comptez quelques minutes.
+
+```bash
+docker compose -f docker-compose.essai.yml up -d
+```
+
+4. Affichez le journal : il donne le **code d'initialisation**, de la forme `XXXX-XXXX-XXXX`.
+
+```bash
+docker compose -f docker-compose.essai.yml logs netcarto
+```
+
+5. Ouvrez `https://127.0.0.1:8443`, acceptez l'avertissement du navigateur (certificat auto-signé), puis créez le compte administrateur avec ce code.
+
+| Pour… | Commande |
+|---|---|
+| Arrêter, en gardant les données | `docker compose -f docker-compose.essai.yml down` |
+| Arrêter et tout effacer | `docker compose -f docker-compose.essai.yml down --volumes` |
+| Relancer après une mise à jour du dépôt | `docker compose -f docker-compose.essai.yml up -d --build` |
+
+Ce fichier d'essai lance le même conteneur que l'installation ci-dessous, avec les mêmes protections. Deux différences : la base et les réglages vont dans des volumes de Docker, et non dans `/var/lib/netcarto` et `/etc/netcarto`, qui n'existent pas sur un poste Windows ; et la base démarre remplie du **jeu de démonstration fictif**, pour avoir tout de suite quelque chose à regarder. Le port 8443 est ouvert sur le poste : sur un réseau qui n'est pas le vôtre, laissez le pare-feu du poste le fermer aux autres machines.
 
 ## Avec Docker
 
